@@ -14,13 +14,13 @@ interface HotbarState {
 export const useHotbarStore = create<HotbarState>((set, get) => ({
   selectedIndex: 0,
   slots: [
-    BLOCK_ID.GRASS,
-    BLOCK_ID.DIRT,
-    BLOCK_ID.STONE,
-    BLOCK_ID.SAND,
-    BLOCK_ID.LOG,
-    BLOCK_ID.LEAVES,
-    BLOCK_ID.CRYSTAL,
+    BLOCK_ID.AIR,
+    BLOCK_ID.AIR,
+    BLOCK_ID.AIR,
+    BLOCK_ID.AIR,
+    BLOCK_ID.AIR,
+    BLOCK_ID.AIR,
+    BLOCK_ID.AIR,
     BLOCK_ID.AIR,
   ],
 

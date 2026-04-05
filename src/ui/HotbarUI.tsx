@@ -3,55 +3,73 @@
 import { useHotbarStore } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
 
-const BLOCK_COLORS: Record<number, string> = {
-  [BLOCK_ID.GRASS]: "#4CAF50",
-  [BLOCK_ID.DIRT]: "#8D6E63",
-  [BLOCK_ID.STONE]: "#9E9E9E",
-  [BLOCK_ID.SAND]: "#FDD835",
-  [BLOCK_ID.LOG]: "#5D4037",
-  [BLOCK_ID.LEAVES]: "#2E7D32",
-  [BLOCK_ID.CRYSTAL]: "#00E5FF",
-  [BLOCK_ID.AIR]: "transparent",
+/** Block top face color (lighter) and side face color (darker) for 3D look. */
+const BLOCK_VISUALS: Record<
+  number,
+  { top: string; side: string; name: string } | null
+> = {
+  [BLOCK_ID.GRASS]: { top: "#5cb85c", side: "#8D6E63", name: "Grass" },
+  [BLOCK_ID.DIRT]: { top: "#9b7653", side: "#7a5c3a", name: "Dirt" },
+  [BLOCK_ID.STONE]: { top: "#aaaaaa", side: "#888888", name: "Stone" },
+  [BLOCK_ID.SAND]: { top: "#ffe082", side: "#d4a832", name: "Sand" },
+  [BLOCK_ID.LOG]: { top: "#D7CCC8", side: "#5D4037", name: "Log" },
+  [BLOCK_ID.LEAVES]: { top: "#43a047", side: "#2E7D32", name: "Leaves" },
+  [BLOCK_ID.CRYSTAL]: { top: "#4dd0e1", side: "#0097a7", name: "Crystal" },
+  [BLOCK_ID.AIR]: null,
 };
 
-const BLOCK_NAMES: Record<number, string> = {
-  [BLOCK_ID.GRASS]: "Grass",
-  [BLOCK_ID.DIRT]: "Dirt",
-  [BLOCK_ID.STONE]: "Stone",
-  [BLOCK_ID.SAND]: "Sand",
-  [BLOCK_ID.LOG]: "Log",
-  [BLOCK_ID.LEAVES]: "Leaves",
-  [BLOCK_ID.CRYSTAL]: "Crystal",
-  [BLOCK_ID.AIR]: "Air",
-};
+/** Renders a tiny isometric block icon. */
+function BlockIcon({ blockId }: { blockId: number }) {
+  const v = BLOCK_VISUALS[blockId];
+  if (!v) return null;
+
+  // Simple isometric block using 3 parallelogram faces via SVG
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" style={{ imageRendering: "pixelated" }}>
+      {/* Top face */}
+      <polygon points="16,4 28,10 16,16 4,10" fill={v.top} />
+      {/* Left face */}
+      <polygon points="4,10 16,16 16,28 4,22" fill={v.side} />
+      {/* Right face (slightly lighter than left) */}
+      <polygon
+        points="16,16 28,10 28,22 16,28"
+        fill={v.side}
+        style={{ opacity: 0.7 }}
+      />
+    </svg>
+  );
+}
 
 /**
- * Minecraft-style hotbar at the bottom of the screen.
+ * Minecraft-style hotbar: dark outer frame with 9-patch look, lighter inner slots.
  */
 export function HotbarUI() {
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const slots = useHotbarStore((s) => s.slots);
 
   return (
-    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-10">
-      {/* Selected block name above hotbar */}
-      <div className="text-center mb-1">
-        <span
-          className="text-white font-mono text-xs"
-          style={{ textShadow: "1px 1px 0 #000" }}
-        >
-          {BLOCK_NAMES[slots[selectedIndex]] ?? ""}
-        </span>
-      </div>
+    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+      {/* Block name tooltip above selected slot */}
+      {BLOCK_VISUALS[slots[selectedIndex]] && (
+        <div className="text-center mb-1">
+          <span
+            className="text-white font-mono text-xs px-2 py-0.5 bg-black/60 rounded-sm"
+            style={{ textShadow: "1px 1px 0 #000" }}
+          >
+            {BLOCK_VISUALS[slots[selectedIndex]]?.name}
+          </span>
+        </div>
+      )}
 
-      {/* Hotbar container — dark background with Minecraft-style border */}
+      {/* Hotbar frame */}
       <div
-        className="flex p-0.5 gap-0"
+        className="flex"
         style={{
           background: "#1a1a1a",
-          border: "2px solid #1a1a1a",
+          border: "2px solid #0f0f0f",
           boxShadow:
-            "inset 0 0 0 1px #555, 0 0 0 1px #0a0a0a, 0 4px 12px rgba(0,0,0,0.5)",
+            "inset 1px 1px 0 #3a3a3a, inset -1px -1px 0 #0a0a0a, 0 2px 8px rgba(0,0,0,0.6)",
+          padding: "1px",
           imageRendering: "pixelated",
         }}
       >
@@ -60,45 +78,23 @@ export function HotbarUI() {
           return (
             <div
               key={i}
-              className="relative"
+              className="relative flex items-center justify-center"
               style={{
-                width: 44,
-                height: 44,
-                margin: 1,
-                border: isSelected
-                  ? "2px solid #eee"
-                  : "1px solid #333",
+                width: 40,
+                height: 40,
+                margin: "1px",
                 background: isSelected
-                  ? "rgba(255,255,255,0.08)"
-                  : "#2a2a2a",
+                  ? "#c6c6c6"
+                  : "#8b8b8b",
+                border: isSelected
+                  ? "1px solid #ffffff"
+                  : "1px solid #373737",
                 boxShadow: isSelected
-                  ? "inset 0 0 0 1px #888, 0 0 8px rgba(255,255,255,0.1)"
-                  : "inset 0 -2px 0 #1a1a1a, inset 0 2px 0 #3a3a3a",
+                  ? "inset 1px 1px 0 #fafafa, inset -1px -1px 0 #aaa"
+                  : "inset 1px 1px 0 #ababab, inset -1px -1px 0 #585858",
               }}
             >
-              {/* Block color swatch — looks like a block item */}
-              {blockId !== BLOCK_ID.AIR && (
-                <div
-                  className="absolute"
-                  style={{
-                    top: 6,
-                    left: 6,
-                    width: isSelected ? 28 : 30,
-                    height: isSelected ? 28 : 30,
-                    backgroundColor: BLOCK_COLORS[blockId],
-                    boxShadow: `inset -4px -4px 0 rgba(0,0,0,0.3), inset 4px 4px 0 rgba(255,255,255,0.15)`,
-                    imageRendering: "pixelated",
-                  }}
-                />
-              )}
-
-              {/* Slot number */}
-              <span
-                className="absolute bottom-0.5 right-1 text-[9px] font-mono text-white/30"
-                style={{ textShadow: "1px 1px 0 #000" }}
-              >
-                {i + 1}
-              </span>
+              <BlockIcon blockId={blockId} />
             </div>
           );
         })}

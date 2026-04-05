@@ -40,14 +40,14 @@ describe("useHotbarStore", () => {
     useHotbarStore.getState().select(0);
   });
 
-  it("starts with GRASS selected (index 0)", () => {
-    expect(useHotbarStore.getState().getSelectedBlockId()).toBe(BLOCK_ID.GRASS);
+  it("starts with AIR selected (empty hotbar)", () => {
+    expect(useHotbarStore.getState().getSelectedBlockId()).toBe(BLOCK_ID.AIR);
   });
 
   it("select(3) changes selectedIndex", () => {
     useHotbarStore.getState().select(3);
     expect(useHotbarStore.getState().selectedIndex).toBe(3);
-    expect(useHotbarStore.getState().getSelectedBlockId()).toBe(BLOCK_ID.SAND);
+    expect(useHotbarStore.getState().getSelectedBlockId()).toBe(BLOCK_ID.AIR);
   });
 
   it("scrollUp wraps from 0 to 7", () => {
