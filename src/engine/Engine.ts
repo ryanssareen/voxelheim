@@ -39,6 +39,15 @@ export class Engine {
     await this.renderer.init();
 
     this.chunkManager = new ChunkManager(this.renderer, SEED);
+
+    // Generate world synchronously before starting the game loop
+    this.chunkManager.update(0, 0, 0);
+    console.log("[Engine] World generated, isFullyLoaded:", this.chunkManager.isFullyLoaded());
+
+    // Verify ground exists under spawn
+    const groundCheck = this.chunkManager.getBlock(32, 23, 32);
+    console.log("[Engine] Block at spawn ground (32,23,32):", groundCheck);
+
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
       useGameStore.getState().setPaused(true);

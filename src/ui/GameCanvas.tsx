@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { useEngine } from "@hooks/useEngine";
 import { HUD } from "@ui/HUD";
 import { HotbarUI } from "@ui/HotbarUI";
@@ -8,19 +8,26 @@ import { PauseMenu } from "@ui/PauseMenu";
 import { LoadingScreen } from "@ui/LoadingScreen";
 
 /**
- * Main game canvas component. Renders the WebGL canvas and all UI overlays.
+ * Main game canvas component. Auto-starts engine on mount.
+ * Renders the WebGL canvas and all UI overlays.
  */
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { isLoading, isReady, error, start, engineRef } = useEngine(canvasRef);
-  const [showOverlay, setShowOverlay] = useState(true);
+  const startedRef = useRef(false);
 
-  const handleClick = useCallback(() => {
-    if (showOverlay) {
-      setShowOverlay(false);
+  // Auto-start engine on mount
+  useEffect(() => {
+    if (!startedRef.current) {
+      startedRef.current = true;
       start();
     }
-  }, [showOverlay, start]);
+  }, [start]);
+
+  // Request pointer lock on canvas click
+  const handleCanvasClick = useCallback(() => {
+    canvasRef.current?.requestPointerLock();
+  }, []);
 
   // Handle window resize
   useEffect(() => {
@@ -39,24 +46,12 @@ export function GameCanvas() {
     <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
-        className="w-full h-full block bg-black"
-        onClick={handleClick}
+        className="w-full h-full block bg-black cursor-pointer"
+        onClick={handleCanvasClick}
       />
 
-      {/* Click to Play overlay */}
-      {showOverlay && (
-        <div
-          className="absolute inset-0 flex items-center justify-center bg-black/90 z-20 cursor-pointer"
-          onClick={handleClick}
-        >
-          <p className="text-white text-2xl font-mono animate-pulse">
-            Click to Play
-          </p>
-        </div>
-      )}
-
       {/* Loading */}
-      <LoadingScreen visible={isLoading} />
+      <LoadingScreen visible={isLoading || (!isReady && !error)} />
 
       {/* Error */}
       {error && (

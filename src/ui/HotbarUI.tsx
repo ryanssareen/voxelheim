@@ -3,7 +3,6 @@
 import { useHotbarStore } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
 
-/** Block top face color (lighter) and side face color (darker) for 3D look. */
 const BLOCK_VISUALS: Record<
   number,
   { top: string; side: string; name: string } | null
@@ -18,42 +17,33 @@ const BLOCK_VISUALS: Record<
   [BLOCK_ID.AIR]: null,
 };
 
-/** Renders a tiny isometric block icon. */
 function BlockIcon({ blockId }: { blockId: number }) {
   const v = BLOCK_VISUALS[blockId];
   if (!v) return null;
 
-  // Simple isometric block using 3 parallelogram faces via SVG
   return (
-    <svg width="36" height="36" viewBox="0 0 32 32" style={{ imageRendering: "pixelated" }}>
-      {/* Top face */}
+    <svg width="80%" height="80%" viewBox="0 0 32 32" style={{ imageRendering: "pixelated" }}>
       <polygon points="16,4 28,10 16,16 4,10" fill={v.top} />
-      {/* Left face */}
       <polygon points="4,10 16,16 16,28 4,22" fill={v.side} />
-      {/* Right face (slightly lighter than left) */}
-      <polygon
-        points="16,16 28,10 28,22 16,28"
-        fill={v.side}
-        style={{ opacity: 0.7 }}
-      />
+      <polygon points="16,16 28,10 28,22 16,28" fill={v.side} style={{ opacity: 0.7 }} />
     </svg>
   );
 }
 
 /**
- * Minecraft-style hotbar: dark outer frame with 9-patch look, lighter inner slots.
+ * Full-width Minecraft-style hotbar pinned to the bottom of the screen.
  */
 export function HotbarUI() {
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const slots = useHotbarStore((s) => s.slots);
 
   return (
-    <div className="absolute bottom-1 left-1/2 -translate-x-1/2 pointer-events-none z-10">
-      {/* Block name tooltip above selected slot */}
+    <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10">
+      {/* Block name tooltip */}
       {BLOCK_VISUALS[slots[selectedIndex]] && (
         <div className="text-center mb-1">
           <span
-            className="text-white font-mono text-xs px-2 py-0.5 bg-black/60 rounded-sm"
+            className="text-white font-mono text-sm px-3 py-1 bg-black/60 rounded-sm"
             style={{ textShadow: "1px 1px 0 #000" }}
           >
             {BLOCK_VISUALS[slots[selectedIndex]]?.name}
@@ -61,15 +51,13 @@ export function HotbarUI() {
         </div>
       )}
 
-      {/* Hotbar frame */}
+      {/* Full-width hotbar */}
       <div
-        className="flex"
+        className="flex w-full"
         style={{
           background: "#1a1a1a",
-          border: "2px solid #0f0f0f",
-          boxShadow:
-            "inset 1px 1px 0 #3a3a3a, inset -1px -1px 0 #0a0a0a, 0 2px 8px rgba(0,0,0,0.6)",
-          padding: "1px",
+          borderTop: "3px solid #0f0f0f",
+          boxShadow: "inset 0 1px 0 #3a3a3a, 0 -4px 12px rgba(0,0,0,0.5)",
           imageRendering: "pixelated",
         }}
       >
@@ -78,23 +66,29 @@ export function HotbarUI() {
           return (
             <div
               key={i}
-              className="relative flex items-center justify-center"
+              className="relative flex items-center justify-center flex-1"
               style={{
-                width: 52,
-                height: 52,
-                margin: "1px",
-                background: isSelected
-                  ? "#c6c6c6"
-                  : "#8b8b8b",
-                border: isSelected
-                  ? "1px solid #ffffff"
-                  : "1px solid #373737",
+                height: 64,
+                margin: "2px",
+                background: isSelected ? "#c6c6c6" : "#8b8b8b",
+                border: isSelected ? "2px solid #ffffff" : "2px solid #373737",
                 boxShadow: isSelected
-                  ? "inset 1px 1px 0 #fafafa, inset -1px -1px 0 #aaa"
-                  : "inset 1px 1px 0 #ababab, inset -1px -1px 0 #585858",
+                  ? "inset 2px 2px 0 #fafafa, inset -2px -2px 0 #aaa, 0 0 12px rgba(255,255,255,0.15)"
+                  : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
               }}
             >
               <BlockIcon blockId={blockId} />
+
+              {/* Slot number */}
+              <span
+                className="absolute top-0.5 left-1.5 text-[11px] font-mono font-bold"
+                style={{
+                  color: isSelected ? "#333" : "rgba(255,255,255,0.35)",
+                  textShadow: isSelected ? "none" : "1px 1px 0 #000",
+                }}
+              >
+                {i + 1}
+              </span>
             </div>
           );
         })}
