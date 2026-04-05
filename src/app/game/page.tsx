@@ -1,6 +1,15 @@
 "use client";
 
-import { GameCanvas } from "@ui/GameCanvas";
+import dynamic from "next/dynamic";
+
+const GameCanvas = dynamic(() => import("@ui/GameCanvas").then((m) => m.GameCanvas), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center bg-black">
+      <p className="text-white font-mono animate-pulse">Loading...</p>
+    </div>
+  ),
+});
 
 export default function GamePage() {
   return (
