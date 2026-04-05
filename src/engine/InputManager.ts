@@ -11,6 +11,9 @@ export class InputManager {
   private locked = false;
   private canvas: HTMLCanvasElement | null = null;
 
+  /** Called when pointer lock is lost (e.g., user pressed ESC). */
+  public onPointerLockLost: (() => void) | null = null;
+
   private onKeyDown: ((e: KeyboardEvent) => void) | null = null;
   private onKeyUp: ((e: KeyboardEvent) => void) | null = null;
   private onMouseMove: ((e: MouseEvent) => void) | null = null;
@@ -38,7 +41,11 @@ export class InputManager {
       if (e.button === 2) this.rightClick = true;
     };
     this.onPointerLockChange = () => {
+      const wasLocked = this.locked;
       this.locked = document.pointerLockElement === canvas;
+      if (wasLocked && !this.locked && this.onPointerLockLost) {
+        this.onPointerLockLost();
+      }
     };
     this.onCanvasClick = () => {
       if (!this.locked) {

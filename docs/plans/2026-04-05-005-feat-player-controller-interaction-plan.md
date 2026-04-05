@@ -1,7 +1,7 @@
 ---
 title: "feat: Add player controller, physics, and block interaction"
 type: feat
-status: active
+status: completed
 date: 2026-04-05
 ---
 

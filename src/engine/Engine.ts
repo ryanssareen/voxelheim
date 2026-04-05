@@ -21,7 +21,7 @@ export class Engine {
   private readonly input = new InputManager();
   private readonly camera = new Camera();
   private readonly registry = BlockRegistry.getInstance();
-  private renderer: Renderer | null = null;
+  public renderer: Renderer | null = null;
   private chunkManager: ChunkManager | null = null;
   private player: PlayerController | null = null;
   private blockInteraction: BlockInteraction | null = null;
@@ -39,6 +39,9 @@ export class Engine {
 
     this.chunkManager = new ChunkManager(this.renderer, SEED);
     this.input.init(this.canvas);
+    this.input.onPointerLockLost = () => {
+      useGameStore.getState().setPaused(true);
+    };
     this.player = new PlayerController(32, 45, 32);
     this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry);
 
