@@ -45,7 +45,10 @@ export function GameCanvas() {
 
       {/* Click to Play overlay */}
       {showOverlay && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-20 cursor-pointer">
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-black/90 z-20 cursor-pointer"
+          onClick={handleClick}
+        >
           <p className="text-white text-2xl font-mono animate-pulse">
             Click to Play
           </p>

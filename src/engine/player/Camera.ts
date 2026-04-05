@@ -3,13 +3,29 @@ import * as THREE from "three";
 const MAX_PITCH = (89 * Math.PI) / 180;
 const EYE_HEIGHT = 1.6;
 
+/** Camera perspective modes, cycled with F5. */
+export type CameraMode = "first-person" | "third-person-back" | "third-person-front";
+
+const THIRD_PERSON_DISTANCE = 5;
+
 /**
- * First-person camera with yaw/pitch mouse-look.
- * Pitch is clamped to ±89 degrees to prevent gimbal flipping.
+ * First-person camera with yaw/pitch mouse-look and F5 perspective cycling.
  */
 export class Camera {
   public yaw = 0;
   public pitch = 0;
+  public mode: CameraMode = "first-person";
+
+  /** Cycles through camera modes: 1st → 3rd back → 3rd front → 1st. */
+  cycleMode(): void {
+    if (this.mode === "first-person") {
+      this.mode = "third-person-back";
+    } else if (this.mode === "third-person-back") {
+      this.mode = "third-person-front";
+    } else {
+      this.mode = "first-person";
+    }
+  }
 
   /** Updates yaw and pitch from mouse delta. */
   update(dx: number, dy: number, sensitivity: number): void {
@@ -51,7 +67,35 @@ export class Camera {
     camera: THREE.PerspectiveCamera,
     position: { x: number; y: number; z: number }
   ): void {
-    camera.position.set(position.x, position.y + EYE_HEIGHT, position.z);
-    camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
+    const eyeX = position.x;
+    const eyeY = position.y + EYE_HEIGHT;
+    const eyeZ = position.z;
+
+    if (this.mode === "first-person") {
+      camera.position.set(eyeX, eyeY, eyeZ);
+      camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
+    } else {
+      const lookDir = this.getLookDirection();
+      const sign = this.mode === "third-person-back" ? -1 : 1;
+      const dist = THIRD_PERSON_DISTANCE;
+
+      camera.position.set(
+        eyeX + lookDir.x * dist * sign,
+        eyeY + lookDir.y * dist * sign,
+        eyeZ + lookDir.z * dist * sign
+      );
+
+      if (this.mode === "third-person-back") {
+        // Look at player
+        camera.lookAt(eyeX, eyeY, eyeZ);
+      } else {
+        // Front-facing: look away from player (same as 1st person direction)
+        camera.lookAt(
+          eyeX - lookDir.x * 10,
+          eyeY - lookDir.y * 10,
+          eyeZ - lookDir.z * 10
+        );
+      }
+    }
   }
 }

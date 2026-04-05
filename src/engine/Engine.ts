@@ -27,6 +27,7 @@ export class Engine {
   private blockInteraction: BlockInteraction | null = null;
   private animationFrameId = 0;
   private running = false;
+  private f5WasDown = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -63,6 +64,30 @@ export class Engine {
 
     if (useGameStore.getState().isPaused) return;
 
+    // Update chunk loading first (always, even before chunks are ready)
+    this.chunkManager!.update(
+      this.player!.position.x,
+      this.player!.position.y,
+      this.player!.position.z
+    );
+
+    // Freeze player until chunks are loaded to prevent falling through void
+    if (!this.chunkManager!.isFullyLoaded()) {
+      this.camera.applyToThreeCamera(
+        this.renderer!.getCamera(),
+        this.player!.position
+      );
+      this.renderer!.render();
+      return;
+    }
+
+    // F5 camera perspective cycling (single-press)
+    const f5Down = this.input.isKeyDown("F5");
+    if (f5Down && !this.f5WasDown) {
+      this.camera.cycleMode();
+    }
+    this.f5WasDown = f5Down;
+
     // Hotbar selection: number keys 1-8
     for (let i = 1; i <= 8; i++) {
       if (this.input.isKeyDown(`Digit${i}`)) {
@@ -96,13 +121,6 @@ export class Engine {
       left,
       right,
       useHotbarStore.getState().getSelectedBlockId()
-    );
-
-    // Update chunk loading
-    this.chunkManager!.update(
-      this.player!.position.x,
-      this.player!.position.y,
-      this.player!.position.z
     );
 
     // Apply camera to renderer

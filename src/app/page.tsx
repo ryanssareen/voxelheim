@@ -2,58 +2,83 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0f] relative overflow-hidden">
-      {/* Subtle background grid */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
-        }}
-      />
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
+      {/* Panorama-style background gradient (sky) */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#1a0a2e] via-[#3a1555] to-[#0d3b1e]" />
 
-      {/* Vignette */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,#0a0a0f_100%)]" />
+      {/* Fake terrain silhouette at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-[30%] bg-gradient-to-t from-[#1a3a1a] to-transparent" />
 
-      <div className="relative flex flex-col items-center gap-4 text-center px-8">
-        {/* Small diamond icon */}
-        <div className="w-4 h-4 rotate-45 bg-cyan-400/60 mb-4 shadow-[0_0_20px_rgba(0,229,255,0.3)]" />
+      {/* Dirt-like strip at very bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-16 bg-[#5c3a1e]" />
+      <div className="absolute bottom-16 left-0 right-0 h-4 bg-[#4a7a3a]" />
 
+      {/* Vignette overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(0,0,0,0.6)_100%)]" />
+
+      <div className="relative flex flex-col items-center gap-0 text-center z-10">
+        {/* Title — Minecraft-style blocky look */}
         <h1
-          className="text-7xl sm:text-8xl font-mono font-bold tracking-[0.2em] text-white"
-          style={{ textShadow: "0 0 40px rgba(0,229,255,0.15)" }}
+          className="text-6xl sm:text-8xl font-black tracking-wider text-[#e0e0e0] select-none"
+          style={{
+            fontFamily: "monospace",
+            textShadow:
+              "4px 4px 0 #3a3a3a, 2px 2px 0 #2a2a2a, 0 0 20px rgba(0,0,0,0.5)",
+            letterSpacing: "0.08em",
+          }}
         >
           VOXELHEIM
         </h1>
-
-        <p className="text-base font-mono text-white/30 tracking-[0.3em] uppercase mt-1">
-          A Voxel Island Challenge
-        </p>
-
-        {/* Thin separator */}
-        <div className="w-24 h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent mt-6 mb-2" />
-
-        <p className="text-sm font-mono text-white/20 max-w-sm leading-relaxed">
-          Explore a floating island. Find 5 crystal shards. Break and build your way through.
-        </p>
-
-        <Link
-          href="/game"
-          className="mt-10 group relative px-16 py-4 font-mono text-lg tracking-widest uppercase text-cyan-300 transition-all duration-300 hover:text-white"
+        <p
+          className="text-sm font-mono text-yellow-300/80 mt-1 tracking-widest"
+          style={{ textShadow: "1px 1px 0 #333" }}
         >
-          {/* Button border with glow on hover */}
-          <span className="absolute inset-0 border border-cyan-500/20 group-hover:border-cyan-400/50 group-hover:shadow-[0_0_30px_rgba(0,229,255,0.1)] transition-all duration-300 rounded" />
-          Play
-        </Link>
+          Island Edition
+        </p>
 
-        {/* Controls hint */}
-        <div className="mt-16 flex gap-8 text-white/15 font-mono text-xs">
-          <span>WASD Move</span>
-          <span>Mouse Look</span>
-          <span>LMB Break</span>
-          <span>RMB Place</span>
+        {/* Menu buttons — Minecraft style */}
+        <div className="flex flex-col gap-2 mt-12 w-72">
+          <Link
+            href="/game"
+            className="relative block w-full py-2.5 text-center text-white font-mono text-base border-2 border-[#1a1a1a] bg-[#5a5a5a] hover:bg-[#6a6a6a] active:bg-[#4a4a4a] transition-colors select-none"
+            style={{
+              boxShadow:
+                "inset 0 -3px 0 #3a3a3a, inset 0 3px 0 #7a7a7a, 0 2px 4px rgba(0,0,0,0.5)",
+              textShadow: "2px 2px 0 #2a2a2a",
+              imageRendering: "pixelated",
+            }}
+          >
+            Play Game
+          </Link>
+
+          <div className="flex gap-2">
+            <div
+              className="flex-1 py-2.5 text-center text-white/60 font-mono text-sm border-2 border-[#1a1a1a] bg-[#3a3a3a] select-none cursor-default"
+              style={{
+                boxShadow:
+                  "inset 0 -3px 0 #2a2a2a, inset 0 3px 0 #4a4a4a, 0 2px 4px rgba(0,0,0,0.5)",
+                textShadow: "1px 1px 0 #1a1a1a",
+              }}
+            >
+              Options...
+            </div>
+            <div
+              className="flex-1 py-2.5 text-center text-white/60 font-mono text-sm border-2 border-[#1a1a1a] bg-[#3a3a3a] select-none cursor-default"
+              style={{
+                boxShadow:
+                  "inset 0 -3px 0 #2a2a2a, inset 0 3px 0 #4a4a4a, 0 2px 4px rgba(0,0,0,0.5)",
+                textShadow: "1px 1px 0 #1a1a1a",
+              }}
+            >
+              Quit Game
+            </div>
+          </div>
         </div>
+
+        {/* Bottom text */}
+        <p className="mt-10 text-[10px] text-white/30 font-mono">
+          Voxelheim Island Edition (v0.1.0)
+        </p>
       </div>
     </main>
   );
