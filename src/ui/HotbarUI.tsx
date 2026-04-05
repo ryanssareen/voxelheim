@@ -25,7 +25,7 @@ function BlockIcon({ blockId }: { blockId: number }) {
 
   // Simple isometric block using 3 parallelogram faces via SVG
   return (
-    <svg width="28" height="28" viewBox="0 0 32 32" style={{ imageRendering: "pixelated" }}>
+    <svg width="36" height="36" viewBox="0 0 32 32" style={{ imageRendering: "pixelated" }}>
       {/* Top face */}
       <polygon points="16,4 28,10 16,16 4,10" fill={v.top} />
       {/* Left face */}
@@ -80,8 +80,8 @@ export function HotbarUI() {
               key={i}
               className="relative flex items-center justify-center"
               style={{
-                width: 40,
-                height: 40,
+                width: 52,
+                height: 52,
                 margin: "1px",
                 background: isSelected
                   ? "#c6c6c6"
