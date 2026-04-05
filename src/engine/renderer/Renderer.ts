@@ -46,6 +46,11 @@ export class Renderer {
     return this.atlas;
   }
 
+  /** Returns the Three.js camera for external manipulation. */
+  getCamera(): THREE.PerspectiveCamera {
+    return this.camera;
+  }
+
   /** Creates a Three.js Mesh from raw mesh data and adds it to the scene. */
   addChunkMesh(
     key: string,
