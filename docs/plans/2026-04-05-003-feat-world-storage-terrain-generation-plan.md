@@ -1,7 +1,7 @@
 ---
 title: "feat: Add world storage and terrain generation"
 type: feat
-status: active
+status: completed
 date: 2026-04-05
 ---
 
