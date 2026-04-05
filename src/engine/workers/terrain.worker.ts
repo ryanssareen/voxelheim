@@ -23,6 +23,7 @@ self.onmessage = (event: MessageEvent<MainToWorker>) => {
       const gen = getGenerator(msg.seed);
       const chunk = gen.generateChunk(msg.cx, msg.cy, msg.cz);
       const meshData = ChunkMeshBuilder.buildMesh(chunk, {}, registry);
+      const blockData = chunk.getBlockData();
 
       const response: WorkerToMain = {
         type: "chunkReady",
@@ -30,6 +31,7 @@ self.onmessage = (event: MessageEvent<MainToWorker>) => {
         cy: msg.cy,
         cz: msg.cz,
         meshData,
+        blockData,
         requestId: msg.requestId,
       };
 
@@ -40,6 +42,7 @@ self.onmessage = (event: MessageEvent<MainToWorker>) => {
         meshData.normals.buffer,
         meshData.uvs.buffer,
         meshData.indices.buffer,
+        blockData.buffer,
       ]);
     } catch (err) {
       const response: WorkerToMain = {

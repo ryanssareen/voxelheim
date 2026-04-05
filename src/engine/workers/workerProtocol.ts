@@ -18,6 +18,7 @@ export type WorkerToMain =
       cy: number;
       cz: number;
       meshData: ChunkMeshData;
+      blockData: Uint8Array;
       requestId: string;
     }
   | {

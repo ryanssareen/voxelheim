@@ -36,7 +36,7 @@ export class ChunkManager {
     this.worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       const msg = event.data;
       if (msg.type === "chunkReady") {
-        this.onChunkReady(msg.cx, msg.cy, msg.cz, msg.meshData);
+        this.onChunkReady(msg.cx, msg.cy, msg.cz, msg.meshData, msg.blockData);
       } else if (msg.type === "error") {
         console.error(`Worker error (request ${msg.requestId}):`, msg.message);
       }
@@ -77,16 +77,15 @@ export class ChunkManager {
     cx: number,
     cy: number,
     cz: number,
-    meshData: ChunkMeshData
+    meshData: ChunkMeshData,
+    blockData: Uint8Array
   ): void {
     const key = chunkKey(cx, cy, cz);
     this.pending.delete(key);
 
-    // Reconstruct Chunk from mesh data is not needed — we need the actual block data.
-    // For MVP, we create an empty chunk placeholder. Full block data would require
-    // the worker to also transfer the Uint8Array block data.
-    // TODO: Transfer block data from worker for getBlock/setBlock support.
     const chunk = new Chunk(cx, cy, cz);
+    chunk.setBlockData(blockData);
+    chunk.dirty = false;
     this.chunks.set(key, chunk);
 
     this.renderer.addChunkMesh(
