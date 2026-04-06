@@ -314,6 +314,7 @@ export class Engine {
     ) {
       handState = "walking";
     }
+    this.handRenderer!.setHeldBlock(selectedBlockId);
     this.handRenderer!.update(dt, handState);
     this.handRenderer!.setVisible(this.camera.mode === "first-person");
 
