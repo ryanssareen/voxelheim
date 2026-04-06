@@ -147,12 +147,15 @@ export class PlayerController {
             }
             return;
           } else if (axis === "x") {
-            // Auto-jump: if on ground, obstacle is 1 block high, and air above
-            if (this.onGround && !this.isCrouching) {
-              const aboveClear =
-                !registry.isSolid(getBlock(bx, by + 1, bz)) &&
-                !registry.isSolid(getBlock(bx, by + 2, bz));
-              if (aboveClear) {
+            // Auto-jump: only if the colliding block is at feet level (1-high step)
+            if (this.onGround && !this.isCrouching && by === Math.floor(this.position.y)) {
+              const stepTop = by + 1;
+              const headRoom =
+                !registry.isSolid(getBlock(bx, stepTop, bz)) &&
+                !registry.isSolid(getBlock(bx, stepTop + 1, bz));
+              if (headRoom) {
+                // Revert horizontal move, then jump
+                this.position.x -= delta;
                 this.velocity.y = JUMP_VELOCITY;
                 this.onGround = false;
                 return;
@@ -166,12 +169,14 @@ export class PlayerController {
             this.velocity.x = 0;
             return;
           } else {
-            // Auto-jump for Z axis too
-            if (this.onGround && !this.isCrouching) {
-              const aboveClear =
-                !registry.isSolid(getBlock(bx, by + 1, bz)) &&
-                !registry.isSolid(getBlock(bx, by + 2, bz));
-              if (aboveClear) {
+            // Auto-jump for Z axis
+            if (this.onGround && !this.isCrouching && by === Math.floor(this.position.y)) {
+              const stepTop = by + 1;
+              const headRoom =
+                !registry.isSolid(getBlock(bx, stepTop, bz)) &&
+                !registry.isSolid(getBlock(bx, stepTop + 1, bz));
+              if (headRoom) {
+                this.position.z -= delta;
                 this.velocity.y = JUMP_VELOCITY;
                 this.onGround = false;
                 return;
