@@ -3,41 +3,37 @@ import * as THREE from "three";
 export type HandState = "idle" | "walking" | "breaking" | "placing";
 
 /**
- * First-person hand/arm visible in the bottom-right of the screen.
- * Attached as a child of the camera so it moves with the view.
+ * First-person hand visible in the bottom-right corner.
+ * Tiny arm attached to camera, rendered on top of everything.
  */
 export class HandRenderer {
   private readonly group: THREE.Group;
-  private readonly arm: THREE.Group;
+  private readonly pivot: THREE.Group;
   private time = 0;
   private placeTimer = 0;
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.group = new THREE.Group();
-    this.arm = new THREE.Group();
+    this.pivot = new THREE.Group();
 
+    // Use unlit materials so they're always visible, skip depth test to render on top
     const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882, depthTest: false });
-    const skinDark = new THREE.MeshBasicMaterial({ color: 0xb89872, depthTest: false });
 
-    // Small arm segments — sized for close-to-camera viewing
-    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.04), skin);
-    upperArm.position.set(0, 0, 0);
-    this.arm.add(upperArm);
+    // Single blocky arm piece — simple like Minecraft
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.025), skin);
+    arm.position.set(0, -0.04, 0);
+    this.pivot.add(arm);
 
-    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.1, 0.035), skinDark);
-    forearm.position.set(0, -0.11, 0);
-    this.arm.add(forearm);
+    // Fist at the end
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.018, 0.028), skin);
+    fist.position.set(0, -0.085, -0.003);
+    this.pivot.add(fist);
 
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.05), skin);
-    hand.position.set(0, -0.18, -0.005);
-    this.arm.add(hand);
+    this.group.add(this.pivot);
 
-    this.arm.position.set(0, 0.02, 0);
-    this.group.add(this.arm);
-
-    // Position: bottom-right corner, close to camera
-    this.group.position.set(0.12, -0.1, -0.2);
-    this.group.rotation.set(-0.3, -0.15, -0.1);
+    // Position in bottom-right corner of view — very small and out of the way
+    this.group.position.set(0.08, -0.07, -0.12);
+    this.group.rotation.set(-0.5, -0.2, -0.1);
     this.group.renderOrder = 999;
 
     camera.add(this.group);
@@ -46,41 +42,26 @@ export class HandRenderer {
   update(dt: number, state: HandState): void {
     this.time += dt;
 
-    if (this.placeTimer > 0) {
-      this.placeTimer = Math.max(0, this.placeTimer - dt);
-    }
+    if (this.placeTimer > 0) this.placeTimer = Math.max(0, this.placeTimer - dt);
 
     switch (state) {
-      case "breaking": {
-        const swing = Math.sin(this.time * 5);
-        this.arm.rotation.x = -Math.abs(swing) * 0.6;
-        this.group.position.y = -0.1 + Math.abs(swing) * 0.01;
+      case "breaking":
+        this.pivot.rotation.x = -Math.abs(Math.sin(this.time * 5)) * 0.5;
         break;
-      }
-      case "placing": {
-        this.placeTimer = 0.2;
-        this.arm.rotation.x = -0.4;
-        this.group.position.z = -0.17;
+      case "placing":
+        this.placeTimer = 0.15;
+        this.pivot.rotation.x = -0.3;
         break;
-      }
-      case "walking": {
-        this.arm.rotation.x = Math.sin(this.time * 8) * 0.08;
-        this.group.position.y = -0.1 + Math.sin(this.time * 8) * 0.005;
-        this.group.position.z = -0.2;
+      case "walking":
+        this.pivot.rotation.x = Math.sin(this.time * 8) * 0.06;
         break;
-      }
-      default: {
-        this.arm.rotation.x = Math.sin(this.time * 1.5) * 0.02;
-        this.group.position.y = -0.1 + Math.sin(this.time * 1.5) * 0.002;
-        this.group.position.z = -0.2;
+      default:
+        this.pivot.rotation.x = Math.sin(this.time * 1.5) * 0.015;
         break;
-      }
     }
 
     if (this.placeTimer > 0 && state !== "placing") {
-      const t = this.placeTimer / 0.2;
-      this.arm.rotation.x = -0.4 * t;
-      this.group.position.z = -0.2 + 0.03 * t;
+      this.pivot.rotation.x = -0.3 * (this.placeTimer / 0.15);
     }
   }
 
