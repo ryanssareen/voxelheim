@@ -107,16 +107,18 @@ export class PlayerController {
     const feetY = Math.floor(this.position.y);
     if (by !== feetY) return false;
 
-    // Check there's room above the step (2 blocks of air)
-    const above1 = getBlock(bx, by + 1, bz);
-    const above2 = getBlock(bx, by + 2, bz);
-    if (registry.isSolid(above1) || registry.isSolid(above2)) return false;
+    // The block directly above the obstacle MUST be air — otherwise it's a wall, not a step
+    const blockAboveObstacle = getBlock(bx, by + 1, bz);
+    if (registry.isSolid(blockAboveObstacle)) return false;
 
-    // Also check the player's own column has headroom
+    // Need 2 blocks of air above the step for the player to fit
+    const blockAbove2 = getBlock(bx, by + 2, bz);
+    if (registry.isSolid(blockAbove2)) return false;
+
+    // Check the player's own column has headroom to jump into
     const px = Math.floor(this.position.x);
     const pz = Math.floor(this.position.z);
-    const selfAbove1 = getBlock(px, feetY + 2, pz);
-    if (registry.isSolid(selfAbove1)) return false;
+    if (registry.isSolid(getBlock(px, feetY + 2, pz))) return false;
 
     this.velocity.y = JUMP_VELOCITY;
     this.onGround = false;
@@ -164,11 +166,6 @@ export class PlayerController {
             }
             return;
           } else if (axis === "x") {
-            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
-              // Revert horizontal move — jump will clear the obstacle
-              this.position.x -= delta;
-              return;
-            }
             if (delta < 0) {
               this.position.x = bx + 1 + HALF_WIDTH;
             } else {
@@ -177,10 +174,6 @@ export class PlayerController {
             this.velocity.x = 0;
             return;
           } else {
-            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
-              this.position.z -= delta;
-              return;
-            }
             if (delta < 0) {
               this.position.z = bz + 1 + HALF_WIDTH;
             } else {
