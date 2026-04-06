@@ -82,20 +82,6 @@ export class PlayerController {
       this.onGround = false;
     }
 
-    // Debug: log collision state every ~60 frames
-    if (!this.onGround && Math.random() < 0.016) {
-      const testBlock = getBlock(
-        Math.floor(this.position.x),
-        Math.floor(this.position.y - 1),
-        Math.floor(this.position.z)
-      );
-      console.log(
-        `[Collision] pos=(${this.position.x.toFixed(1)},${this.position.y.toFixed(1)},${this.position.z.toFixed(1)})`,
-        `block below=${testBlock}, solid=${registry.isSolid(testBlock)}`,
-        `vel.y=${this.velocity.y.toFixed(1)}, onGround=${this.onGround}`
-      );
-    }
-
     // Move and collide axis-by-axis: Y first, then X, then Z
     this.moveAxis("y", this.velocity.y * dt, getBlock, registry);
     this.moveAxis("x", this.velocity.x * dt, getBlock, registry);
