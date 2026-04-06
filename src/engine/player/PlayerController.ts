@@ -147,6 +147,17 @@ export class PlayerController {
             }
             return;
           } else if (axis === "x") {
+            // Auto-jump: if on ground, obstacle is 1 block high, and air above
+            if (this.onGround && !this.isCrouching) {
+              const aboveClear =
+                !registry.isSolid(getBlock(bx, by + 1, bz)) &&
+                !registry.isSolid(getBlock(bx, by + 2, bz));
+              if (aboveClear) {
+                this.velocity.y = JUMP_VELOCITY;
+                this.onGround = false;
+                return;
+              }
+            }
             if (delta < 0) {
               this.position.x = bx + 1 + HALF_WIDTH;
             } else {
@@ -155,6 +166,17 @@ export class PlayerController {
             this.velocity.x = 0;
             return;
           } else {
+            // Auto-jump for Z axis too
+            if (this.onGround && !this.isCrouching) {
+              const aboveClear =
+                !registry.isSolid(getBlock(bx, by + 1, bz)) &&
+                !registry.isSolid(getBlock(bx, by + 2, bz));
+              if (aboveClear) {
+                this.velocity.y = JUMP_VELOCITY;
+                this.onGround = false;
+                return;
+              }
+            }
             if (delta < 0) {
               this.position.z = bz + 1 + HALF_WIDTH;
             } else {

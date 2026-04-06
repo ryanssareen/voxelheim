@@ -5,36 +5,53 @@ export type HandState = "idle" | "walking" | "breaking" | "placing";
 /**
  * First-person hand/arm visible in the bottom-right of the screen.
  * Attached as a child of the camera so it moves with the view.
+ * Uses MeshBasicMaterial (unlit) to guarantee visibility regardless of light position.
  */
 export class HandRenderer {
   private readonly group: THREE.Group;
+  private readonly arm: THREE.Group;
   private time = 0;
   private placeTimer = 0;
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.group = new THREE.Group();
+    this.arm = new THREE.Group();
 
-    const skin = new THREE.MeshLambertMaterial({ color: 0xc8a882 });
+    const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882 });
+    const skinDark = new THREE.MeshBasicMaterial({ color: 0xb89872 });
 
-    // Forearm
+    // Upper arm
+    const upperArm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.5, 0.18),
+      skin
+    );
+    upperArm.position.set(0, 0, 0);
+    this.arm.add(upperArm);
+
+    // Forearm (slightly darker)
     const forearm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.4, 0.12),
-      skin
+      new THREE.BoxGeometry(0.16, 0.4, 0.16),
+      skinDark
     );
-    forearm.position.set(0, -0.1, 0);
-    this.group.add(forearm);
+    forearm.position.set(0, -0.45, 0);
+    this.arm.add(forearm);
 
-    // Hand (slightly wider)
+    // Hand/fist
     const hand = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 0.12, 0.14),
+      new THREE.BoxGeometry(0.17, 0.14, 0.2),
       skin
     );
-    hand.position.set(0, -0.36, 0);
-    this.group.add(hand);
+    hand.position.set(0, -0.72, -0.02);
+    this.arm.add(hand);
 
-    // Position relative to camera: bottom-right
-    this.group.position.set(0.35, -0.35, -0.5);
-    this.group.rotation.set(0, 0, -0.1);
+    // Pivot point at shoulder
+    this.arm.position.set(0, 0.1, 0);
+
+    this.group.add(this.arm);
+
+    // Position the whole group relative to camera: bottom-right, closer
+    this.group.position.set(0.45, -0.5, -0.65);
+    this.group.rotation.set(-0.3, -0.2, -0.15);
 
     camera.add(this.group);
   }
@@ -43,51 +60,50 @@ export class HandRenderer {
   update(dt: number, state: HandState): void {
     this.time += dt;
 
-    // Decay place timer
     if (this.placeTimer > 0) {
-      this.placeTimer -= dt;
+      this.placeTimer = Math.max(0, this.placeTimer - dt);
     }
 
     switch (state) {
       case "breaking": {
-        // Repeated forward swing
-        const swingCycle = (this.time * 6) % (Math.PI * 2);
-        this.group.rotation.x = -Math.abs(Math.sin(swingCycle)) * 0.6;
-        this.group.position.y = -0.35 + Math.sin(swingCycle * 2) * 0.02;
+        // Repeated mining swing — arm rotates forward and back
+        const swingCycle = (this.time * 5) % (Math.PI * 2);
+        const swing = Math.sin(swingCycle);
+        this.arm.rotation.x = -Math.abs(swing) * 0.8;
+        this.group.position.y = -0.5 + Math.abs(swing) * 0.03;
         break;
       }
       case "placing": {
-        // Quick thrust forward
-        this.placeTimer = 0.15;
-        this.group.rotation.x = -0.4;
-        this.group.position.z = -0.45;
+        // Quick forward thrust
+        this.placeTimer = 0.2;
+        this.arm.rotation.x = -0.5;
+        this.group.position.z = -0.55;
         break;
       }
       case "walking": {
-        // Vertical bob
-        this.group.rotation.x = 0;
-        this.group.position.y = -0.35 + Math.sin(this.time * 8) * 0.015;
-        this.group.position.z = -0.5;
+        // Bob up and down with slight swing
+        this.arm.rotation.x = Math.sin(this.time * 8) * 0.1;
+        this.group.position.y = -0.5 + Math.sin(this.time * 8) * 0.02;
+        this.group.position.z = -0.65;
         break;
       }
       default: {
-        // Idle: gentle sway
-        this.group.rotation.x = 0;
-        this.group.position.y = -0.35 + Math.sin(this.time * 2) * 0.005;
-        this.group.position.z = -0.5;
+        // Idle: gentle breathing sway
+        this.arm.rotation.x = Math.sin(this.time * 1.5) * 0.03;
+        this.group.position.y = -0.5 + Math.sin(this.time * 1.5) * 0.005;
+        this.group.position.z = -0.65;
         break;
       }
     }
 
     // Smooth return from place thrust
     if (this.placeTimer > 0 && state !== "placing") {
-      const t = this.placeTimer / 0.15;
-      this.group.rotation.x = -0.4 * t;
-      this.group.position.z = -0.5 + 0.05 * t;
+      const t = this.placeTimer / 0.2;
+      this.arm.rotation.x = -0.5 * t;
+      this.group.position.z = -0.65 + 0.1 * t;
     }
   }
 
-  /** Show or hide the hand. */
   setVisible(visible: boolean): void {
     this.group.visible = visible;
   }
