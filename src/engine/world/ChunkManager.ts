@@ -1,9 +1,10 @@
 import { Chunk } from "@engine/world/Chunk";
 import { Renderer } from "@engine/renderer/Renderer";
-import { ChunkMeshBuilder } from "@engine/renderer/ChunkMeshBuilder";
+import { ChunkMeshBuilder, type GetUV } from "@engine/renderer/ChunkMeshBuilder";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { TerrainGenerator } from "@engine/generation/TerrainGenerator";
 import { StructureGenerator } from "@engine/generation/StructureGenerator";
+import { ATLAS_UVS } from "@data/atlasUVs";
 import {
   CHUNK_SIZE,
   WORLD_SIZE_CHUNKS,
@@ -21,6 +22,13 @@ export class ChunkManager {
   private readonly registry = BlockRegistry.getInstance();
   private readonly chunks = new Map<string, Chunk>();
   private loaded = false;
+
+  /** Resolves texture name to atlas UV coordinates. */
+  private readonly getUV: GetUV = (textureName: string) => {
+    const uv = ATLAS_UVS[textureName];
+    if (uv) return uv;
+    return { u0: 0, v0: 0, u1: 1, v1: 1 };
+  };
 
   constructor(renderer: Renderer, seed: string) {
     this.renderer = renderer;
@@ -56,7 +64,7 @@ export class ChunkManager {
 
     // Build meshes and add to renderer
     for (const [key, chunk] of this.chunks) {
-      const meshData = ChunkMeshBuilder.buildMesh(chunk, {}, this.registry);
+      const meshData = ChunkMeshBuilder.buildMesh(chunk, {}, this.registry, this.getUV);
       this.renderer.addChunkMesh(
         key,
         meshData,
@@ -87,7 +95,7 @@ export class ChunkManager {
     chunk.setBlock(lx, ly, lz, blockId);
 
     // Re-mesh for immediate visual feedback
-    const meshData = ChunkMeshBuilder.buildMesh(chunk, {}, this.registry);
+    const meshData = ChunkMeshBuilder.buildMesh(chunk, {}, this.registry, this.getUV);
     this.renderer.addChunkMesh(
       key,
       meshData,
