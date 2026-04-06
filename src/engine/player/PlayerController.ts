@@ -107,21 +107,21 @@ export class PlayerController {
     const feetY = Math.floor(this.position.y);
     if (by !== feetY) return false;
 
-    // The block directly above the obstacle MUST be air — otherwise it's a wall, not a step
-    const blockAboveObstacle = getBlock(bx, by + 1, bz);
-    if (registry.isSolid(blockAboveObstacle)) return false;
+    // Block above obstacle must be air (it's a 1-block step, not a wall)
+    if (registry.isSolid(getBlock(bx, by + 1, bz))) return false;
 
-    // Need 2 blocks of air above the step for the player to fit
-    const blockAbove2 = getBlock(bx, by + 2, bz);
-    if (registry.isSolid(blockAbove2)) return false;
+    // Need 2 blocks of air above for player to fit
+    if (registry.isSolid(getBlock(bx, by + 2, bz))) return false;
 
-    // Check the player's own column has headroom to jump into
+    // Player's own column needs headroom
     const px = Math.floor(this.position.x);
     const pz = Math.floor(this.position.z);
     if (registry.isSolid(getBlock(px, feetY + 2, pz))) return false;
 
-    this.velocity.y = JUMP_VELOCITY;
-    this.onGround = false;
+    // Step up instantly (no velocity — prevents chain-bouncing on slopes)
+    this.position.y = by + 1;
+    this.onGround = true;
+    this.velocity.y = 0;
     this.autoJumpTimer = AUTO_JUMP_COOLDOWN;
     return true;
   }
@@ -166,6 +166,10 @@ export class PlayerController {
             }
             return;
           } else if (axis === "x") {
+            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
+              // Don't revert position — we stepped up in place
+              return;
+            }
             if (delta < 0) {
               this.position.x = bx + 1 + HALF_WIDTH;
             } else {
@@ -174,6 +178,9 @@ export class PlayerController {
             this.velocity.x = 0;
             return;
           } else {
+            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
+              return;
+            }
             if (delta < 0) {
               this.position.z = bz + 1 + HALF_WIDTH;
             } else {
