@@ -17,8 +17,8 @@ export class HandRenderer {
     this.group = new THREE.Group();
     this.arm = new THREE.Group();
 
-    const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882 });
-    const skinDark = new THREE.MeshBasicMaterial({ color: 0xb89872 });
+    const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882, depthTest: false });
+    const skinDark = new THREE.MeshBasicMaterial({ color: 0xb89872, depthTest: false });
 
     // Upper arm
     const upperArm = new THREE.Mesh(
@@ -52,6 +52,9 @@ export class HandRenderer {
     // Position the whole group relative to camera: bottom-right, closer
     this.group.position.set(0.45, -0.5, -0.65);
     this.group.rotation.set(-0.3, -0.2, -0.15);
+
+    // Render on top of everything
+    this.group.renderOrder = 999;
 
     camera.add(this.group);
   }

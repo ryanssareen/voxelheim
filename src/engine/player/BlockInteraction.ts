@@ -1,4 +1,5 @@
 import { ChunkManager } from "@engine/world/ChunkManager";
+import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { BLOCK_ID } from "@data/blocks";
 import { useGameStore } from "@store/useGameStore";
@@ -29,15 +30,17 @@ export interface BreakState {
 export class BlockInteraction {
   private readonly chunkManager: ChunkManager;
   private readonly registry: BlockRegistry;
+  private readonly itemDrops: ItemDropManager;
 
   // Breaking state
   private breakingPos: { x: number; y: number; z: number } | null = null;
   private breakProgress = 0;
   private breakBlockId = 0;
 
-  constructor(chunkManager: ChunkManager, registry: BlockRegistry) {
+  constructor(chunkManager: ChunkManager, registry: BlockRegistry, itemDrops: ItemDropManager) {
     this.chunkManager = chunkManager;
     this.registry = registry;
+    this.itemDrops = itemDrops;
   }
 
   /** Raycasts from eye position to find the targeted block. */
@@ -117,8 +120,8 @@ export class BlockInteraction {
         if (this.breakProgress >= 1.0) {
           this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
 
-          // Drop into hotbar
-          useHotbarStore.getState().addItem(blockDef.dropId);
+          // Spawn floating item drop
+          this.itemDrops.spawnDrop(blockDef.dropId, bp.x, bp.y, bp.z);
 
           // Crystal shard collection
           if (target.blockId === BLOCK_ID.CRYSTAL) {

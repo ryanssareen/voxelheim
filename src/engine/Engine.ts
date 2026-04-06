@@ -8,6 +8,7 @@ import { BlockInteraction } from "@engine/player/BlockInteraction";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
 import { ChunkManager } from "@engine/world/ChunkManager";
+import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useGameStore } from "@store/useGameStore";
@@ -21,7 +22,7 @@ import {
 const MOUSE_SENSITIVITY = 0.002;
 const SPAWN = { x: 32, y: 50, z: 32 };
 const VOID_Y = -10;
-const AUTOSAVE_INTERVAL = 60_000;
+const AUTOSAVE_INTERVAL = 15_000; // Save every 15 seconds
 
 export class Engine {
   private readonly canvas: HTMLCanvasElement;
@@ -36,6 +37,7 @@ export class Engine {
   private handRenderer: HandRenderer | null = null;
   private blockInteraction: BlockInteraction | null = null;
   private breakOverlay: BlockBreakOverlay | null = null;
+  private itemDrops: ItemDropManager | null = null;
   private animationFrameId = 0;
   private running = false;
   private pWasDown = false;
@@ -85,7 +87,10 @@ export class Engine {
 
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
-      useGameStore.getState().setPaused(true);
+      // Don't pause if we're dead (death screen needs mouse)
+      if (!useGameStore.getState().isDead) {
+        useGameStore.getState().setPaused(true);
+      }
     };
 
     // Player
@@ -96,7 +101,8 @@ export class Engine {
       this.camera.pitch = savedMeta.playerPitch;
     }
 
-    this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry);
+    this.itemDrops = new ItemDropManager(this.renderer.getScene());
+    this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry, this.itemDrops);
 
     // Player model (3rd person)
     this.playerModel = new PlayerModel();
@@ -201,6 +207,10 @@ export class Engine {
     // Void death
     if (this.player!.position.y < VOID_Y) {
       useGameStore.getState().setDead(true);
+      // Exit pointer lock so user can click death screen buttons
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
       return;
     }
 
@@ -218,6 +228,9 @@ export class Engine {
       selectedBlockId,
       dt
     );
+
+    // Update item drops (floating pickups)
+    this.itemDrops!.update(dt, this.player!.position);
 
     // Update break overlay and HUD
     this.breakOverlay!.update(breakState.breakTarget, breakState.breakProgress);
@@ -269,6 +282,7 @@ export class Engine {
     this.input.dispose();
     this.handRenderer?.dispose();
     this.breakOverlay?.dispose();
+    this.itemDrops?.dispose();
     this.playerModel?.dispose();
     this.chunkManager?.dispose();
     this.renderer?.dispose();

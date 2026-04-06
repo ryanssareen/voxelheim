@@ -1,0 +1,138 @@
+import * as THREE from "three";
+import { useHotbarStore } from "@store/useHotbarStore";
+import { BLOCK_ID } from "@data/blocks";
+
+/** Block colors for item drop rendering. */
+const DROP_COLORS: Record<number, number> = {
+  [BLOCK_ID.GRASS]: 0x5cb85c,
+  [BLOCK_ID.DIRT]: 0x8d6e63,
+  [BLOCK_ID.STONE]: 0x9e9e9e,
+  [BLOCK_ID.SAND]: 0xfdd835,
+  [BLOCK_ID.LOG]: 0x5d4037,
+  [BLOCK_ID.LEAVES]: 0x2e7d32,
+  [BLOCK_ID.CRYSTAL]: 0x00e5ff,
+};
+
+interface ItemDrop {
+  mesh: THREE.Mesh;
+  blockId: number;
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  age: number;
+  bobOffset: number;
+}
+
+const PICKUP_DISTANCE = 1.8;
+const DROP_LIFETIME = 60; // seconds before despawn
+const BOB_SPEED = 3;
+const BOB_HEIGHT = 0.15;
+const SPIN_SPEED = 2;
+
+/**
+ * Manages floating item drops in the world.
+ * Items pop out of broken blocks, float/spin, and get picked up on walk-over.
+ */
+export class ItemDropManager {
+  private readonly scene: THREE.Scene;
+  private readonly drops: ItemDrop[] = [];
+
+  constructor(scene: THREE.Scene) {
+    this.scene = scene;
+  }
+
+  /** Spawn a floating item at a block position. */
+  spawnDrop(blockId: number, x: number, y: number, z: number): void {
+    const color = DROP_COLORS[blockId] ?? 0xffffff;
+
+    const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+    const material = new THREE.MeshBasicMaterial({ color });
+    const mesh = new THREE.Mesh(geometry, material);
+
+    // Start at center of broken block with slight random offset
+    const pos = new THREE.Vector3(
+      x + 0.5 + (Math.random() - 0.5) * 0.3,
+      y + 0.5,
+      z + 0.5 + (Math.random() - 0.5) * 0.3
+    );
+    mesh.position.copy(pos);
+
+    // Pop up and out
+    const vel = new THREE.Vector3(
+      (Math.random() - 0.5) * 2,
+      3 + Math.random() * 2,
+      (Math.random() - 0.5) * 2
+    );
+
+    this.scene.add(mesh);
+    this.drops.push({
+      mesh,
+      blockId,
+      position: pos,
+      velocity: vel,
+      age: 0,
+      bobOffset: Math.random() * Math.PI * 2,
+    });
+  }
+
+  /** Update all drops: physics, bob, spin, pickup check. */
+  update(
+    dt: number,
+    playerPos: { x: number; y: number; z: number }
+  ): void {
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      const drop = this.drops[i];
+      drop.age += dt;
+
+      // Remove old drops
+      if (drop.age > DROP_LIFETIME) {
+        this.removeDrop(i);
+        continue;
+      }
+
+      // Physics (first 0.5 seconds: pop out, then settle)
+      if (drop.age < 0.5) {
+        drop.velocity.y -= 15 * dt;
+        drop.position.add(drop.velocity.clone().multiplyScalar(dt));
+      }
+
+      // Bob and spin
+      const bobY =
+        drop.position.y +
+        Math.sin(drop.age * BOB_SPEED + drop.bobOffset) * BOB_HEIGHT * 0.5;
+      drop.mesh.position.set(drop.position.x, bobY, drop.position.z);
+      drop.mesh.rotation.y = drop.age * SPIN_SPEED;
+
+      // Slight scale pulse
+      const scale = 1 + Math.sin(drop.age * 4) * 0.05;
+      drop.mesh.scale.setScalar(scale);
+
+      // Pickup check
+      const dx = playerPos.x - drop.position.x;
+      const dy = playerPos.y + 0.9 - drop.position.y; // check against player center
+      const dz = playerPos.z - drop.position.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      // Only pick up after initial pop (0.3s delay)
+      if (dist < PICKUP_DISTANCE && drop.age > 0.3) {
+        const added = useHotbarStore.getState().addItem(drop.blockId);
+        if (added) {
+          this.removeDrop(i);
+        }
+      }
+    }
+  }
+
+  private removeDrop(index: number): void {
+    const drop = this.drops[index];
+    this.scene.remove(drop.mesh);
+    drop.mesh.geometry.dispose();
+    (drop.mesh.material as THREE.Material).dispose();
+    this.drops.splice(index, 1);
+  }
+
+  dispose(): void {
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      this.removeDrop(i);
+    }
+  }
+}
