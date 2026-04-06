@@ -19,6 +19,7 @@ export class Renderer {
     this.scene.background = new THREE.Color(0x87ceeb);
 
     this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 300);
+    this.scene.add(this.camera); // Must be in scene for camera children (hand) to render
 
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
