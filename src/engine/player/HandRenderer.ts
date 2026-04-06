@@ -34,33 +34,31 @@ export class HandRenderer {
     const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882, depthTest: false });
     const skinDark = new THREE.MeshBasicMaterial({ color: 0xa07850, depthTest: false });
 
-    // Arm segments going DOWN from pivot (negative Y)
-    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.25, 0.06), skin);
-    upperArm.position.set(0, -0.125, 0);
+    // Arm segments — LARGE so they're visible at z=-0.5 distance
+    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), skin);
+    upperArm.position.set(0, -0.2, 0);
 
-    const lowerArm = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.2, 0.055), skinDark);
-    lowerArm.position.set(0, -0.35, 0);
+    const lowerArm = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.3, 0.09), skinDark);
+    lowerArm.position.set(0, -0.55, 0);
 
-    this.fist = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.05, 0.075), skin);
-    this.fist.position.set(0, -0.48, 0);
+    this.fist = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.08, 0.12), skin);
+    this.fist.position.set(0, -0.75, 0);
 
     this.heldBlockMat = new THREE.MeshBasicMaterial({ color: 0x888888, depthTest: false });
-    this.heldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), this.heldBlockMat);
-    this.heldBlock.position.set(0, -0.47, 0);
+    this.heldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), this.heldBlockMat);
+    this.heldBlock.position.set(0, -0.73, 0);
     this.heldBlock.visible = false;
 
     this.armPivot.add(upperArm, lowerArm, this.fist, this.heldBlock);
     this.group.add(this.armPivot);
 
-    // POSITION: bottom-right of screen
-    // x=0.3 pushes right, y=-0.15 pushes down, z=-0.5 is half a meter in front
-    this.group.position.set(0.3, -0.15, -0.5);
+    // POSITION: far right, below center, in front of camera
+    this.group.position.set(0.55, -0.1, -0.5);
 
-    // ROTATION: tilt arm so it angles from lower-right toward screen center
-    // Rotate around Z to lean left, around X to point forward slightly
+    // ROTATION: lean arm left and tilt forward
     this.group.rotation.order = "ZXY";
-    this.group.rotation.z = 0.3;   // lean arm to the left
-    this.group.rotation.x = -0.5;  // tilt forward
+    this.group.rotation.z = 0.25;
+    this.group.rotation.x = -0.4;
 
     // Ensure renders on top
     this.group.renderOrder = 999;
