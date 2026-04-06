@@ -3,8 +3,8 @@ import * as THREE from "three";
 export type HandState = "idle" | "walking" | "breaking" | "placing";
 
 /**
- * First-person hand visible in the bottom-right corner.
- * Tiny arm attached to camera, rendered on top of everything.
+ * Minecraft-style first-person arm in the bottom-right of the screen.
+ * Large blocky arm extending from off-screen, showing forearm and fist.
  */
 export class HandRenderer {
   private readonly group: THREE.Group;
@@ -16,24 +16,32 @@ export class HandRenderer {
     this.group = new THREE.Group();
     this.pivot = new THREE.Group();
 
-    // Use unlit materials so they're always visible, skip depth test to render on top
     const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882, depthTest: false });
+    const skinShadow = new THREE.MeshBasicMaterial({ color: 0xa8845a, depthTest: false });
 
-    // Single blocky arm piece — simple like Minecraft
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.025), skin);
-    arm.position.set(0, -0.04, 0);
-    this.pivot.add(arm);
+    // Upper arm (extends from off-screen)
+    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.06), skin);
+    upperArm.position.set(0, 0.06, 0);
+    this.pivot.add(upperArm);
 
-    // Fist at the end
-    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.018, 0.028), skin);
-    fist.position.set(0, -0.085, -0.003);
+    // Forearm (slightly darker for depth)
+    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.14, 0.055), skinShadow);
+    forearm.position.set(0, -0.1, 0);
+    this.pivot.add(forearm);
+
+    // Fist/hand block
+    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.07), skin);
+    fist.position.set(0, -0.19, -0.008);
     this.pivot.add(fist);
 
+    // Pivot at shoulder
+    this.pivot.position.set(0, 0, 0);
     this.group.add(this.pivot);
 
-    // Position in bottom-right corner of view — very small and out of the way
-    this.group.position.set(0.08, -0.07, -0.12);
-    this.group.rotation.set(-0.5, -0.2, -0.1);
+    // Large, prominent position — bottom-right like Minecraft
+    // Arm comes from below-right, angled inward
+    this.group.position.set(0.14, -0.18, -0.2);
+    this.group.rotation.set(-0.6, -0.3, -0.15);
     this.group.renderOrder = 999;
 
     camera.add(this.group);
@@ -45,23 +53,38 @@ export class HandRenderer {
     if (this.placeTimer > 0) this.placeTimer = Math.max(0, this.placeTimer - dt);
 
     switch (state) {
-      case "breaking":
-        this.pivot.rotation.x = -Math.abs(Math.sin(this.time * 5)) * 0.5;
+      case "breaking": {
+        // Mining swing — arm swings forward and back
+        const swing = Math.sin(this.time * 6);
+        this.pivot.rotation.x = -Math.abs(swing) * 0.7;
+        this.group.position.y = -0.18 + Math.abs(swing) * 0.01;
         break;
-      case "placing":
+      }
+      case "placing": {
         this.placeTimer = 0.15;
-        this.pivot.rotation.x = -0.3;
+        this.pivot.rotation.x = -0.4;
+        this.group.position.z = -0.17;
         break;
-      case "walking":
-        this.pivot.rotation.x = Math.sin(this.time * 8) * 0.06;
+      }
+      case "walking": {
+        this.pivot.rotation.x = Math.sin(this.time * 8) * 0.08;
+        this.group.position.y = -0.18 + Math.sin(this.time * 8) * 0.008;
+        this.group.position.z = -0.2;
         break;
-      default:
-        this.pivot.rotation.x = Math.sin(this.time * 1.5) * 0.015;
+      }
+      default: {
+        // Idle — gentle sway
+        this.pivot.rotation.x = Math.sin(this.time * 1.5) * 0.02;
+        this.group.position.y = -0.18 + Math.sin(this.time * 1.5) * 0.003;
+        this.group.position.z = -0.2;
         break;
+      }
     }
 
     if (this.placeTimer > 0 && state !== "placing") {
-      this.pivot.rotation.x = -0.3 * (this.placeTimer / 0.15);
+      const t = this.placeTimer / 0.15;
+      this.pivot.rotation.x = -0.4 * t;
+      this.group.position.z = -0.2 + 0.03 * t;
     }
   }
 
