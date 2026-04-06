@@ -20,6 +20,7 @@ export class TextureAtlas {
           tex.magFilter = THREE.NearestFilter;
           tex.minFilter = THREE.NearestFilter;
           tex.colorSpace = THREE.SRGBColorSpace;
+          tex.flipY = false; // Atlas UV coords assume top-left origin
           tex.needsUpdate = true;
           this.texture = tex;
           resolve(tex);
