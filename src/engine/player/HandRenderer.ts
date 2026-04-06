@@ -52,14 +52,14 @@ export class HandRenderer {
     this.armPivot.add(upperArm, lowerArm, this.fist, this.heldBlock);
     this.group.add(this.armPivot);
 
-    // POSITION: bottom-right corner, arm extends upward from below screen
-    this.group.position.set(0.4, -0.55, -0.4);
+    // POSITION: bottom-right, arm angled naturally
+    this.group.position.set(0.35, -0.3, -0.45);
 
-    // ROTATION: arm mostly vertical, slight lean inward
+    // ROTATION: tilted forward and inward like holding something
     this.group.rotation.order = "ZXY";
-    this.group.rotation.z = 0.15;    // slight lean left
-    this.group.rotation.x = -0.15;   // barely tilted forward
-    this.group.rotation.y = -0.1;    // slight turn inward
+    this.group.rotation.x = -0.4;
+    this.group.rotation.y = -0.25;
+    this.group.rotation.z = 0.15;
 
     // Ensure renders on top
     this.group.renderOrder = 999;
@@ -69,7 +69,6 @@ export class HandRenderer {
 
     camera.add(this.group);
 
-    console.log("[Hand] Created at", this.group.position.toArray(), "rot", this.group.rotation.toArray());
   }
 
   setHeldBlock(blockId: number): void {

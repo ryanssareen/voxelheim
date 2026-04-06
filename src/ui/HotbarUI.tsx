@@ -1,6 +1,6 @@
 "use client";
 
-import { useHotbarStore } from "@store/useHotbarStore";
+import { useHotbarStore, HOTBAR_SLOTS } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
 
 const BLOCK_VISUALS: Record<
@@ -65,7 +65,7 @@ export function HotbarUI() {
           imageRendering: "pixelated",
         }}
       >
-        {slots.map((slot, i) => {
+        {slots.slice(0, HOTBAR_SLOTS).map((slot, i) => {
           const isSelected = i === selectedIndex;
           return (
             <div

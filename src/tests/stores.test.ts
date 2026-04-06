@@ -83,15 +83,23 @@ describe("useHotbarStore", () => {
     expect(useHotbarStore.getState().slots[0].blockId).toBe(BLOCK_ID.AIR);
   });
 
-  it("scrollUp wraps from 0 to 7", () => {
+  it("scrollUp wraps from 0 to 8", () => {
     useHotbarStore.getState().select(0);
     useHotbarStore.getState().scrollUp();
-    expect(useHotbarStore.getState().selectedIndex).toBe(7);
+    expect(useHotbarStore.getState().selectedIndex).toBe(8);
   });
 
-  it("scrollDown wraps from 7 to 0", () => {
-    useHotbarStore.getState().select(7);
+  it("scrollDown wraps from 8 to 0", () => {
+    useHotbarStore.getState().select(8);
     useHotbarStore.getState().scrollDown();
     expect(useHotbarStore.getState().selectedIndex).toBe(0);
+  });
+
+  it("has 36 total slots (9 hotbar + 27 inventory)", () => {
+    expect(useHotbarStore.getState().slots.length).toBe(36);
+  });
+
+  it("has 4 armor slots", () => {
+    expect(useHotbarStore.getState().armor.length).toBe(4);
   });
 });

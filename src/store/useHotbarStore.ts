@@ -2,7 +2,10 @@ import { create } from "zustand";
 import { BLOCK_ID } from "@data/blocks";
 
 const MAX_STACK = 64;
-const SLOT_COUNT = 8;
+const HOTBAR_SLOTS = 9;
+const INVENTORY_SLOTS = 27;
+const TOTAL_SLOTS = HOTBAR_SLOTS + INVENTORY_SLOTS; // 36
+const ARMOR_SLOTS = 4;
 
 export interface ItemStack {
   blockId: number;
@@ -11,21 +14,28 @@ export interface ItemStack {
 
 interface HotbarState {
   selectedIndex: number;
+  /** First 9 = hotbar, next 27 = main inventory grid */
   slots: ItemStack[];
+  /** 4 armor slots: helmet, chestplate, leggings, boots */
+  armor: ItemStack[];
   select: (index: number) => void;
   scrollUp: () => void;
   scrollDown: () => void;
   getSelectedBlockId: () => number;
-  /** Add a block to the hotbar. Returns false if inventory is full. */
   addItem: (blockId: number) => boolean;
-  /** Remove one item from the selected slot. Returns the block ID removed, or AIR if empty. */
   removeSelectedItem: () => number;
-  /** Reset all slots to empty. */
   resetSlots: () => void;
 }
 
 function emptySlots(): ItemStack[] {
-  return Array.from({ length: SLOT_COUNT }, () => ({
+  return Array.from({ length: TOTAL_SLOTS }, () => ({
+    blockId: BLOCK_ID.AIR,
+    count: 0,
+  }));
+}
+
+function emptyArmor(): ItemStack[] {
+  return Array.from({ length: ARMOR_SLOTS }, () => ({
     blockId: BLOCK_ID.AIR,
     count: 0,
   }));
@@ -34,18 +44,19 @@ function emptySlots(): ItemStack[] {
 export const useHotbarStore = create<HotbarState>((set, get) => ({
   selectedIndex: 0,
   slots: emptySlots(),
+  armor: emptyArmor(),
 
   select: (index: number) =>
-    set({ selectedIndex: Math.max(0, Math.min(SLOT_COUNT - 1, index)) }),
+    set({ selectedIndex: Math.max(0, Math.min(HOTBAR_SLOTS - 1, index)) }),
 
   scrollUp: () => {
     const { selectedIndex } = get();
-    set({ selectedIndex: (selectedIndex + SLOT_COUNT - 1) % SLOT_COUNT });
+    set({ selectedIndex: (selectedIndex + HOTBAR_SLOTS - 1) % HOTBAR_SLOTS });
   },
 
   scrollDown: () => {
     const { selectedIndex } = get();
-    set({ selectedIndex: (selectedIndex + 1) % SLOT_COUNT });
+    set({ selectedIndex: (selectedIndex + 1) % HOTBAR_SLOTS });
   },
 
   getSelectedBlockId: () => {
@@ -56,8 +67,8 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
 
   addItem: (blockId: number) => {
     const { slots } = get();
-    // First pass: find existing stack of same type with space
-    for (let i = 0; i < SLOT_COUNT; i++) {
+    // First: stack in existing matching slot (hotbar first, then inventory)
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
       if (slots[i].blockId === blockId && slots[i].count < MAX_STACK) {
         const newSlots = [...slots];
         newSlots[i] = { blockId, count: slots[i].count + 1 };
@@ -65,8 +76,8 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
         return true;
       }
     }
-    // Second pass: find empty slot
-    for (let i = 0; i < SLOT_COUNT; i++) {
+    // Second: find first empty slot (hotbar first, then inventory)
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
       if (slots[i].count === 0) {
         const newSlots = [...slots];
         newSlots[i] = { blockId, count: 1 };
@@ -74,7 +85,7 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
         return true;
       }
     }
-    return false; // Full
+    return false;
   },
 
   removeSelectedItem: () => {
@@ -92,5 +103,8 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
     return blockId;
   },
 
-  resetSlots: () => set({ slots: emptySlots(), selectedIndex: 0 }),
+  resetSlots: () =>
+    set({ slots: emptySlots(), armor: emptyArmor(), selectedIndex: 0 }),
 }));
+
+export { HOTBAR_SLOTS, INVENTORY_SLOTS, TOTAL_SLOTS, ARMOR_SLOTS };

@@ -246,8 +246,8 @@ export class Engine {
     if (pDown && !this.pWasDown) this.camera.cycleMode();
     this.pWasDown = pDown;
 
-    // Hotbar selection: keys 1-8
-    for (let i = 1; i <= 8; i++) {
+    // Hotbar selection: keys 1-9
+    for (let i = 1; i <= 9; i++) {
       if (this.input.isKeyDown(`Digit${i}`)) {
         useHotbarStore.getState().select(i - 1);
       }

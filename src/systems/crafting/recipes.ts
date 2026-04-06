@@ -70,6 +70,41 @@ export const RECIPES: CraftingRecipe[] = [
     count: 1,
     name: "Log",
   },
+  // grass + dirt → 2 sand (erosion)
+  {
+    grid: [BLOCK_ID.GRASS, BLOCK_ID.DIRT, 0, 0],
+    result: BLOCK_ID.SAND,
+    count: 2,
+    name: "Sand (Erosion)",
+  },
+  // 2 stone → 1 crystal (rare find)
+  {
+    grid: [BLOCK_ID.STONE, BLOCK_ID.STONE, 0, 0],
+    result: BLOCK_ID.CRYSTAL,
+    count: 1,
+    name: "Crystal (Rare Find)",
+  },
+  // stone + sand → 2 dirt (mixing)
+  {
+    grid: [BLOCK_ID.STONE, BLOCK_ID.SAND, 0, 0],
+    result: BLOCK_ID.DIRT,
+    count: 2,
+    name: "Dirt (Mixing)",
+  },
+  // 2 dirt + 2 leaves → 1 grass (composting)
+  {
+    grid: [BLOCK_ID.DIRT, BLOCK_ID.DIRT, BLOCK_ID.LEAVES, BLOCK_ID.LEAVES],
+    result: BLOCK_ID.GRASS,
+    count: 1,
+    name: "Grass (Composting)",
+  },
+  // crystal + 3 stone → 2 crystal (polishing)
+  {
+    grid: [BLOCK_ID.CRYSTAL, BLOCK_ID.STONE, BLOCK_ID.STONE, BLOCK_ID.STONE],
+    result: BLOCK_ID.CRYSTAL,
+    count: 2,
+    name: "Crystal (Polishing)",
+  },
 ];
 
 /** Find a matching recipe for the given 2x2 grid. Returns null if no match. */
