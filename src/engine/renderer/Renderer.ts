@@ -51,6 +51,11 @@ export class Renderer {
     return this.camera;
   }
 
+  /** Returns the scene for adding custom objects. */
+  getScene(): THREE.Scene {
+    return this.scene;
+  }
+
   /** Creates a Three.js Mesh from raw mesh data and adds it to the scene. */
   addChunkMesh(
     key: string,

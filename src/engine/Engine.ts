@@ -2,6 +2,7 @@ import { Clock } from "@engine/Clock";
 import { InputManager } from "@engine/InputManager";
 import { Camera } from "@engine/player/Camera";
 import { PlayerController } from "@engine/player/PlayerController";
+import { PlayerModel } from "@engine/player/PlayerModel";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
 import { Renderer } from "@engine/renderer/Renderer";
 import { ChunkManager } from "@engine/world/ChunkManager";
@@ -24,6 +25,7 @@ export class Engine {
   public renderer: Renderer | null = null;
   private chunkManager: ChunkManager | null = null;
   private player: PlayerController | null = null;
+  private playerModel: PlayerModel | null = null;
   private blockInteraction: BlockInteraction | null = null;
   private animationFrameId = 0;
   private running = false;
@@ -50,6 +52,10 @@ export class Engine {
     this.player = new PlayerController(32, 45, 32);
     this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry);
 
+    // Player model (visible in 3rd person)
+    this.playerModel = new PlayerModel();
+    this.renderer.getScene().add(this.playerModel.group);
+
     // Reset game state
     useGameStore.getState().resetObjective();
 
@@ -64,18 +70,17 @@ export class Engine {
     this.animationFrameId = requestAnimationFrame(this.gameLoop);
 
     const dt = this.clock.getDelta();
-    if (dt === 0) return; // First frame
+    if (dt === 0) return;
 
     if (useGameStore.getState().isPaused) return;
 
-    // Update chunk loading first (always, even before chunks are ready)
+    // Chunk loading
     this.chunkManager!.update(
       this.player!.position.x,
       this.player!.position.y,
       this.player!.position.z
     );
 
-    // Freeze player until chunks are loaded to prevent falling through void
     if (!this.chunkManager!.isFullyLoaded()) {
       this.camera.applyToThreeCamera(
         this.renderer!.getCamera(),
@@ -85,7 +90,7 @@ export class Engine {
       return;
     }
 
-    // P key camera perspective cycling (single-press)
+    // P key camera perspective cycling
     const pDown = this.input.isKeyDown("KeyP");
     if (pDown && !this.pWasDown) {
       this.camera.cycleMode();
@@ -99,12 +104,12 @@ export class Engine {
       }
     }
 
-    // Camera rotation from mouse
+    // Camera rotation
     if (this.input.isPointerLocked()) {
       const { dx, dy } = this.input.getMouseDelta();
       this.camera.update(dx, dy, MOUSE_SENSITIVITY);
     } else {
-      this.input.getMouseDelta(); // Consume to reset accumulator
+      this.input.getMouseDelta();
     }
 
     // Player movement + physics
@@ -127,7 +132,20 @@ export class Engine {
       useHotbarStore.getState().getSelectedBlockId()
     );
 
-    // Apply camera to renderer
+    // Update player model
+    const isMoving =
+      this.player!.velocity.x !== 0 || this.player!.velocity.z !== 0;
+    this.playerModel!.update(
+      this.player!.position,
+      this.camera.yaw,
+      isMoving,
+      this.player!.isCrouching,
+      dt
+    );
+    // Show model only in 3rd person
+    this.playerModel!.setVisible(this.camera.mode !== "first-person");
+
+    // Apply camera
     const eyeH = this.player!.isCrouching ? 1.2 : 1.6;
     this.camera.applyToThreeCamera(
       this.renderer!.getCamera(),
@@ -144,6 +162,7 @@ export class Engine {
     this.running = false;
     cancelAnimationFrame(this.animationFrameId);
     this.input.dispose();
+    this.playerModel?.dispose();
     this.chunkManager?.dispose();
     this.renderer?.dispose();
     useGameStore.getState().resetObjective();
