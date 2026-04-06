@@ -10,10 +10,11 @@ const JUMP_VELOCITY = 8;
 const HALF_WIDTH = 0.3;
 const STAND_HEIGHT = 1.8;
 const CROUCH_HEIGHT = 1.4;
+const AUTO_JUMP_COOLDOWN = 0.3;
 
 /**
  * First-person player controller with WASD movement, sprint (Shift),
- * crouch (Ctrl/CapsLock), gravity, jumping, and AABB collision.
+ * crouch (Ctrl/CapsLock), gravity, jumping, auto-jump, and AABB collision.
  */
 export class PlayerController {
   public position: { x: number; y: number; z: number };
@@ -21,12 +22,12 @@ export class PlayerController {
   public onGround = false;
   public isCrouching = false;
   public isSprinting = false;
+  private autoJumpTimer = 0;
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
     this.position = { x: spawnX, y: spawnY, z: spawnZ };
   }
 
-  /** Current player height (shorter when crouching). */
   get height(): number {
     return this.isCrouching ? CROUCH_HEIGHT : STAND_HEIGHT;
   }
@@ -38,13 +39,13 @@ export class PlayerController {
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry
   ): void {
-    // Crouch: Ctrl or CapsLock
+    // Crouch
     this.isCrouching =
       input.isKeyDown("ControlLeft") ||
       input.isKeyDown("ControlRight") ||
       input.isKeyDown("CapsLock");
 
-    // Sprint: Shift (only when moving forward and not crouching)
+    // Sprint
     this.isSprinting =
       !this.isCrouching &&
       (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight"));
@@ -56,31 +57,12 @@ export class PlayerController {
     let moveX = 0;
     let moveZ = 0;
 
-    if (input.isKeyDown("KeyW")) {
-      moveX += forward.x;
-      moveZ += forward.z;
-    }
-    if (input.isKeyDown("KeyS")) {
-      moveX -= forward.x;
-      moveZ -= forward.z;
-    }
-    if (input.isKeyDown("KeyA")) {
-      moveX -= right.x;
-      moveZ -= right.z;
-    }
-    if (input.isKeyDown("KeyD")) {
-      moveX += right.x;
-      moveZ += right.z;
-    }
+    if (input.isKeyDown("KeyW")) { moveX += forward.x; moveZ += forward.z; }
+    if (input.isKeyDown("KeyS")) { moveX -= forward.x; moveZ -= forward.z; }
+    if (input.isKeyDown("KeyA")) { moveX -= right.x; moveZ -= right.z; }
+    if (input.isKeyDown("KeyD")) { moveX += right.x; moveZ += right.z; }
 
-    // Speed based on state
-    const speed = this.isCrouching
-      ? CROUCH_SPEED
-      : this.isSprinting
-        ? SPRINT_SPEED
-        : WALK_SPEED;
-
-    // Normalize horizontal movement
+    const speed = this.isCrouching ? CROUCH_SPEED : this.isSprinting ? SPRINT_SPEED : WALK_SPEED;
     const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
     if (len > 0) {
       moveX = (moveX / len) * speed;
@@ -101,10 +83,45 @@ export class PlayerController {
       this.onGround = false;
     }
 
+    // Auto-jump cooldown
+    if (this.autoJumpTimer > 0) {
+      this.autoJumpTimer -= dt;
+    }
+
     // Move and collide axis-by-axis: Y first, then X, then Z
     this.moveAxis("y", this.velocity.y * dt, getBlock, registry);
     this.moveAxis("x", this.velocity.x * dt, getBlock, registry);
     this.moveAxis("z", this.velocity.z * dt, getBlock, registry);
+  }
+
+  private tryAutoJump(
+    bx: number,
+    by: number,
+    bz: number,
+    getBlock: (wx: number, wy: number, wz: number) => number,
+    registry: BlockRegistry
+  ): boolean {
+    if (!this.onGround || this.isCrouching || this.autoJumpTimer > 0) return false;
+
+    // Only auto-jump over blocks at feet level
+    const feetY = Math.floor(this.position.y);
+    if (by !== feetY) return false;
+
+    // Check there's room above the step (2 blocks of air)
+    const above1 = getBlock(bx, by + 1, bz);
+    const above2 = getBlock(bx, by + 2, bz);
+    if (registry.isSolid(above1) || registry.isSolid(above2)) return false;
+
+    // Also check the player's own column has headroom
+    const px = Math.floor(this.position.x);
+    const pz = Math.floor(this.position.z);
+    const selfAbove1 = getBlock(px, feetY + 2, pz);
+    if (registry.isSolid(selfAbove1)) return false;
+
+    this.velocity.y = JUMP_VELOCITY;
+    this.onGround = false;
+    this.autoJumpTimer = AUTO_JUMP_COOLDOWN;
+    return true;
   }
 
   private moveAxis(
@@ -147,19 +164,10 @@ export class PlayerController {
             }
             return;
           } else if (axis === "x") {
-            // Auto-jump: only if the colliding block is at feet level (1-high step)
-            if (this.onGround && !this.isCrouching && by === Math.floor(this.position.y)) {
-              const stepTop = by + 1;
-              const headRoom =
-                !registry.isSolid(getBlock(bx, stepTop, bz)) &&
-                !registry.isSolid(getBlock(bx, stepTop + 1, bz));
-              if (headRoom) {
-                // Revert horizontal move, then jump
-                this.position.x -= delta;
-                this.velocity.y = JUMP_VELOCITY;
-                this.onGround = false;
-                return;
-              }
+            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
+              // Revert horizontal move — jump will clear the obstacle
+              this.position.x -= delta;
+              return;
             }
             if (delta < 0) {
               this.position.x = bx + 1 + HALF_WIDTH;
@@ -169,18 +177,9 @@ export class PlayerController {
             this.velocity.x = 0;
             return;
           } else {
-            // Auto-jump for Z axis
-            if (this.onGround && !this.isCrouching && by === Math.floor(this.position.y)) {
-              const stepTop = by + 1;
-              const headRoom =
-                !registry.isSolid(getBlock(bx, stepTop, bz)) &&
-                !registry.isSolid(getBlock(bx, stepTop + 1, bz));
-              if (headRoom) {
-                this.position.z -= delta;
-                this.velocity.y = JUMP_VELOCITY;
-                this.onGround = false;
-                return;
-              }
+            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
+              this.position.z -= delta;
+              return;
             }
             if (delta < 0) {
               this.position.z = bz + 1 + HALF_WIDTH;
