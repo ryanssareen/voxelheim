@@ -3,19 +3,26 @@ import { InputManager } from "@engine/InputManager";
 import { Camera } from "@engine/player/Camera";
 import { PlayerController } from "@engine/player/PlayerController";
 import { PlayerModel } from "@engine/player/PlayerModel";
+import { HandRenderer } from "@engine/player/HandRenderer";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
+import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
 import { ChunkManager } from "@engine/world/ChunkManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useGameStore } from "@store/useGameStore";
+import {
+  saveWorld,
+  loadWorldMeta,
+  loadWorldChunks,
+  type WorldMeta,
+} from "@systems/persistence/WorldStorage";
 
 const MOUSE_SENSITIVITY = 0.002;
-const SEED = "voxelheim-mvp";
+const SPAWN = { x: 32, y: 50, z: 32 };
+const VOID_Y = -10;
+const AUTOSAVE_INTERVAL = 60_000;
 
-/**
- * Main game engine. Orchestrates all subsystems and runs the game loop.
- */
 export class Engine {
   private readonly canvas: HTMLCanvasElement;
   private readonly clock = new Clock();
@@ -26,44 +33,130 @@ export class Engine {
   private chunkManager: ChunkManager | null = null;
   private player: PlayerController | null = null;
   private playerModel: PlayerModel | null = null;
+  private handRenderer: HandRenderer | null = null;
   private blockInteraction: BlockInteraction | null = null;
+  private breakOverlay: BlockBreakOverlay | null = null;
   private animationFrameId = 0;
   private running = false;
   private pWasDown = false;
+  private worldId: string | null = null;
+  private seed = "voxelheim-mvp";
+  private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
   }
 
-  /** Initializes all subsystems and starts the game loop. */
-  async init(): Promise<void> {
+  async init(worldId?: string): Promise<void> {
     this.renderer = new Renderer(this.canvas);
     await this.renderer.init();
 
-    this.chunkManager = new ChunkManager(this.renderer, SEED);
+    // Load world config
+    this.worldId = worldId ?? null;
+    let savedMeta: WorldMeta | null = null;
 
-    // Generate world synchronously before starting the game loop
+    if (worldId) {
+      savedMeta = await loadWorldMeta(worldId);
+      if (savedMeta) {
+        this.seed = savedMeta.seed;
+      }
+    } else {
+      // Read seed from sessionStorage (from create world page)
+      try {
+        const config = JSON.parse(
+          sessionStorage.getItem("voxelheim-world-config") || "{}"
+        );
+        if (config.seed) this.seed = config.seed;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    this.chunkManager = new ChunkManager(this.renderer, this.seed);
     this.chunkManager.update(0, 0, 0);
+
+    // Load saved chunk modifications
+    if (worldId) {
+      const savedChunks = await loadWorldChunks(worldId);
+      if (savedChunks.size > 0) {
+        this.chunkManager.loadModifiedChunks(savedChunks);
+      }
+    }
 
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
       useGameStore.getState().setPaused(true);
     };
-    // Spawn above the terrain center — player will fall to surface
-    this.player = new PlayerController(32, 50, 32);
+
+    // Player
+    const spawnPos = savedMeta?.playerPos ?? SPAWN;
+    this.player = new PlayerController(spawnPos.x, spawnPos.y, spawnPos.z);
+    if (savedMeta) {
+      this.camera.yaw = savedMeta.playerYaw;
+      this.camera.pitch = savedMeta.playerPitch;
+    }
+
     this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry);
 
-    // Player model (visible in 3rd person)
+    // Player model (3rd person)
     this.playerModel = new PlayerModel();
     this.renderer.getScene().add(this.playerModel.group);
 
-    // Reset game state
-    useGameStore.getState().resetObjective();
+    // Hand (1st person)
+    this.handRenderer = new HandRenderer(this.renderer.getCamera());
+
+    // Break overlay
+    this.breakOverlay = new BlockBreakOverlay();
+    this.renderer.getScene().add(this.breakOverlay.getMesh());
+
+    // Restore state
+    if (savedMeta) {
+      useGameStore.setState({ shardsCollected: savedMeta.shardsCollected });
+      // Restore hotbar
+      if (savedMeta.hotbarSlots) {
+        useHotbarStore.setState({ slots: savedMeta.hotbarSlots });
+      }
+    } else {
+      useGameStore.getState().resetObjective();
+      useHotbarStore.getState().resetSlots();
+    }
 
     this.renderer.resize(this.canvas.clientWidth, this.canvas.clientHeight);
 
+    // Auto-save
+    this.autoSaveTimer = setInterval(() => this.save(), AUTOSAVE_INTERVAL);
+
     this.running = true;
     this.gameLoop();
+  }
+
+  /** Save current world state to IndexedDB. */
+  async save(): Promise<void> {
+    if (!this.worldId || !this.chunkManager || !this.player) return;
+
+    const meta: WorldMeta = {
+      id: this.worldId,
+      name: "World", // TODO: store name
+      seed: this.seed,
+      createdAt: Date.now(),
+      lastPlayedAt: Date.now(),
+      playerPos: { ...this.player.position },
+      playerYaw: this.camera.yaw,
+      playerPitch: this.camera.pitch,
+      shardsCollected: useGameStore.getState().shardsCollected,
+      hotbarSlots: useHotbarStore.getState().slots,
+    };
+
+    await saveWorld(meta, this.chunkManager.getModifiedChunks());
+  }
+
+  /** Respawn after death. */
+  respawn(): void {
+    if (!this.player) return;
+    this.player.position = { ...SPAWN };
+    this.player.velocity = { x: 0, y: 0, z: 0 };
+    this.player.onGround = false;
+    useGameStore.getState().setDead(false);
   }
 
   private gameLoop = (): void => {
@@ -73,32 +166,15 @@ export class Engine {
     const dt = this.clock.getDelta();
     if (dt === 0) return;
 
-    if (useGameStore.getState().isPaused) return;
+    const state = useGameStore.getState();
+    if (state.isPaused || state.isDead) return;
 
-    // Chunk loading
-    this.chunkManager!.update(
-      this.player!.position.x,
-      this.player!.position.y,
-      this.player!.position.z
-    );
-
-    if (!this.chunkManager!.isFullyLoaded()) {
-      this.camera.applyToThreeCamera(
-        this.renderer!.getCamera(),
-        this.player!.position
-      );
-      this.renderer!.render();
-      return;
-    }
-
-    // P key camera perspective cycling
+    // P key camera cycling
     const pDown = this.input.isKeyDown("KeyP");
-    if (pDown && !this.pWasDown) {
-      this.camera.cycleMode();
-    }
+    if (pDown && !this.pWasDown) this.camera.cycleMode();
     this.pWasDown = pDown;
 
-    // Hotbar selection: number keys 1-8
+    // Hotbar selection: keys 1-8
     for (let i = 1; i <= 8; i++) {
       if (this.input.isKeyDown(`Digit${i}`)) {
         useHotbarStore.getState().select(i - 1);
@@ -113,7 +189,7 @@ export class Engine {
       this.input.getMouseDelta();
     }
 
-    // Player movement + physics
+    // Player physics
     this.player!.update(
       dt,
       this.input,
@@ -122,18 +198,47 @@ export class Engine {
       this.registry
     );
 
-    // Block interaction
-    const { left, right } = this.input.getMouseButton();
+    // Void death
+    if (this.player!.position.y < VOID_Y) {
+      useGameStore.getState().setDead(true);
+      return;
+    }
+
+    // Block interaction (timed breaking)
+    const isLeftHeld = this.input.isMouseButtonDown(0);
+    const { right: rightClick } = this.input.getMouseButton();
     const lookDir = this.camera.getLookDirection();
-    this.blockInteraction!.update(
+    const selectedBlockId = useHotbarStore.getState().getSelectedBlockId();
+
+    const breakState = this.blockInteraction!.update(
       this.player!.position,
       lookDir,
-      left,
-      right,
-      useHotbarStore.getState().getSelectedBlockId()
+      isLeftHeld,
+      rightClick,
+      selectedBlockId,
+      dt
     );
 
-    // Update player model
+    // Update break overlay and HUD
+    this.breakOverlay!.update(breakState.breakTarget, breakState.breakProgress);
+    useGameStore.getState().setBreakProgress(breakState.breakProgress);
+
+    // Update hand state
+    let handState: "idle" | "walking" | "breaking" | "placing" = "idle";
+    if (breakState.isBreaking) {
+      handState = "breaking";
+    } else if (rightClick) {
+      handState = "placing";
+    } else if (
+      this.player!.velocity.x !== 0 ||
+      this.player!.velocity.z !== 0
+    ) {
+      handState = "walking";
+    }
+    this.handRenderer!.update(dt, handState);
+    this.handRenderer!.setVisible(this.camera.mode === "first-person");
+
+    // Player model (3rd person)
     const isMoving =
       this.player!.velocity.x !== 0 || this.player!.velocity.z !== 0;
     this.playerModel!.update(
@@ -143,10 +248,9 @@ export class Engine {
       this.player!.isCrouching,
       dt
     );
-    // Show model only in 3rd person
     this.playerModel!.setVisible(this.camera.mode !== "first-person");
 
-    // Apply camera
+    // Camera
     const eyeH = this.player!.isCrouching ? 1.2 : 1.6;
     this.camera.applyToThreeCamera(
       this.renderer!.getCamera(),
@@ -154,15 +258,17 @@ export class Engine {
       eyeH
     );
 
-    // Render
     this.renderer!.render();
   };
 
-  /** Stops the game loop and cleans up all subsystems. */
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.running = false;
     cancelAnimationFrame(this.animationFrameId);
+    if (this.autoSaveTimer) clearInterval(this.autoSaveTimer);
+    await this.save();
     this.input.dispose();
+    this.handRenderer?.dispose();
+    this.breakOverlay?.dispose();
     this.playerModel?.dispose();
     this.chunkManager?.dispose();
     this.renderer?.dispose();

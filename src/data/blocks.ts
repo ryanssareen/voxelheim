@@ -21,6 +21,10 @@ export interface BlockDefinition {
   textures: BlockTextures;
   /** Special behavior tag for gameplay systems. */
   special: "none" | "crystal_shard";
+  /** Seconds to break this block. 0 = instant / unbreakable. */
+  breakTime: number;
+  /** Block ID dropped when broken. */
+  dropId: number;
 }
 
 /** Canonical block type IDs. */
@@ -40,73 +44,57 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
   {
     id: BLOCK_ID.AIR,
     name: "Air",
-    solid: false,
-    transparent: true,
-    breakable: false,
+    solid: false, transparent: true, breakable: false,
     textures: { top: "", bottom: "", side: "" },
-    special: "none",
+    special: "none", breakTime: 0, dropId: 0,
   },
   {
     id: BLOCK_ID.GRASS,
     name: "Grass",
-    solid: true,
-    transparent: false,
-    breakable: true,
+    solid: true, transparent: false, breakable: true,
     textures: { top: "grass_top", bottom: "dirt", side: "grass_side" },
-    special: "none",
+    special: "none", breakTime: 0.6, dropId: BLOCK_ID.DIRT,
   },
   {
     id: BLOCK_ID.DIRT,
     name: "Dirt",
-    solid: true,
-    transparent: false,
-    breakable: true,
+    solid: true, transparent: false, breakable: true,
     textures: { top: "dirt", bottom: "dirt", side: "dirt" },
-    special: "none",
+    special: "none", breakTime: 0.5, dropId: BLOCK_ID.DIRT,
   },
   {
     id: BLOCK_ID.STONE,
     name: "Stone",
-    solid: true,
-    transparent: false,
-    breakable: true,
+    solid: true, transparent: false, breakable: true,
     textures: { top: "stone", bottom: "stone", side: "stone" },
-    special: "none",
+    special: "none", breakTime: 1.5, dropId: BLOCK_ID.STONE,
   },
   {
     id: BLOCK_ID.SAND,
     name: "Sand",
-    solid: true,
-    transparent: false,
-    breakable: true,
+    solid: true, transparent: false, breakable: true,
     textures: { top: "sand", bottom: "sand", side: "sand" },
-    special: "none",
+    special: "none", breakTime: 0.5, dropId: BLOCK_ID.SAND,
   },
   {
     id: BLOCK_ID.LOG,
     name: "Log",
-    solid: true,
-    transparent: false,
-    breakable: true,
+    solid: true, transparent: false, breakable: true,
     textures: { top: "log_top", bottom: "log_top", side: "log_side" },
-    special: "none",
+    special: "none", breakTime: 2.0, dropId: BLOCK_ID.LOG,
   },
   {
     id: BLOCK_ID.LEAVES,
     name: "Leaves",
-    solid: true,
-    transparent: true,
-    breakable: true,
+    solid: true, transparent: true, breakable: true,
     textures: { top: "leaves", bottom: "leaves", side: "leaves" },
-    special: "none",
+    special: "none", breakTime: 0.2, dropId: BLOCK_ID.LEAVES,
   },
   {
     id: BLOCK_ID.CRYSTAL,
     name: "Crystal",
-    solid: true,
-    transparent: true,
-    breakable: true,
-    textures: { top: "crystal", bottom: "crystal", side: "crystal" },
-    special: "crystal_shard",
+    solid: true, transparent: true, breakable: true,
+    textures: { top: "crystal_shard", bottom: "crystal_shard", side: "crystal_shard" },
+    special: "crystal_shard", breakTime: 3.0, dropId: BLOCK_ID.CRYSTAL,
   },
 ];

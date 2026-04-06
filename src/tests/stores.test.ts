@@ -6,7 +6,7 @@ import { BLOCK_ID } from "@data/blocks";
 describe("useGameStore", () => {
   beforeEach(() => {
     useGameStore.getState().resetObjective();
-    useGameStore.setState({ isPaused: false });
+    useGameStore.setState({ isPaused: false, isDead: false });
   });
 
   it("starts with 0 shards collected", () => {
@@ -37,17 +37,50 @@ describe("useGameStore", () => {
 
 describe("useHotbarStore", () => {
   beforeEach(() => {
+    useHotbarStore.getState().resetSlots();
+  });
+
+  it("starts with all empty slots", () => {
+    expect(useHotbarStore.getState().getSelectedBlockId()).toBe(BLOCK_ID.AIR);
+    expect(useHotbarStore.getState().slots[0].count).toBe(0);
+  });
+
+  it("addItem places block in first empty slot", () => {
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
+    const slot = useHotbarStore.getState().slots[0];
+    expect(slot.blockId).toBe(BLOCK_ID.DIRT);
+    expect(slot.count).toBe(1);
+  });
+
+  it("addItem stacks same block type", () => {
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
+    expect(useHotbarStore.getState().slots[0].count).toBe(3);
+  });
+
+  it("addItem puts different blocks in different slots", () => {
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
+    useHotbarStore.getState().addItem(BLOCK_ID.STONE);
+    expect(useHotbarStore.getState().slots[0].blockId).toBe(BLOCK_ID.DIRT);
+    expect(useHotbarStore.getState().slots[1].blockId).toBe(BLOCK_ID.STONE);
+  });
+
+  it("removeSelectedItem decrements count", () => {
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
     useHotbarStore.getState().select(0);
+    const removed = useHotbarStore.getState().removeSelectedItem();
+    expect(removed).toBe(BLOCK_ID.DIRT);
+    expect(useHotbarStore.getState().slots[0].count).toBe(1);
   });
 
-  it("starts with AIR selected (empty hotbar)", () => {
-    expect(useHotbarStore.getState().getSelectedBlockId()).toBe(BLOCK_ID.AIR);
-  });
-
-  it("select(3) changes selectedIndex", () => {
-    useHotbarStore.getState().select(3);
-    expect(useHotbarStore.getState().selectedIndex).toBe(3);
-    expect(useHotbarStore.getState().getSelectedBlockId()).toBe(BLOCK_ID.AIR);
+  it("removeSelectedItem clears slot when count reaches 0", () => {
+    useHotbarStore.getState().addItem(BLOCK_ID.DIRT);
+    useHotbarStore.getState().select(0);
+    useHotbarStore.getState().removeSelectedItem();
+    expect(useHotbarStore.getState().slots[0].count).toBe(0);
+    expect(useHotbarStore.getState().slots[0].blockId).toBe(BLOCK_ID.AIR);
   });
 
   it("scrollUp wraps from 0 to 7", () => {

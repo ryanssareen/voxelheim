@@ -31,22 +31,26 @@ function BlockIcon({ blockId }: { blockId: number }) {
 }
 
 /**
- * Full-width Minecraft-style hotbar pinned to the bottom of the screen.
+ * Full-width Minecraft-style hotbar with item stack counts.
  */
 export function HotbarUI() {
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const slots = useHotbarStore((s) => s.slots);
 
+  const selectedSlot = slots[selectedIndex];
+  const selectedVisual =
+    selectedSlot.count > 0 ? BLOCK_VISUALS[selectedSlot.blockId] : null;
+
   return (
     <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10">
       {/* Block name tooltip */}
-      {BLOCK_VISUALS[slots[selectedIndex]] && (
+      {selectedVisual && (
         <div className="text-center mb-1">
           <span
             className="text-white font-mono text-sm px-3 py-1 bg-black/60 rounded-sm"
             style={{ textShadow: "1px 1px 0 #000" }}
           >
-            {BLOCK_VISUALS[slots[selectedIndex]]?.name}
+            {selectedVisual.name}
           </span>
         </div>
       )}
@@ -61,7 +65,7 @@ export function HotbarUI() {
           imageRendering: "pixelated",
         }}
       >
-        {slots.map((blockId, i) => {
+        {slots.map((slot, i) => {
           const isSelected = i === selectedIndex;
           return (
             <div
@@ -77,7 +81,17 @@ export function HotbarUI() {
                   : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
               }}
             >
-              <BlockIcon blockId={blockId} />
+              {slot.count > 0 && <BlockIcon blockId={slot.blockId} />}
+
+              {/* Item count */}
+              {slot.count > 1 && (
+                <span
+                  className="absolute bottom-0.5 right-1 text-[12px] font-mono font-bold text-white"
+                  style={{ textShadow: "1px 1px 0 #000" }}
+                >
+                  {slot.count}
+                </span>
+              )}
 
               {/* Slot number */}
               <span

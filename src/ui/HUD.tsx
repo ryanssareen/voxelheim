@@ -10,6 +10,7 @@ export function HUD() {
   const shardsCollected = useGameStore((s) => s.shardsCollected);
   const shardsTotal = useGameStore((s) => s.shardsTotal);
   const isComplete = useGameStore((s) => s.isComplete);
+  const breakProgress = useGameStore((s) => s.breakProgress);
   const [showContinue, setShowContinue] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
 
@@ -44,6 +45,16 @@ export function HUD() {
           <rect x="13" y="11" width="7" height="2" fill="white" />
         </svg>
       </div>
+
+      {/* Break progress bar below crosshair */}
+      {breakProgress > 0 && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-5 w-24 h-1 bg-black/40 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-white/80 transition-none"
+            style={{ width: `${breakProgress * 100}%` }}
+          />
+        </div>
+      )}
 
       {/* Shard Counter — top center, Minecraft achievement style */}
       <div

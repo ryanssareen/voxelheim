@@ -8,10 +8,6 @@ interface EngineState {
   error: string | null;
 }
 
-/**
- * Manages Engine lifecycle with SSR-safe dynamic import.
- * Engine and Three.js are loaded only in the browser.
- */
 export function useEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
   const [state, setState] = useState<EngineState>({
     isLoading: false,
@@ -21,7 +17,7 @@ export function useEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) 
   const engineRef = useRef<any>(null);
   const initCalled = useRef(false);
 
-  const start = () => {
+  const start = (worldId?: string) => {
     if (initCalled.current) return;
     initCalled.current = true;
     setState({ isLoading: true, isReady: false, error: null });
@@ -32,12 +28,11 @@ export function useEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) 
       return;
     }
 
-    // Dynamic import to avoid SSR — Three.js accesses `window` at module level
     import("@engine/Engine")
       .then(async ({ Engine }) => {
         const engine = new Engine(canvas);
         engineRef.current = engine;
-        await engine.init();
+        await engine.init(worldId);
         setState({ isLoading: false, isReady: true, error: null });
       })
       .catch((err) => {

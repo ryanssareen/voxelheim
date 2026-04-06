@@ -8,6 +8,8 @@ export class InputManager {
   private mouseDy = 0;
   private leftClick = false;
   private rightClick = false;
+  private leftDown = false;
+  private rightDown = false;
   private locked = false;
   private canvas: HTMLCanvasElement | null = null;
 
@@ -18,6 +20,7 @@ export class InputManager {
   private onKeyUp: ((e: KeyboardEvent) => void) | null = null;
   private onMouseMove: ((e: MouseEvent) => void) | null = null;
   private onMouseDown: ((e: MouseEvent) => void) | null = null;
+  private onMouseUp: ((e: MouseEvent) => void) | null = null;
   private onPointerLockChange: (() => void) | null = null;
   private onCanvasClick: (() => void) | null = null;
 
@@ -37,8 +40,12 @@ export class InputManager {
       this.mouseDy += e.movementY;
     };
     this.onMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) this.leftClick = true;
-      if (e.button === 2) this.rightClick = true;
+      if (e.button === 0) { this.leftClick = true; this.leftDown = true; }
+      if (e.button === 2) { this.rightClick = true; this.rightDown = true; }
+    };
+    this.onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) this.leftDown = false;
+      if (e.button === 2) this.rightDown = false;
     };
     this.onPointerLockChange = () => {
       const wasLocked = this.locked;
@@ -57,6 +64,7 @@ export class InputManager {
     window.addEventListener("keyup", this.onKeyUp);
     document.addEventListener("mousemove", this.onMouseMove);
     canvas.addEventListener("mousedown", this.onMouseDown);
+    window.addEventListener("mouseup", this.onMouseUp);
     document.addEventListener("pointerlockchange", this.onPointerLockChange);
     canvas.addEventListener("click", this.onCanvasClick);
 
@@ -87,6 +95,11 @@ export class InputManager {
     return { left, right };
   }
 
+  /** Returns true if the mouse button is currently held down. */
+  isMouseButtonDown(button: 0 | 2): boolean {
+    return button === 0 ? this.leftDown : this.rightDown;
+  }
+
   /** Returns true if the pointer is currently locked to the canvas. */
   isPointerLocked(): boolean {
     return this.locked;
@@ -98,6 +111,7 @@ export class InputManager {
     if (this.onKeyUp) window.removeEventListener("keyup", this.onKeyUp);
     if (this.onMouseMove) document.removeEventListener("mousemove", this.onMouseMove);
     if (this.onMouseDown && this.canvas) this.canvas.removeEventListener("mousedown", this.onMouseDown);
+    if (this.onMouseUp) window.removeEventListener("mouseup", this.onMouseUp);
     if (this.onPointerLockChange) document.removeEventListener("pointerlockchange", this.onPointerLockChange);
     if (this.onCanvasClick && this.canvas) this.canvas.removeEventListener("click", this.onCanvasClick);
     if (this.locked && document.exitPointerLock) {

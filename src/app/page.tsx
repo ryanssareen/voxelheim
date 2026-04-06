@@ -129,7 +129,7 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col items-center gap-2.5 mt-10 w-[300px] sm:w-[380px]">
-          <Link href="/game/create" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
+          <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
             Play Game
           </Link>
           <div className="flex gap-2.5 w-full">

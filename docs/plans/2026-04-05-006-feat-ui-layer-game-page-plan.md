@@ -1,7 +1,7 @@
 ---
 title: "feat: Add UI layer and game page"
 type: feat
-status: active
+status: completed
 date: 2026-04-05
 ---
 

@@ -21,6 +21,7 @@ export class ChunkManager {
   private readonly seed: string;
   private readonly registry = BlockRegistry.getInstance();
   private readonly chunks = new Map<string, Chunk>();
+  private readonly modifiedChunks = new Set<string>();
   private loaded = false;
 
   /** Resolves texture name to atlas UV coordinates. */
@@ -93,6 +94,7 @@ export class ChunkManager {
 
     const { lx, ly, lz } = worldToLocal(wx, wy, wz);
     chunk.setBlock(lx, ly, lz, blockId);
+    this.modifiedChunks.add(key);
 
     // Re-mesh for immediate visual feedback
     const meshData = ChunkMeshBuilder.buildMesh(chunk, {}, this.registry, this.getUV);
@@ -110,8 +112,44 @@ export class ChunkManager {
     return this.loaded;
   }
 
+  /** Returns the seed used for world generation. */
+  getSeed(): string {
+    return this.seed;
+  }
+
+  /** Returns block data for all chunks modified by the player. */
+  getModifiedChunks(): Map<string, Uint8Array> {
+    const result = new Map<string, Uint8Array>();
+    for (const key of this.modifiedChunks) {
+      const chunk = this.chunks.get(key);
+      if (chunk) result.set(key, chunk.getBlockData());
+    }
+    return result;
+  }
+
+  /** Loads previously saved chunk modifications, overwriting generated data. */
+  loadModifiedChunks(saved: Map<string, Uint8Array>): void {
+    for (const [key, data] of saved) {
+      const chunk = this.chunks.get(key);
+      if (chunk) {
+        chunk.setBlockData(data);
+        this.modifiedChunks.add(key);
+        // Re-mesh
+        const meshData = ChunkMeshBuilder.buildMesh(chunk, {}, this.registry, this.getUV);
+        this.renderer.addChunkMesh(
+          key,
+          meshData,
+          chunk.cx * CHUNK_SIZE,
+          chunk.cy * CHUNK_SIZE,
+          chunk.cz * CHUNK_SIZE
+        );
+      }
+    }
+  }
+
   /** Clears all state. */
   dispose(): void {
     this.chunks.clear();
+    this.modifiedChunks.clear();
   }
 }

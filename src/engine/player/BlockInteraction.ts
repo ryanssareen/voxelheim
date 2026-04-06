@@ -2,6 +2,7 @@ import { ChunkManager } from "@engine/world/ChunkManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { BLOCK_ID } from "@data/blocks";
 import { useGameStore } from "@store/useGameStore";
+import { useHotbarStore } from "@store/useHotbarStore";
 
 const MAX_DISTANCE = 6;
 const STEP_SIZE = 0.1;
@@ -16,12 +17,23 @@ interface TargetBlock {
   blockId?: number;
 }
 
+export interface BreakState {
+  isBreaking: boolean;
+  breakProgress: number;
+  breakTarget: { x: number; y: number; z: number } | null;
+}
+
 /**
- * Handles block breaking and placing via raycasting from the player's eye.
+ * Handles timed block breaking and block placing via raycasting.
  */
 export class BlockInteraction {
   private readonly chunkManager: ChunkManager;
   private readonly registry: BlockRegistry;
+
+  // Breaking state
+  private breakingPos: { x: number; y: number; z: number } | null = null;
+  private breakProgress = 0;
+  private breakBlockId = 0;
 
   constructor(chunkManager: ChunkManager, registry: BlockRegistry) {
     this.chunkManager = chunkManager;
@@ -48,7 +60,6 @@ export class BlockInteraction {
       const wy = Math.floor(eyeY + lookDir.y * t);
       const wz = Math.floor(eyeZ + lookDir.z * t);
 
-      // Skip if same block as previous step
       if (wx === prevX && wy === prevY && wz === prevZ) continue;
 
       const blockId = this.chunkManager.getBlock(wx, wy, wz);
@@ -69,56 +80,98 @@ export class BlockInteraction {
     return { hit: false };
   }
 
-  /** Processes break/place actions for the current frame. */
+  /** Processes timed breaking and single-frame placing. Returns break state for rendering. */
   update(
     playerPos: { x: number; y: number; z: number },
     lookDir: { x: number; y: number; z: number },
-    leftClick: boolean,
+    isLeftHeld: boolean,
     rightClick: boolean,
-    selectedBlockId: number
-  ): void {
-    if (!leftClick && !rightClick) return;
-
+    selectedBlockId: number,
+    dt: number
+  ): BreakState {
     const target = this.getTargetBlock(playerPos, lookDir);
-    if (!target.hit || !target.blockPos) return;
 
-    if (leftClick) {
-      const blockId = target.blockId!;
-      this.chunkManager.setBlock(
-        target.blockPos.x,
-        target.blockPos.y,
-        target.blockPos.z,
-        BLOCK_ID.AIR
-      );
-      if (blockId === BLOCK_ID.CRYSTAL) {
-        useGameStore.getState().collectShard();
+    // --- Timed breaking ---
+    if (isLeftHeld && target.hit && target.blockPos) {
+      const bp = target.blockPos;
+      const blockDef = this.registry.getBlock(target.blockId!);
+
+      if (blockDef && blockDef.breakable && blockDef.breakTime > 0) {
+        // Check if still targeting the same block
+        if (
+          this.breakingPos &&
+          this.breakingPos.x === bp.x &&
+          this.breakingPos.y === bp.y &&
+          this.breakingPos.z === bp.z
+        ) {
+          // Continue breaking
+          this.breakProgress += dt / blockDef.breakTime;
+        } else {
+          // New block — start fresh
+          this.breakingPos = { x: bp.x, y: bp.y, z: bp.z };
+          this.breakProgress = dt / blockDef.breakTime;
+          this.breakBlockId = target.blockId!;
+        }
+
+        // Block broken!
+        if (this.breakProgress >= 1.0) {
+          this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
+
+          // Drop into hotbar
+          useHotbarStore.getState().addItem(blockDef.dropId);
+
+          // Crystal shard collection
+          if (target.blockId === BLOCK_ID.CRYSTAL) {
+            useGameStore.getState().collectShard();
+          }
+
+          this.breakingPos = null;
+          this.breakProgress = 0;
+        }
+      }
+    } else {
+      // Not holding left or no target — reset
+      this.breakingPos = null;
+      this.breakProgress = 0;
+    }
+
+    // --- Single-frame placing (right click) ---
+    if (rightClick && target.hit && target.facePos && target.facePos.x >= 0) {
+      // Check we have items to place
+      const hotbar = useHotbarStore.getState();
+      const placeId = hotbar.getSelectedBlockId();
+      if (placeId !== BLOCK_ID.AIR) {
+        const px = target.facePos.x;
+        const py = target.facePos.y;
+        const pz = target.facePos.z;
+
+        // Don't place if it overlaps player
+        const playerMinX = playerPos.x - HALF_WIDTH;
+        const playerMaxX = playerPos.x + HALF_WIDTH;
+        const playerMinY = playerPos.y;
+        const playerMaxY = playerPos.y + PLAYER_HEIGHT;
+        const playerMinZ = playerPos.z - HALF_WIDTH;
+        const playerMaxZ = playerPos.z + HALF_WIDTH;
+
+        const overlaps =
+          px + 1 > playerMinX &&
+          px < playerMaxX &&
+          py + 1 > playerMinY &&
+          py < playerMaxY &&
+          pz + 1 > playerMinZ &&
+          pz < playerMaxZ;
+
+        if (!overlaps) {
+          this.chunkManager.setBlock(px, py, pz, placeId);
+          hotbar.removeSelectedItem();
+        }
       }
     }
 
-    if (rightClick && target.facePos && target.facePos.x >= 0) {
-      // Check that placement position doesn't overlap player hitbox
-      const px = target.facePos.x;
-      const py = target.facePos.y;
-      const pz = target.facePos.z;
-
-      const playerMinX = playerPos.x - HALF_WIDTH;
-      const playerMaxX = playerPos.x + HALF_WIDTH;
-      const playerMinY = playerPos.y;
-      const playerMaxY = playerPos.y + PLAYER_HEIGHT;
-      const playerMinZ = playerPos.z - HALF_WIDTH;
-      const playerMaxZ = playerPos.z + HALF_WIDTH;
-
-      const blockOverlapsPlayer =
-        px + 1 > playerMinX &&
-        px < playerMaxX &&
-        py + 1 > playerMinY &&
-        py < playerMaxY &&
-        pz + 1 > playerMinZ &&
-        pz < playerMaxZ;
-
-      if (!blockOverlapsPlayer) {
-        this.chunkManager.setBlock(px, py, pz, selectedBlockId);
-      }
-    }
+    return {
+      isBreaking: this.breakingPos !== null,
+      breakProgress: this.breakProgress,
+      breakTarget: this.breakingPos,
+    };
   }
 }

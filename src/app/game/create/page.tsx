@@ -33,16 +33,36 @@ export default function CreateWorldPage() {
   const [gameMode, setGameMode] = useState(0);
   const [worldType, setWorldType] = useState(0);
 
-  const handleCreate = () => {
-    // Store config in sessionStorage for the game page to read
-    const config = {
-      worldName,
-      seed: seed || "voxelheim-mvp",
-      gameMode: GAME_MODES[gameMode],
-      worldType: WORLD_TYPES[worldType],
-    };
-    sessionStorage.setItem("voxelheim-world-config", JSON.stringify(config));
-    router.push("/game");
+  const handleCreate = async () => {
+    const actualSeed = seed || "voxelheim-mvp";
+
+    // Save initial world metadata to IndexedDB
+    const { generateWorldId, saveWorld } = await import(
+      "@systems/persistence/WorldStorage"
+    );
+    const id = generateWorldId();
+    await saveWorld(
+      {
+        id,
+        name: worldName,
+        seed: actualSeed,
+        createdAt: Date.now(),
+        lastPlayedAt: Date.now(),
+        playerPos: { x: 32, y: 50, z: 32 },
+        playerYaw: 0,
+        playerPitch: 0,
+        shardsCollected: 0,
+        hotbarSlots: Array.from({ length: 8 }, () => ({ blockId: 0, count: 0 })),
+      },
+      new Map()
+    );
+
+    // Also store seed in sessionStorage as fallback
+    sessionStorage.setItem(
+      "voxelheim-world-config",
+      JSON.stringify({ seed: actualSeed })
+    );
+    router.push(`/game?worldId=${id}`);
   };
 
   return (
@@ -135,7 +155,7 @@ export default function CreateWorldPage() {
             Create World
           </button>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/worlds")}
             className={MC_BUTTON + " flex-1 text-sm"}
             style={MC_BUTTON_STYLE}
           >
