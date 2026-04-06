@@ -14,114 +14,109 @@ const BLOCK_COLORS: Record<number, number> = {
 };
 
 /**
- * Minecraft-style first-person arm. Shows held block when inventory has one selected.
+ * Minecraft-style first-person hand/held item.
+ * Positioned in camera-local coordinates: +X is right, +Y is up, -Z is forward.
  */
 export class HandRenderer {
   private readonly group: THREE.Group;
-  private readonly pivot: THREE.Group;
-  private readonly armMeshes: THREE.Mesh[] = [];
+  private readonly armGroup: THREE.Group;
   private readonly heldBlock: THREE.Mesh;
-  private readonly heldBlockMaterial: THREE.MeshBasicMaterial;
+  private readonly heldBlockMat: THREE.MeshBasicMaterial;
+  private readonly fist: THREE.Mesh;
   private time = 0;
   private placeTimer = 0;
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.group = new THREE.Group();
-    this.pivot = new THREE.Group();
+
+    // Arm pivot — rotates for animations
+    this.armGroup = new THREE.Group();
 
     const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882, depthTest: false });
-    const skinShadow = new THREE.MeshBasicMaterial({ color: 0xa8845a, depthTest: false });
+    const skinDark = new THREE.MeshBasicMaterial({ color: 0xa07850, depthTest: false });
 
-    // Upper arm
-    const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.18, 0.06), skin);
-    upperArm.position.set(0, 0.06, 0);
-    this.pivot.add(upperArm);
-    this.armMeshes.push(upperArm);
+    // Arm — vertical bar extending downward from shoulder
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.22, 0.045), skin);
+    arm.position.set(0, -0.11, 0);
+    this.armGroup.add(arm);
 
-    // Forearm
-    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.14, 0.055), skinShadow);
-    forearm.position.set(0, -0.1, 0);
-    this.pivot.add(forearm);
-    this.armMeshes.push(forearm);
+    // Forearm — continues down
+    const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.12, 0.042), skinDark);
+    forearm.position.set(0, -0.28, 0.01);
+    this.armGroup.add(forearm);
 
-    // Fist
-    const fist = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.07), skin);
-    fist.position.set(0, -0.19, -0.008);
-    this.pivot.add(fist);
-    this.armMeshes.push(fist);
+    // Fist at the bottom
+    this.fist = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.035, 0.06), skin);
+    this.fist.position.set(0, -0.36, 0.01);
+    this.armGroup.add(this.fist);
 
-    // Held block — displayed instead of bare hand when holding a block
-    this.heldBlockMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
+    // Held block — replaces fist when holding something
+    this.heldBlockMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
     this.heldBlock = new THREE.Mesh(
-      new THREE.BoxGeometry(0.07, 0.07, 0.07),
-      this.heldBlockMaterial
+      new THREE.BoxGeometry(0.06, 0.06, 0.06),
+      this.heldBlockMat
     );
-    this.heldBlock.position.set(0, -0.17, -0.01);
+    this.heldBlock.position.set(0, -0.35, 0.01);
     this.heldBlock.visible = false;
-    this.heldBlock.renderOrder = 999;
-    this.pivot.add(this.heldBlock);
+    this.armGroup.add(this.heldBlock);
 
-    this.pivot.position.set(0, 0, 0);
-    this.group.add(this.pivot);
+    this.group.add(this.armGroup);
 
-    this.group.position.set(0.14, -0.18, -0.2);
-    this.group.rotation.set(-0.6, -0.3, -0.15);
+    // Position in camera space: right side (+X), below center (-Y), in front (-Z)
+    // These values place it in the bottom-right like Minecraft
+    this.group.position.set(0.22, -0.22, -0.35);
+    // Tilt the arm so it angles from bottom-right toward center
+    this.group.rotation.set(-0.8, -0.4, 0.2);
+
     this.group.renderOrder = 999;
+    this.group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.renderOrder = 999;
+      }
+    });
 
     camera.add(this.group);
   }
 
-  /** Update which block is held. Pass BLOCK_ID.AIR or 0 for empty hand. */
   setHeldBlock(blockId: number): void {
     if (blockId === BLOCK_ID.AIR || blockId === 0) {
-      // Show bare hand
       this.heldBlock.visible = false;
-      for (const m of this.armMeshes) m.visible = true;
+      this.fist.visible = true;
     } else {
-      // Show block, hide fist (keep arm visible)
       this.heldBlock.visible = true;
-      this.heldBlockMaterial.color.setHex(BLOCK_COLORS[blockId] ?? 0x888888);
-      // Hide just the fist, keep upper arm and forearm
-      this.armMeshes[2].visible = false; // fist
+      this.fist.visible = false;
+      this.heldBlockMat.color.setHex(BLOCK_COLORS[blockId] ?? 0x888888);
     }
   }
 
   update(dt: number, state: HandState): void {
     this.time += dt;
-
     if (this.placeTimer > 0) this.placeTimer = Math.max(0, this.placeTimer - dt);
 
+    // All animations are on the armGroup pivot, not the positioning group
     switch (state) {
       case "breaking": {
         const swing = Math.sin(this.time * 6);
-        this.pivot.rotation.x = -Math.abs(swing) * 0.7;
-        this.group.position.y = -0.18 + Math.abs(swing) * 0.01;
+        this.armGroup.rotation.x = Math.abs(swing) * 0.6;
         break;
       }
       case "placing": {
         this.placeTimer = 0.15;
-        this.pivot.rotation.x = -0.4;
-        this.group.position.z = -0.17;
+        this.armGroup.rotation.x = 0.3;
         break;
       }
       case "walking": {
-        this.pivot.rotation.x = Math.sin(this.time * 8) * 0.08;
-        this.group.position.y = -0.18 + Math.sin(this.time * 8) * 0.008;
-        this.group.position.z = -0.2;
+        this.armGroup.rotation.x = Math.sin(this.time * 8) * 0.06;
         break;
       }
       default: {
-        this.pivot.rotation.x = Math.sin(this.time * 1.5) * 0.02;
-        this.group.position.y = -0.18 + Math.sin(this.time * 1.5) * 0.003;
-        this.group.position.z = -0.2;
+        this.armGroup.rotation.x = Math.sin(this.time * 1.5) * 0.015;
         break;
       }
     }
 
     if (this.placeTimer > 0 && state !== "placing") {
-      const t = this.placeTimer / 0.15;
-      this.pivot.rotation.x = -0.4 * t;
-      this.group.position.z = -0.2 + 0.03 * t;
+      this.armGroup.rotation.x = 0.3 * (this.placeTimer / 0.15);
     }
   }
 
