@@ -33,101 +33,74 @@ export interface ChunkNeighbors {
 
 const S = CHUNK_SIZE;
 
-/**
- * Each face definition: direction offset, normal, and 4 vertex offsets
- * relative to the block origin (x, y, z).
- * Vertices are in CCW order when viewed from outside the block.
+/*
+ * Face table derived from Three.js BoxGeometry buildPlane calls.
+ * Each face: [u-axis, v-axis, w-axis, udir, vdir, normal-sign]
+ * Maps to: vertex[u] = udir*(i-0.5), vertex[v] = vdir*(j-0.5), vertex[w] = normal-sign*0.5
+ * Then offset by block center (x+0.5, y+0.5, z+0.5).
+ *
+ * For a unit cube at origin, the 4 corners of each face (CCW from outside):
  */
-const FACES: Array<{
-  dir: [number, number, number];
-  normal: [number, number, number];
-  verts: [number, number, number][];
+interface FaceDef {
+  // Direction to check for neighbor (dx, dy, dz)
+  dx: number;
+  dy: number;
+  dz: number;
+  // Normal
+  nx: number;
+  ny: number;
+  nz: number;
+  // 4 vertices as offsets from block origin (0,0,0) to (1,1,1)
+  corners: [number, number, number][];
+  // Texture face name
   faceName: "top" | "bottom" | "side";
+  // Neighbor chunk key
   neighborKey: keyof ChunkNeighbors;
-}> = [
+}
+
+// Vertex positions derived from Three.js BoxGeometry (CCW winding from outside)
+const faces: FaceDef[] = [
   {
-    // +X face (right)
-    dir: [1, 0, 0],
-    normal: [1, 0, 0],
-    verts: [
-      [1, 0, 1],
-      [1, 1, 1],
-      [1, 1, 0],
-      [1, 0, 0],
-    ],
-    faceName: "side",
-    neighborKey: "px",
+    // Right face (+X) - buildPlane('z','y','x', -1,-1, ...)
+    dx: 1, dy: 0, dz: 0, nx: 1, ny: 0, nz: 0,
+    corners: [[1,0,1],[1,1,1],[1,1,0],[1,0,0]],
+    faceName: "side", neighborKey: "px",
   },
   {
-    // -X face (left)
-    dir: [-1, 0, 0],
-    normal: [-1, 0, 0],
-    verts: [
-      [0, 0, 0],
-      [0, 1, 0],
-      [0, 1, 1],
-      [0, 0, 1],
-    ],
-    faceName: "side",
-    neighborKey: "nx",
+    // Left face (-X) - buildPlane('z','y','x', 1,-1, ...)
+    dx: -1, dy: 0, dz: 0, nx: -1, ny: 0, nz: 0,
+    corners: [[0,0,0],[0,1,0],[0,1,1],[0,0,1]],
+    faceName: "side", neighborKey: "nx",
   },
   {
-    // +Y face (top)
-    dir: [0, 1, 0],
-    normal: [0, 1, 0],
-    verts: [
-      [0, 1, 0],
-      [1, 1, 0],
-      [1, 1, 1],
-      [0, 1, 1],
-    ],
-    faceName: "top",
-    neighborKey: "py",
+    // Top face (+Y) - buildPlane('x','z','y', 1,1, ...)
+    dx: 0, dy: 1, dz: 0, nx: 0, ny: 1, nz: 0,
+    corners: [[1,1,1],[0,1,1],[0,1,0],[1,1,0]],
+    faceName: "top", neighborKey: "py",
   },
   {
-    // -Y face (bottom)
-    dir: [0, -1, 0],
-    normal: [0, -1, 0],
-    verts: [
-      [0, 0, 1],
-      [1, 0, 1],
-      [1, 0, 0],
-      [0, 0, 0],
-    ],
-    faceName: "bottom",
-    neighborKey: "ny",
+    // Bottom face (-Y) - buildPlane('x','z','y', 1,-1, ...)
+    dx: 0, dy: -1, dz: 0, nx: 0, ny: -1, nz: 0,
+    corners: [[1,0,0],[0,0,0],[0,0,1],[1,0,1]],
+    faceName: "bottom", neighborKey: "ny",
   },
   {
-    // +Z face (front)
-    dir: [0, 0, 1],
-    normal: [0, 0, 1],
-    verts: [
-      [0, 0, 1],
-      [0, 1, 1],
-      [1, 1, 1],
-      [1, 0, 1],
-    ],
-    faceName: "side",
-    neighborKey: "pz",
+    // Front face (+Z) - buildPlane('x','y','z', 1,-1, ...)
+    dx: 0, dy: 0, dz: 1, nx: 0, ny: 0, nz: 1,
+    corners: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]],
+    faceName: "side", neighborKey: "pz",
   },
   {
-    // -Z face (back)
-    dir: [0, 0, -1],
-    normal: [0, 0, -1],
-    verts: [
-      [1, 0, 0],
-      [1, 1, 0],
-      [0, 1, 0],
-      [0, 0, 0],
-    ],
-    faceName: "side",
-    neighborKey: "nz",
+    // Back face (-Z) - buildPlane('x','y','z', -1,-1, ...)
+    dx: 0, dy: 0, dz: -1, nx: 0, ny: 0, nz: -1,
+    corners: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]],
+    faceName: "side", neighborKey: "nz",
   },
 ];
 
 /**
  * Builds chunk mesh by emitting one quad per visible face.
- * Simple and correct — no greedy merging for now.
+ * Face vertex winding follows Three.js BoxGeometry conventions.
  */
 export class ChunkMeshBuilder {
   static buildMesh(
@@ -136,14 +109,11 @@ export class ChunkMeshBuilder {
     registry: BlockRegistry,
     getUV: GetUV = DEFAULT_GET_UV
   ): ChunkMeshData {
-    // Max: 16^3 blocks * 6 faces * 4 verts = 98304 verts
-    const maxQuads = S * S * S * 6;
-    const positions = new Float32Array(maxQuads * 4 * 3);
-    const normals = new Float32Array(maxQuads * 4 * 3);
-    const uvs = new Float32Array(maxQuads * 4 * 2);
-    const indices = new Uint32Array(maxQuads * 6);
-    let vi = 0;
-    let ii = 0;
+    const positions: number[] = [];
+    const norms: number[] = [];
+    const uvArr: number[] = [];
+    const idxArr: number[] = [];
+    let vertCount = 0;
 
     for (let y = 0; y < S; y++) {
       for (let z = 0; z < S; z++) {
@@ -153,81 +123,63 @@ export class ChunkMeshBuilder {
 
           const blockDef = registry.getBlock(blockId);
 
-          for (const face of FACES) {
-            const nx = x + face.dir[0];
-            const ny = y + face.dir[1];
-            const nz = z + face.dir[2];
+          for (const face of faces) {
+            const adjX = x + face.dx;
+            const adjY = y + face.dy;
+            const adjZ = z + face.dz;
 
-            // Get adjacent block
             let adjBlock: number;
-            if (nx < 0 || nx >= S || ny < 0 || ny >= S || nz < 0 || nz >= S) {
+            if (adjX < 0 || adjX >= S || adjY < 0 || adjY >= S || adjZ < 0 || adjZ >= S) {
               const neighbor = neighbors[face.neighborKey];
               if (neighbor) {
                 adjBlock = neighbor.getBlock(
-                  ((nx % S) + S) % S,
-                  ((ny % S) + S) % S,
-                  ((nz % S) + S) % S
+                  ((adjX % S) + S) % S,
+                  ((adjY % S) + S) % S,
+                  ((adjZ % S) + S) % S
                 );
               } else {
                 adjBlock = 0;
               }
             } else {
-              adjBlock = chunk.getBlock(nx, ny, nz);
+              adjBlock = chunk.getBlock(adjX, adjY, adjZ);
             }
 
-            // Skip if adjacent is solid and not transparent
-            if (registry.isSolid(adjBlock) && !registry.isTransparent(adjBlock)) {
-              continue;
-            }
+            if (registry.isSolid(adjBlock) && !registry.isTransparent(adjBlock)) continue;
 
-            // Emit quad
-            const texName = blockDef
-              ? blockDef.textures[face.faceName]
-              : "";
+            // Get UVs
+            const texName = blockDef ? blockDef.textures[face.faceName] : "";
             const uv = getUV(texName);
 
-            const base = vi;
-            for (let i = 0; i < 4; i++) {
-              const v = face.verts[i];
-              positions[(base + i) * 3] = x + v[0];
-              positions[(base + i) * 3 + 1] = y + v[1];
-              positions[(base + i) * 3 + 2] = z + v[2];
-              normals[(base + i) * 3] = face.normal[0];
-              normals[(base + i) * 3 + 1] = face.normal[1];
-              normals[(base + i) * 3 + 2] = face.normal[2];
+            // Emit 4 vertices
+            const base = vertCount;
+            for (const corner of face.corners) {
+              positions.push(x + corner[0], y + corner[1], z + corner[2]);
+              norms.push(face.nx, face.ny, face.nz);
             }
 
-            uvs[base * 2] = uv.u0;
-            uvs[base * 2 + 1] = uv.v0;
-            uvs[(base + 1) * 2] = uv.u1;
-            uvs[(base + 1) * 2 + 1] = uv.v0;
-            uvs[(base + 2) * 2] = uv.u1;
-            uvs[(base + 2) * 2 + 1] = uv.v1;
-            uvs[(base + 3) * 2] = uv.u0;
-            uvs[(base + 3) * 2 + 1] = uv.v1;
+            // UVs for the 4 corners
+            uvArr.push(uv.u0, uv.v0);
+            uvArr.push(uv.u1, uv.v0);
+            uvArr.push(uv.u1, uv.v1);
+            uvArr.push(uv.u0, uv.v1);
 
-            // Two triangles: 0-1-2, 0-2-3
-            indices[ii] = base;
-            indices[ii + 1] = base + 1;
-            indices[ii + 2] = base + 2;
-            indices[ii + 3] = base;
-            indices[ii + 4] = base + 2;
-            indices[ii + 5] = base + 3;
+            // Two triangles: (a, b, d) and (b, c, d) — Three.js BoxGeometry winding
+            idxArr.push(base, base + 1, base + 3);
+            idxArr.push(base + 1, base + 2, base + 3);
 
-            vi += 4;
-            ii += 6;
+            vertCount += 4;
           }
         }
       }
     }
 
     return {
-      positions: positions.slice(0, vi * 3),
-      normals: normals.slice(0, vi * 3),
-      uvs: uvs.slice(0, vi * 2),
-      indices: indices.slice(0, ii),
-      vertexCount: vi,
-      indexCount: ii,
+      positions: new Float32Array(positions),
+      normals: new Float32Array(norms),
+      uvs: new Float32Array(uvArr),
+      indices: new Uint32Array(idxArr),
+      vertexCount: vertCount,
+      indexCount: idxArr.length,
     };
   }
 }

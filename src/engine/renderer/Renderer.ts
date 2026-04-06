@@ -36,7 +36,7 @@ export class Renderer {
     const texture = await this.atlas.load();
     this.material = new THREE.MeshLambertMaterial({
       map: texture,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       alphaTest: 0.5,
     });
   }
