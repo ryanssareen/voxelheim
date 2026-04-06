@@ -7,6 +7,7 @@ import { HotbarUI } from "@ui/HotbarUI";
 import { PauseMenu } from "@ui/PauseMenu";
 import { DeathScreen } from "@ui/DeathScreen";
 import { LoadingScreen } from "@ui/LoadingScreen";
+import { InventoryUI } from "@ui/InventoryUI";
 
 export function GameCanvas({ worldId }: { worldId?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,6 +59,7 @@ export function GameCanvas({ worldId }: { worldId?: string }) {
           <HotbarUI />
           <PauseMenu canvasRef={canvasRef} />
           <DeathScreen onRespawn={handleRespawn} />
+          <InventoryUI />
         </>
       )}
     </div>

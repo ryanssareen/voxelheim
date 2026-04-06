@@ -12,6 +12,7 @@ import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useGameStore } from "@store/useGameStore";
+import { useInventoryStore } from "@store/useInventoryStore";
 import {
   saveWorld,
   loadWorldMeta,
@@ -41,6 +42,7 @@ export class Engine {
   private animationFrameId = 0;
   private running = false;
   private pWasDown = false;
+  private eWasDown = false;
   private worldId: string | null = null;
   private seed = "voxelheim-mvp";
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
@@ -87,8 +89,8 @@ export class Engine {
 
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
-      // Don't pause if we're dead (death screen needs mouse)
-      if (!useGameStore.getState().isDead) {
+      // Don't pause if dead or inventory is open
+      if (!useGameStore.getState().isDead && !useInventoryStore.getState().isOpen) {
         useGameStore.getState().setPaused(true);
       }
     };
@@ -156,12 +158,13 @@ export class Engine {
     await saveWorld(meta, this.chunkManager.getModifiedChunks());
   }
 
-  /** Respawn after death. */
+  /** Respawn after death. Clears inventory. */
   respawn(): void {
     if (!this.player) return;
     this.player.position = { ...SPAWN };
     this.player.velocity = { x: 0, y: 0, z: 0 };
     this.player.onGround = false;
+    useHotbarStore.getState().resetSlots();
     useGameStore.getState().setDead(false);
   }
 
@@ -174,6 +177,35 @@ export class Engine {
 
     const state = useGameStore.getState();
     if (state.isPaused || state.isDead) return;
+
+    // E key: toggle inventory (single press)
+    const eDown = this.input.isKeyDown("KeyE");
+    if (eDown && !this.eWasDown) {
+      const inv = useInventoryStore.getState();
+      if (inv.isOpen) {
+        inv.close();
+        this.canvas.requestPointerLock();
+      } else {
+        inv.open();
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+      }
+    }
+    this.eWasDown = eDown;
+
+    // Skip game input while inventory is open
+    if (useInventoryStore.getState().isOpen) {
+      this.input.getMouseDelta(); // consume
+      this.input.getMouseButton(); // consume
+      this.camera.applyToThreeCamera(
+        this.renderer!.getCamera(),
+        this.player!.position,
+        this.player!.isCrouching ? 1.2 : 1.6
+      );
+      this.renderer!.render();
+      return;
+    }
 
     // P key camera cycling
     const pDown = this.input.isKeyDown("KeyP");
