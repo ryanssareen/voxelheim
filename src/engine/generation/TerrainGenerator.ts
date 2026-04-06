@@ -64,16 +64,18 @@ export class TerrainGenerator {
           4,
           0.5,
           2.0,
-          80
+          50
         );
-        let surfaceY = Math.floor(baseHeight + noiseValue * 15);
+        let surfaceY = Math.floor(baseHeight + noiseValue * 14);
 
-        // Island shaping: quadratic falloff from center (32, 32)
+        // Island shaping: smooth falloff from center (32, 32)
         const dx = wx - 32;
         const dz = wz - 32;
         const distFromCenter = Math.sqrt(dx * dx + dz * dz);
-        let falloff = 1 - clamp(distFromCenter / 28, 0, 1);
-        falloff = falloff * falloff;
+        // Use a larger radius and gentler curve so most of the island is above sea level
+        const normalizedDist = clamp(distFromCenter / 38, 0, 1);
+        // Smoothstep keeps the center plateau high and drops sharply only at the edges
+        const falloff = 1 - normalizedDist * normalizedDist * normalizedDist;
         surfaceY = Math.floor(surfaceY * falloff);
         if (surfaceY < 1) surfaceY = 0;
 

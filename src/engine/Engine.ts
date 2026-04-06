@@ -49,7 +49,8 @@ export class Engine {
     this.input.onPointerLockLost = () => {
       useGameStore.getState().setPaused(true);
     };
-    this.player = new PlayerController(32, 45, 32);
+    // Spawn above the terrain center — player will fall to surface
+    this.player = new PlayerController(32, 50, 32);
     this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry);
 
     // Player model (visible in 3rd person)
