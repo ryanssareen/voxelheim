@@ -158,10 +158,44 @@ export class Engine {
     await saveWorld(meta, this.chunkManager.getModifiedChunks());
   }
 
-  /** Respawn after death. Clears inventory. */
+  /** Find the highest solid block at (x, z) and return spawn Y above it. */
+  private findSafeSpawnY(x: number, z: number): number {
+    if (!this.chunkManager) return SPAWN.y;
+    // Scan from top of world downward to find first solid block
+    for (let y = 63; y >= 0; y--) {
+      if (this.registry.isSolid(this.chunkManager.getBlock(Math.floor(x), y, Math.floor(z)))) {
+        return y + 1; // Spawn on top of this block
+      }
+    }
+    return SPAWN.y; // Fallback if no solid found
+  }
+
+  /** Respawn after death. Clears inventory. Finds safe spawn if original is void. */
   respawn(): void {
     if (!this.player) return;
-    this.player.position = { ...SPAWN };
+
+    // Check if default spawn is safe (has solid ground below)
+    let spawnY = this.findSafeSpawnY(SPAWN.x, SPAWN.z);
+
+    // If default spawn column is completely dug out, search nearby
+    if (spawnY <= 0) {
+      const searchRadius = 5;
+      for (let r = 1; r <= searchRadius; r++) {
+        for (const [dx, dz] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]) {
+          const sy = this.findSafeSpawnY(SPAWN.x + dx, SPAWN.z + dz);
+          if (sy > 0) {
+            this.player.position = { x: SPAWN.x + dx, y: sy, z: SPAWN.z + dz };
+            this.player.velocity = { x: 0, y: 0, z: 0 };
+            this.player.onGround = false;
+            useHotbarStore.getState().resetSlots();
+            useGameStore.getState().setDead(false);
+            return;
+          }
+        }
+      }
+    }
+
+    this.player.position = { x: SPAWN.x, y: spawnY, z: SPAWN.z };
     this.player.velocity = { x: 0, y: 0, z: 0 };
     this.player.onGround = false;
     useHotbarStore.getState().resetSlots();
