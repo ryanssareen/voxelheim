@@ -34,9 +34,100 @@ export interface ChunkNeighbors {
 const S = CHUNK_SIZE;
 
 /**
- * Greedy meshing: for each of 3 axes and 2 directions (positive/negative),
- * sweep slices, build a mask of visible faces, merge adjacent same-block
- * faces into larger quads.
+ * Each face definition: direction offset, normal, and 4 vertex offsets
+ * relative to the block origin (x, y, z).
+ * Vertices are in CCW order when viewed from outside the block.
+ */
+const FACES: Array<{
+  dir: [number, number, number];
+  normal: [number, number, number];
+  verts: [number, number, number][];
+  faceName: "top" | "bottom" | "side";
+  neighborKey: keyof ChunkNeighbors;
+}> = [
+  {
+    // +X face (right)
+    dir: [1, 0, 0],
+    normal: [1, 0, 0],
+    verts: [
+      [1, 0, 1],
+      [1, 1, 1],
+      [1, 1, 0],
+      [1, 0, 0],
+    ],
+    faceName: "side",
+    neighborKey: "px",
+  },
+  {
+    // -X face (left)
+    dir: [-1, 0, 0],
+    normal: [-1, 0, 0],
+    verts: [
+      [0, 0, 0],
+      [0, 1, 0],
+      [0, 1, 1],
+      [0, 0, 1],
+    ],
+    faceName: "side",
+    neighborKey: "nx",
+  },
+  {
+    // +Y face (top)
+    dir: [0, 1, 0],
+    normal: [0, 1, 0],
+    verts: [
+      [0, 1, 0],
+      [1, 1, 0],
+      [1, 1, 1],
+      [0, 1, 1],
+    ],
+    faceName: "top",
+    neighborKey: "py",
+  },
+  {
+    // -Y face (bottom)
+    dir: [0, -1, 0],
+    normal: [0, -1, 0],
+    verts: [
+      [0, 0, 1],
+      [1, 0, 1],
+      [1, 0, 0],
+      [0, 0, 0],
+    ],
+    faceName: "bottom",
+    neighborKey: "ny",
+  },
+  {
+    // +Z face (front)
+    dir: [0, 0, 1],
+    normal: [0, 0, 1],
+    verts: [
+      [0, 0, 1],
+      [0, 1, 1],
+      [1, 1, 1],
+      [1, 0, 1],
+    ],
+    faceName: "side",
+    neighborKey: "pz",
+  },
+  {
+    // -Z face (back)
+    dir: [0, 0, -1],
+    normal: [0, 0, -1],
+    verts: [
+      [1, 0, 0],
+      [1, 1, 0],
+      [0, 1, 0],
+      [0, 0, 0],
+    ],
+    faceName: "side",
+    neighborKey: "nz",
+  },
+];
+
+/**
+ * Builds chunk mesh by emitting one quad per visible face.
+ * Simple and correct — no greedy merging for now.
  */
 export class ChunkMeshBuilder {
   static buildMesh(
@@ -45,173 +136,86 @@ export class ChunkMeshBuilder {
     registry: BlockRegistry,
     getUV: GetUV = DEFAULT_GET_UV
   ): ChunkMeshData {
-    // Worst case: every block has 6 faces, each face is 1 quad = 4 verts, 6 indices
+    // Max: 16^3 blocks * 6 faces * 4 verts = 98304 verts
     const maxQuads = S * S * S * 6;
     const positions = new Float32Array(maxQuads * 4 * 3);
     const normals = new Float32Array(maxQuads * 4 * 3);
     const uvs = new Float32Array(maxQuads * 4 * 2);
     const indices = new Uint32Array(maxQuads * 6);
-    let vi = 0; // vertex index
-    let ii = 0; // index index
+    let vi = 0;
+    let ii = 0;
 
-    const mask = new Int32Array(S * S);
+    for (let y = 0; y < S; y++) {
+      for (let z = 0; z < S; z++) {
+        for (let x = 0; x < S; x++) {
+          const blockId = chunk.getBlock(x, y, z);
+          if (!registry.isSolid(blockId)) continue;
 
-    // For each axis (0=X, 1=Y, 2=Z)
-    for (let axis = 0; axis < 3; axis++) {
-      // For each direction along that axis (+1 or -1)
-      for (let dir = -1; dir <= 1; dir += 2) {
-        const isPositive = dir > 0;
+          const blockDef = registry.getBlock(blockId);
 
-        // The two axes perpendicular to the sweep axis
-        const axis1 = (axis + 1) % 3; // u axis
-        const axis2 = (axis + 2) % 3; // v axis
+          for (const face of FACES) {
+            const nx = x + face.dir[0];
+            const ny = y + face.dir[1];
+            const nz = z + face.dir[2];
 
-        // Normal vector
-        const normal = [0, 0, 0];
-        normal[axis] = dir;
-
-        const faceName =
-          axis === 1
-            ? isPositive
-              ? "top"
-              : "bottom"
-            : "side";
-
-        // Sweep through each slice perpendicular to the axis
-        for (let slice = 0; slice < S; slice++) {
-          // Build mask: mask[u + v*S] = blockId if face should be rendered, 0 otherwise
-          mask.fill(0);
-
-          for (let v = 0; v < S; v++) {
-            for (let u = 0; u < S; u++) {
-              // Map (slice, u, v) to (x, y, z) based on which axis we're sweeping
-              const pos = [0, 0, 0];
-              pos[axis] = slice;
-              pos[axis1] = u;
-              pos[axis2] = v;
-              const [bx, by, bz] = pos;
-
-              const blockId = chunk.getBlock(bx, by, bz);
-              if (!registry.isSolid(blockId)) continue;
-
-              // Check adjacent block in the face direction
-              const adjPos = [bx, by, bz];
-              adjPos[axis] += dir;
-
-              let adjBlock: number;
-              if (adjPos[axis] < 0 || adjPos[axis] >= S) {
-                // Outside chunk — check neighbor
-                const neighborKey = isPositive
-                  ? (["px", "py", "pz"] as const)[axis]
-                  : (["nx", "ny", "nz"] as const)[axis];
-                const neighbor = neighbors[neighborKey];
-                if (neighbor) {
-                  const nlx = ((adjPos[0] % S) + S) % S;
-                  const nly = ((adjPos[1] % S) + S) % S;
-                  const nlz = ((adjPos[2] % S) + S) % S;
-                  adjBlock = neighbor.getBlock(nlx, nly, nlz);
-                } else {
-                  adjBlock = 0; // AIR
-                }
+            // Get adjacent block
+            let adjBlock: number;
+            if (nx < 0 || nx >= S || ny < 0 || ny >= S || nz < 0 || nz >= S) {
+              const neighbor = neighbors[face.neighborKey];
+              if (neighbor) {
+                adjBlock = neighbor.getBlock(
+                  ((nx % S) + S) % S,
+                  ((ny % S) + S) % S,
+                  ((nz % S) + S) % S
+                );
               } else {
-                adjBlock = chunk.getBlock(adjPos[0], adjPos[1], adjPos[2]);
+                adjBlock = 0;
               }
-
-              // Render face if adjacent is air or transparent
-              if (!registry.isSolid(adjBlock) || registry.isTransparent(adjBlock)) {
-                mask[u + v * S] = blockId;
-              }
+            } else {
+              adjBlock = chunk.getBlock(nx, ny, nz);
             }
-          }
 
-          // Greedy merge the mask into quads
-          for (let v = 0; v < S; v++) {
-            for (let u = 0; u < S; ) {
-              const blockId = mask[u + v * S];
-              if (blockId === 0) {
-                u++;
-                continue;
-              }
-
-              // Expand width along u
-              let w = 1;
-              while (u + w < S && mask[(u + w) + v * S] === blockId) w++;
-
-              // Expand height along v
-              let h = 1;
-              let canExpand = true;
-              while (v + h < S && canExpand) {
-                for (let k = 0; k < w; k++) {
-                  if (mask[(u + k) + (v + h) * S] !== blockId) {
-                    canExpand = false;
-                    break;
-                  }
-                }
-                if (canExpand) h++;
-              }
-
-              // Clear merged region from mask
-              for (let dv = 0; dv < h; dv++) {
-                for (let du = 0; du < w; du++) {
-                  mask[(u + du) + (v + dv) * S] = 0;
-                }
-              }
-
-              // Emit quad
-              // Corner position: the face sits on the boundary of the block
-              const corner = [0, 0, 0];
-              corner[axis] = isPositive ? slice + 1 : slice;
-              corner[axis1] = u;
-              corner[axis2] = v;
-
-              // Two edge vectors spanning the quad
-              const du_vec = [0, 0, 0];
-              du_vec[axis1] = w;
-
-              const dv_vec = [0, 0, 0];
-              dv_vec[axis2] = h;
-
-              // 4 vertices: corner, corner+du, corner+du+dv, corner+dv
-              const v0 = [corner[0], corner[1], corner[2]];
-              const v1 = [corner[0] + du_vec[0], corner[1] + du_vec[1], corner[2] + du_vec[2]];
-              const v2 = [corner[0] + du_vec[0] + dv_vec[0], corner[1] + du_vec[1] + dv_vec[1], corner[2] + du_vec[2] + dv_vec[2]];
-              const v3 = [corner[0] + dv_vec[0], corner[1] + dv_vec[1], corner[2] + dv_vec[2]];
-
-              // Get UVs
-              const blockDef = registry.getBlock(blockId);
-              const texName = blockDef ? blockDef.textures[faceName as "top" | "bottom" | "side"] : "";
-              const uv = getUV(texName);
-
-              // Write vertices
-              const base = vi;
-              const verts = [v0, v1, v2, v3];
-              for (let i = 0; i < 4; i++) {
-                positions[(base + i) * 3] = verts[i][0];
-                positions[(base + i) * 3 + 1] = verts[i][1];
-                positions[(base + i) * 3 + 2] = verts[i][2];
-                normals[(base + i) * 3] = normal[0];
-                normals[(base + i) * 3 + 1] = normal[1];
-                normals[(base + i) * 3 + 2] = normal[2];
-              }
-
-              uvs[base * 2] = uv.u0;       uvs[base * 2 + 1] = uv.v0;
-              uvs[(base + 1) * 2] = uv.u1; uvs[(base + 1) * 2 + 1] = uv.v0;
-              uvs[(base + 2) * 2] = uv.u1; uvs[(base + 2) * 2 + 1] = uv.v1;
-              uvs[(base + 3) * 2] = uv.u0; uvs[(base + 3) * 2 + 1] = uv.v1;
-
-              // Indices: 2 triangles per quad, winding depends on face direction
-              if (isPositive) {
-                indices[ii] = base;     indices[ii + 1] = base + 1; indices[ii + 2] = base + 2;
-                indices[ii + 3] = base; indices[ii + 4] = base + 2; indices[ii + 5] = base + 3;
-              } else {
-                indices[ii] = base;     indices[ii + 1] = base + 2; indices[ii + 2] = base + 1;
-                indices[ii + 3] = base; indices[ii + 4] = base + 3; indices[ii + 5] = base + 2;
-              }
-
-              vi += 4;
-              ii += 6;
-              u += w;
+            // Skip if adjacent is solid and not transparent
+            if (registry.isSolid(adjBlock) && !registry.isTransparent(adjBlock)) {
+              continue;
             }
+
+            // Emit quad
+            const texName = blockDef
+              ? blockDef.textures[face.faceName]
+              : "";
+            const uv = getUV(texName);
+
+            const base = vi;
+            for (let i = 0; i < 4; i++) {
+              const v = face.verts[i];
+              positions[(base + i) * 3] = x + v[0];
+              positions[(base + i) * 3 + 1] = y + v[1];
+              positions[(base + i) * 3 + 2] = z + v[2];
+              normals[(base + i) * 3] = face.normal[0];
+              normals[(base + i) * 3 + 1] = face.normal[1];
+              normals[(base + i) * 3 + 2] = face.normal[2];
+            }
+
+            uvs[base * 2] = uv.u0;
+            uvs[base * 2 + 1] = uv.v0;
+            uvs[(base + 1) * 2] = uv.u1;
+            uvs[(base + 1) * 2 + 1] = uv.v0;
+            uvs[(base + 2) * 2] = uv.u1;
+            uvs[(base + 2) * 2 + 1] = uv.v1;
+            uvs[(base + 3) * 2] = uv.u0;
+            uvs[(base + 3) * 2 + 1] = uv.v1;
+
+            // Two triangles: 0-1-2, 0-2-3
+            indices[ii] = base;
+            indices[ii + 1] = base + 1;
+            indices[ii + 2] = base + 2;
+            indices[ii + 3] = base;
+            indices[ii + 4] = base + 2;
+            indices[ii + 5] = base + 3;
+
+            vi += 4;
+            ii += 6;
           }
         }
       }

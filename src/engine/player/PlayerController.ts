@@ -2,34 +2,35 @@ import { InputManager } from "@engine/InputManager";
 import { Camera } from "@engine/player/Camera";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 
-const MOVE_SPEED = 5;
+const WALK_SPEED = 5;
+const SPRINT_SPEED = 8;
+const CROUCH_SPEED = 2.5;
 const GRAVITY = 20;
 const JUMP_VELOCITY = 8;
 const HALF_WIDTH = 0.3;
-const HEIGHT = 1.8;
+const STAND_HEIGHT = 1.8;
+const CROUCH_HEIGHT = 1.4;
 
 /**
- * First-person player controller with WASD movement, gravity, jumping,
- * and AABB collision against solid blocks.
+ * First-person player controller with WASD movement, sprint (Shift),
+ * crouch (Ctrl/CapsLock), gravity, jumping, and AABB collision.
  */
 export class PlayerController {
   public position: { x: number; y: number; z: number };
   public velocity = { x: 0, y: 0, z: 0 };
   public onGround = false;
+  public isCrouching = false;
+  public isSprinting = false;
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
     this.position = { x: spawnX, y: spawnY, z: spawnZ };
   }
 
-  /**
-   * Updates player position based on input, gravity, and collision.
-   *
-   * @param dt - Delta time in seconds
-   * @param input - Input manager for key state
-   * @param camera - Camera for movement direction
-   * @param getBlock - Block lookup function (world coords → block ID)
-   * @param registry - Block registry for solid checks
-   */
+  /** Current player height (shorter when crouching). */
+  get height(): number {
+    return this.isCrouching ? CROUCH_HEIGHT : STAND_HEIGHT;
+  }
+
   update(
     dt: number,
     input: InputManager,
@@ -37,6 +38,17 @@ export class PlayerController {
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry
   ): void {
+    // Crouch: Ctrl or CapsLock
+    this.isCrouching =
+      input.isKeyDown("ControlLeft") ||
+      input.isKeyDown("ControlRight") ||
+      input.isKeyDown("CapsLock");
+
+    // Sprint: Shift (only when moving forward and not crouching)
+    this.isSprinting =
+      !this.isCrouching &&
+      (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight"));
+
     // Movement input
     const forward = camera.getForward();
     const right = camera.getRight();
@@ -61,11 +73,18 @@ export class PlayerController {
       moveZ += right.z;
     }
 
+    // Speed based on state
+    const speed = this.isCrouching
+      ? CROUCH_SPEED
+      : this.isSprinting
+        ? SPRINT_SPEED
+        : WALK_SPEED;
+
     // Normalize horizontal movement
     const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
     if (len > 0) {
-      moveX = (moveX / len) * MOVE_SPEED;
-      moveZ = (moveZ / len) * MOVE_SPEED;
+      moveX = (moveX / len) * speed;
+      moveZ = (moveZ / len) * speed;
     }
 
     this.velocity.x = moveX;
@@ -77,7 +96,7 @@ export class PlayerController {
     }
 
     // Jump
-    if (input.isKeyDown("Space") && this.onGround) {
+    if (input.isKeyDown("Space") && this.onGround && !this.isCrouching) {
       this.velocity.y = JUMP_VELOCITY;
       this.onGround = false;
     }
@@ -96,15 +115,14 @@ export class PlayerController {
   ): void {
     this.position[axis] += delta;
 
-    // Player AABB: centered on X/Z, feet at position.y
+    const h = this.height;
     const minX = this.position.x - HALF_WIDTH;
     const maxX = this.position.x + HALF_WIDTH;
     const minY = this.position.y;
-    const maxY = this.position.y + HEIGHT;
+    const maxY = this.position.y + h;
     const minZ = this.position.z - HALF_WIDTH;
     const maxZ = this.position.z + HALF_WIDTH;
 
-    // Check blocks in the region the player overlaps
     const bMinX = Math.floor(minX);
     const bMaxX = Math.floor(maxX);
     const bMinY = Math.floor(minY);
@@ -118,17 +136,13 @@ export class PlayerController {
           const blockId = getBlock(bx, by, bz);
           if (!registry.isSolid(blockId)) continue;
 
-          // Block AABB: [bx, bx+1] x [by, by+1] x [bz, bz+1]
-          // Resolve overlap on the current axis
           if (axis === "y") {
             if (delta < 0) {
-              // Moving down — push up to top of block
               this.position.y = by + 1;
               this.velocity.y = 0;
               this.onGround = true;
             } else if (delta > 0) {
-              // Moving up — push down to bottom of block
-              this.position.y = by - HEIGHT;
+              this.position.y = by - h;
               this.velocity.y = 0;
             }
             return;
@@ -153,7 +167,6 @@ export class PlayerController {
       }
     }
 
-    // No collision on Y-down → not on ground
     if (axis === "y" && delta <= 0) {
       this.onGround = false;
     }

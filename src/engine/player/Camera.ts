@@ -65,10 +65,11 @@ export class Camera {
   /** Applies position and rotation to a Three.js PerspectiveCamera. */
   applyToThreeCamera(
     camera: THREE.PerspectiveCamera,
-    position: { x: number; y: number; z: number }
+    position: { x: number; y: number; z: number },
+    eyeHeight: number = EYE_HEIGHT
   ): void {
     const eyeX = position.x;
-    const eyeY = position.y + EYE_HEIGHT;
+    const eyeY = position.y + eyeHeight;
     const eyeZ = position.z;
 
     if (this.mode === "first-person") {

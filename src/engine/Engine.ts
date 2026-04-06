@@ -27,7 +27,7 @@ export class Engine {
   private blockInteraction: BlockInteraction | null = null;
   private animationFrameId = 0;
   private running = false;
-  private f5WasDown = false;
+  private pWasDown = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -85,12 +85,12 @@ export class Engine {
       return;
     }
 
-    // F5 camera perspective cycling (single-press)
-    const f5Down = this.input.isKeyDown("F5");
-    if (f5Down && !this.f5WasDown) {
+    // P key camera perspective cycling (single-press)
+    const pDown = this.input.isKeyDown("KeyP");
+    if (pDown && !this.pWasDown) {
       this.camera.cycleMode();
     }
-    this.f5WasDown = f5Down;
+    this.pWasDown = pDown;
 
     // Hotbar selection: number keys 1-8
     for (let i = 1; i <= 8; i++) {
@@ -128,9 +128,11 @@ export class Engine {
     );
 
     // Apply camera to renderer
+    const eyeH = this.player!.isCrouching ? 1.2 : 1.6;
     this.camera.applyToThreeCamera(
       this.renderer!.getCamera(),
-      this.player!.position
+      this.player!.position,
+      eyeH
     );
 
     // Render
