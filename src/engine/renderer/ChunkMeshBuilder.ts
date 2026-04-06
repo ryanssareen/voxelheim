@@ -163,9 +163,9 @@ export class ChunkMeshBuilder {
             uvArr.push(uv.u1, uv.v1);
             uvArr.push(uv.u0, uv.v1);
 
-            // Two triangles: (a, b, d) and (b, c, d) — Three.js BoxGeometry winding
-            idxArr.push(base, base + 1, base + 3);
-            idxArr.push(base + 1, base + 2, base + 3);
+            // Two triangles: (0,1,2) and (0,2,3)
+            idxArr.push(base, base + 1, base + 2);
+            idxArr.push(base, base + 2, base + 3);
 
             vertCount += 4;
           }
