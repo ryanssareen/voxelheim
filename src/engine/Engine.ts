@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { Clock } from "@engine/Clock";
 import { InputManager } from "@engine/InputManager";
 import { Camera } from "@engine/player/Camera";
@@ -10,6 +11,8 @@ import { Renderer } from "@engine/renderer/Renderer";
 import { ChunkManager } from "@engine/world/ChunkManager";
 import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
+import { DayNightCycle } from "@engine/world/DayNightCycle";
+import { MobManager } from "@engine/entities/MobManager";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useGameStore } from "@store/useGameStore";
 import { useInventoryStore } from "@store/useInventoryStore";
@@ -39,6 +42,10 @@ export class Engine {
   private blockInteraction: BlockInteraction | null = null;
   private breakOverlay: BlockBreakOverlay | null = null;
   private itemDrops: ItemDropManager | null = null;
+  private dayNight: DayNightCycle | null = null;
+  private mobManager: MobManager | null = null;
+  private ambientLight: any = null;
+  private directionalLight: any = null;
   private animationFrameId = 0;
   private running = false;
   private pWasDown = false;
@@ -116,6 +123,18 @@ export class Engine {
     // Break overlay
     this.breakOverlay = new BlockBreakOverlay();
     this.renderer.getScene().add(this.breakOverlay.getMesh());
+
+    // Day/night cycle
+    this.dayNight = new DayNightCycle();
+
+    // Mob manager
+    this.mobManager = new MobManager(this.renderer.getScene());
+
+    // Get light references from scene for day/night updates
+    this.renderer.getScene().traverse((obj: any) => {
+      if (obj.isAmbientLight) this.ambientLight = obj;
+      if (obj.isDirectionalLight) this.directionalLight = obj;
+    });
 
     // Restore state
     if (savedMeta) {
@@ -295,6 +314,39 @@ export class Engine {
       dt
     );
 
+    // Mob combat: left-click hits mob if not breaking a block
+    if (isLeftHeld && !breakState.isBreaking) {
+      const eyePos = {
+        x: this.player!.position.x,
+        y: this.player!.position.y + 1.6,
+        z: this.player!.position.z,
+      };
+      const hitMob = this.mobManager!.hitTest(eyePos, lookDir, 4);
+      if (hitMob) {
+        hitMob.takeDamage(1);
+      }
+    }
+
+    // Update day/night cycle
+    this.dayNight!.update(dt);
+    const scene = this.renderer!.getScene();
+    (scene.background as THREE.Color).copy(this.dayNight!.getSkyColor());
+    if (this.ambientLight) this.ambientLight.intensity = this.dayNight!.getAmbientIntensity();
+    if (this.directionalLight) {
+      this.directionalLight.intensity = this.dayNight!.getDirectionalIntensity();
+      const sunPos = this.dayNight!.getSunPosition();
+      this.directionalLight.position.set(sunPos.x, sunPos.y, sunPos.z);
+    }
+    useGameStore.getState().setTimeOfDay(this.dayNight!.timeOfDay);
+
+    // Update mobs
+    this.mobManager!.update(
+      dt,
+      this.chunkManager!,
+      this.player!.position,
+      this.dayNight!.timeOfDay
+    );
+
     // Update item drops (floating pickups)
     this.itemDrops!.update(dt, this.player!.position);
 
@@ -350,6 +402,7 @@ export class Engine {
     this.handRenderer?.dispose();
     this.breakOverlay?.dispose();
     this.itemDrops?.dispose();
+    this.mobManager?.dispose();
     this.playerModel?.dispose();
     this.chunkManager?.dispose();
     this.renderer?.dispose();

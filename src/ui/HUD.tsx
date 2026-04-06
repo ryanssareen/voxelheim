@@ -11,8 +11,13 @@ export function HUD() {
   const shardsTotal = useGameStore((s) => s.shardsTotal);
   const isComplete = useGameStore((s) => s.isComplete);
   const breakProgress = useGameStore((s) => s.breakProgress);
+  const timeOfDay = useGameStore((s) => s.timeOfDay);
   const [showContinue, setShowContinue] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+
+  // Time display
+  const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
+  const timeIcon = isNight ? "🌙" : "☀️";
 
   useEffect(() => {
     if (!isComplete) {
@@ -55,6 +60,14 @@ export function HUD() {
           />
         </div>
       )}
+
+      {/* Time indicator — top left */}
+      <div
+        className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 border border-white/10 rounded"
+        style={{ textShadow: "1px 1px 0 #000" }}
+      >
+        <span className="text-sm">{timeIcon}</span>
+      </div>
 
       {/* Shard Counter — top center, Minecraft achievement style */}
       <div
