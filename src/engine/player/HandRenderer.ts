@@ -52,13 +52,14 @@ export class HandRenderer {
     this.armPivot.add(upperArm, lowerArm, this.fist, this.heldBlock);
     this.group.add(this.armPivot);
 
-    // POSITION: far right, below center, in front of camera
-    this.group.position.set(0.55, -0.1, -0.5);
+    // POSITION: bottom-right corner, arm extends upward from below screen
+    this.group.position.set(0.4, -0.55, -0.4);
 
-    // ROTATION: lean arm left and tilt forward
+    // ROTATION: arm mostly vertical, slight lean inward
     this.group.rotation.order = "ZXY";
-    this.group.rotation.z = 0.25;
-    this.group.rotation.x = -0.4;
+    this.group.rotation.z = 0.15;    // slight lean left
+    this.group.rotation.x = -0.15;   // barely tilted forward
+    this.group.rotation.y = -0.1;    // slight turn inward
 
     // Ensure renders on top
     this.group.renderOrder = 999;
