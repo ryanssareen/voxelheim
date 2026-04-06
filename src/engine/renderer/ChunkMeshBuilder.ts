@@ -109,8 +109,8 @@ export class ChunkMeshBuilder {
             }
             uv.push(r.u0, r.v1, r.u0, r.v0, r.u1, r.v0, r.u1, r.v1);
 
-            // Triangles: (0,1,2) and (2,3,0)
-            idx.push(vc, vc + 1, vc + 2, vc + 2, vc + 3, vc);
+            // Triangles: (0,1,2) and (0,2,3) — fan from vertex 0
+            idx.push(vc, vc + 1, vc + 2, vc, vc + 2, vc + 3);
             vc += 4;
           }
         }
