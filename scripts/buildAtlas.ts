@@ -5,10 +5,13 @@ import * as path from "path";
 const TILE = 16;
 const COLS = 4;
 
+type RGB = { r: number; g: number; b: number };
+
 interface TextureDef {
   name: string;
   color: string;
   split?: { topColor: string; bottomColor: string };
+  custom?: (buf: Buffer) => void;
 }
 
 const TEXTURES: TextureDef[] = [
@@ -22,13 +25,114 @@ const TEXTURES: TextureDef[] = [
   { name: "leaves", color: "#2E7D32" },
   { name: "crystal_shard", color: "#00E5FF" },
   { name: "planks", color: "#C8A55A" },
-  { name: "crafting_table_top", color: "", split: { topColor: "#8B6914", bottomColor: "#A0783C" } },
-  { name: "crafting_table_side", color: "", split: { topColor: "#A0783C", bottomColor: "#C8A55A" } },
+  { name: "crafting_table_top", color: "", custom: craftingTableTop },
+  { name: "crafting_table_side", color: "", custom: craftingTableSide },
 ];
 
-function hexToRGB(hex: string): { r: number; g: number; b: number } {
+function hexToRGB(hex: string): RGB {
   const n = parseInt(hex.replace("#", ""), 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function setPixel(buf: Buffer, x: number, y: number, c: RGB): void {
+  const i = (y * TILE + x) * 4;
+  buf[i] = c.r; buf[i + 1] = c.g; buf[i + 2] = c.b; buf[i + 3] = 255;
+}
+
+function fillRect(buf: Buffer, x0: number, y0: number, w: number, h: number, c: RGB): void {
+  for (let y = y0; y < y0 + h; y++)
+    for (let x = x0; x < x0 + w; x++)
+      setPixel(buf, x, y, c);
+}
+
+function craftingTableTop(buf: Buffer): void {
+  const darkWood: RGB = { r: 139, g: 90, b: 43 };
+  const medWood: RGB = { r: 180, g: 130, b: 70 };
+  const lightWood: RGB = { r: 200, g: 155, b: 95 };
+  const gridDark: RGB = { r: 140, g: 60, b: 40 };
+  const gridLight: RGB = { r: 180, g: 80, b: 50 };
+  const border: RGB = { r: 100, g: 65, b: 30 };
+
+  // Fill with medium wood
+  fillRect(buf, 0, 0, 16, 16, medWood);
+
+  // Dark border (1px all around)
+  for (let i = 0; i < 16; i++) {
+    setPixel(buf, i, 0, border);
+    setPixel(buf, i, 15, border);
+    setPixel(buf, 0, i, border);
+    setPixel(buf, 15, i, border);
+  }
+
+  // Light wood inner border
+  for (let i = 1; i < 15; i++) {
+    setPixel(buf, i, 1, lightWood);
+    setPixel(buf, i, 14, lightWood);
+    setPixel(buf, 1, i, lightWood);
+    setPixel(buf, 14, i, lightWood);
+  }
+
+  // Dark wood corners
+  fillRect(buf, 1, 1, 2, 2, darkWood);
+  fillRect(buf, 13, 1, 2, 2, darkWood);
+  fillRect(buf, 1, 13, 2, 2, darkWood);
+  fillRect(buf, 13, 13, 2, 2, darkWood);
+
+  // 3x3 crafting grid in center (cells at 4,5,6,7 / 8,9,10,11 pattern)
+  const gridStart = 3;
+  const cellSize = 3;
+  const gap = 1;
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const cx = gridStart + col * (cellSize + gap);
+      const cy = gridStart + row * (cellSize + gap);
+      fillRect(buf, cx, cy, cellSize, cellSize, gridDark);
+      // Lighter inner pixel
+      setPixel(buf, cx + 1, cy + 1, gridLight);
+    }
+  }
+}
+
+function craftingTableSide(buf: Buffer): void {
+  const plankLight: RGB = { r: 200, g: 155, b: 95 };
+  const plankMed: RGB = { r: 180, g: 130, b: 70 };
+  const plankDark: RGB = { r: 139, g: 90, b: 43 };
+  const border: RGB = { r: 100, g: 65, b: 30 };
+  const toolDark: RGB = { r: 80, g: 80, b: 80 };
+  const toolLight: RGB = { r: 160, g: 160, b: 160 };
+  const handleColor: RGB = { r: 120, g: 80, b: 40 };
+
+  // Fill with plank pattern (horizontal bands)
+  for (let y = 0; y < 16; y++) {
+    const band = y % 4;
+    const c = band === 0 ? plankDark : band === 3 ? plankLight : plankMed;
+    for (let x = 0; x < 16; x++) setPixel(buf, x, y, c);
+  }
+
+  // Dark border top and bottom
+  for (let x = 0; x < 16; x++) {
+    setPixel(buf, x, 0, border);
+    setPixel(buf, x, 15, border);
+  }
+
+  // Saw tool on left side
+  // Handle (vertical stick)
+  for (let y = 4; y < 13; y++) setPixel(buf, 3, y, handleColor);
+  // Blade
+  for (let y = 3; y < 12; y++) setPixel(buf, 4, y, toolLight);
+  for (let y = 4; y < 11; y++) setPixel(buf, 5, y, toolDark);
+  // Teeth
+  setPixel(buf, 5, 3, toolLight);
+  setPixel(buf, 5, 5, toolLight);
+  setPixel(buf, 5, 7, toolLight);
+  setPixel(buf, 5, 9, toolLight);
+
+  // Hammer on right side
+  // Handle
+  for (let y = 6; y < 14; y++) setPixel(buf, 11, y, handleColor);
+  // Head
+  fillRect(buf, 9, 3, 5, 3, toolDark);
+  fillRect(buf, 10, 4, 3, 1, toolLight);
 }
 
 function solidTile(hex: string): Buffer {
@@ -76,9 +180,15 @@ async function main() {
     const col = i % COLS;
     const row = Math.floor(i / COLS);
 
-    const tile = tex.split
-      ? splitTile(tex.split.topColor, tex.split.bottomColor)
-      : solidTile(tex.color);
+    let tile: Buffer;
+    if (tex.custom) {
+      tile = Buffer.alloc(TILE * TILE * 4);
+      tex.custom(tile);
+    } else if (tex.split) {
+      tile = splitTile(tex.split.topColor, tex.split.bottomColor);
+    } else {
+      tile = solidTile(tex.color);
+    }
 
     // Copy tile into atlas buffer
     for (let y = 0; y < TILE; y++) {

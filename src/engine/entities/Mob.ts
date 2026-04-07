@@ -97,7 +97,7 @@ export class Mob {
     if (this.config.hostile) {
       this.updateHostileAI(dt, playerPos);
     } else {
-      this.updatePassiveAI(dt, playerPos);
+      this.updatePassiveAI(dt, playerPos, getBlock, registry);
     }
 
     // Gravity
@@ -175,7 +175,41 @@ export class Mob {
     }
   }
 
-  private updatePassiveAI(dt: number, playerPos: { x: number; y: number; z: number }): void {
+  private hasGroundAhead(
+    getBlock: (x: number, y: number, z: number) => number,
+    registry: BlockRegistry
+  ): boolean {
+    const lookX = -Math.sin(this.yaw);
+    const lookZ = -Math.cos(this.yaw);
+    const aheadX = Math.floor(this.position.x + lookX * 1.2);
+    const aheadZ = Math.floor(this.position.z + lookZ * 1.2);
+    const feetY = Math.floor(this.position.y);
+    // Check if there's solid ground at or 1 below feet level ahead
+    return (
+      registry.isSolid(getBlock(aheadX, feetY - 1, aheadZ)) ||
+      registry.isSolid(getBlock(aheadX, feetY, aheadZ))
+    );
+  }
+
+  private isBlockedAhead(
+    getBlock: (x: number, y: number, z: number) => number,
+    registry: BlockRegistry
+  ): boolean {
+    const lookX = -Math.sin(this.yaw);
+    const lookZ = -Math.cos(this.yaw);
+    const aheadX = Math.floor(this.position.x + lookX * 0.8);
+    const aheadZ = Math.floor(this.position.z + lookZ * 0.8);
+    const feetY = Math.floor(this.position.y);
+    return registry.isSolid(getBlock(aheadX, feetY, aheadZ)) ||
+           registry.isSolid(getBlock(aheadX, feetY + 1, aheadZ));
+  }
+
+  private updatePassiveAI(
+    dt: number,
+    playerPos: { x: number; y: number; z: number },
+    getBlock?: (x: number, y: number, z: number) => number,
+    registry?: BlockRegistry
+  ): void {
     // Flee if recently hit
     if (this.fleeTimer > 0) {
       this.fleeTimer -= dt;
@@ -193,7 +227,6 @@ export class Mob {
 
     this.aiTimer -= dt;
     if (this.aiTimer <= 0) {
-      // Random: idle or wander
       if (Math.random() > 0.4) {
         this.aiTargetYaw = Math.random() * Math.PI * 2;
         this.isMoving = true;
@@ -211,14 +244,25 @@ export class Mob {
       while (diff < -Math.PI) diff += Math.PI * 2;
       this.yaw += diff * dt * 3;
 
+      // Check for cliff or wall ahead — pick a new direction if stuck
+      if (getBlock && registry) {
+        if (!this.hasGroundAhead(getBlock, registry) || this.isBlockedAhead(getBlock, registry)) {
+          this.aiTargetYaw = this.yaw + Math.PI * (0.5 + Math.random());
+          this.aiTimer = 0.5 + Math.random();
+          this.velocity.x = 0;
+          this.velocity.z = 0;
+          return;
+        }
+      }
+
       this.velocity.x = -Math.sin(this.yaw) * this.config.speed;
       this.velocity.z = -Math.cos(this.yaw) * this.config.speed;
 
-      // Don't walk off the island
-      if (this.position.x < 2 || this.position.x > 62 ||
-          this.position.z < 2 || this.position.z > 62) {
-        // Turn back toward center
-        this.aiTargetYaw = Math.atan2(32 - this.position.x, 32 - this.position.z) + Math.PI;
+      // Stay within island bounds — turn toward center
+      if (this.position.x < 4 || this.position.x > 60 ||
+          this.position.z < 4 || this.position.z > 60) {
+        this.aiTargetYaw = Math.atan2(32 - this.position.x, 32 - this.position.z);
+        this.aiTimer = 1 + Math.random() * 2;
       }
     } else {
       this.velocity.x = 0;
