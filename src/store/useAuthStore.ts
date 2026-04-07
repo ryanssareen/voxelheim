@@ -1,4 +1,10 @@
 import { create } from "zustand";
+import {
+  auth,
+  googleProvider,
+  microsoftProvider,
+  signInWithPopup,
+} from "@/lib/firebase";
 
 interface AuthUser {
   email: string;
@@ -75,59 +81,6 @@ async function authViaRest(
   };
 }
 
-// Google OAuth via popup — opens Firebase's OAuth handler directly
-async function googleOAuthPopup(): Promise<AuthUser> {
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
-  if (!apiKey || !authDomain) throw new Error("Firebase not configured");
-
-  return new Promise((resolve, reject) => {
-    const width = 500;
-    const height = 600;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-
-    // Use Google's OAuth2 endpoint directly
-    const redirectUri = window.location.origin + "/api/auth/google-callback";
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
-    // Fall back to signInWithPopup via Firebase REST approach
-    // Use the accounts.google.com OAuth flow
-    const state = crypto.randomUUID();
-    sessionStorage.setItem("oauth_state", state);
-
-    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${encodeURIComponent(apiKey)}.apps.googleusercontent.com&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `response_type=code&` +
-      `scope=email+profile&` +
-      `state=${state}`;
-
-    // Actually, the simplest approach: use Firebase's signInWithIdp REST endpoint
-    // But that requires an OAuth token we don't have yet.
-    // Let's use a simpler approach - redirect to our own API endpoint
-
-    // For now, throw a clear error - Google OAuth needs more server setup
-    if (!clientId) {
-      reject(new Error("Google sign-in requires additional server configuration. Use email/password for now."));
-      return;
-    }
-
-    const popup = window.open(googleAuthUrl, "google-signin", `width=${width},height=${height},left=${left},top=${top}`);
-    if (!popup) {
-      reject(new Error("Popup was blocked. Please allow popups for this site."));
-      return;
-    }
-
-    const interval = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(interval);
-        reject(new Error("Sign-in cancelled"));
-      }
-    }, 500);
-  });
-}
-
 export const useAuthStore = create<AuthState>((set) => ({
   user: typeof window !== "undefined" ? loadUser() : null,
   loading: false,
@@ -146,11 +99,37 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signInWithGoogle: async () => {
-    throw new Error("Google sign-in coming soon. Use email/password for now.");
+    const a = auth();
+    const p = googleProvider();
+    if (!a || !p) throw new Error("Firebase not configured");
+    const result = await signInWithPopup(a, p);
+    const fbUser = result.user;
+    const token = await fbUser.getIdToken();
+    const user: AuthUser = {
+      email: fbUser.email ?? "",
+      uid: fbUser.uid,
+      idToken: token,
+      refreshToken: fbUser.refreshToken,
+    };
+    saveUser(user);
+    set({ user });
   },
 
   signInWithMicrosoft: async () => {
-    throw new Error("Microsoft sign-in coming soon. Use email/password for now.");
+    const a = auth();
+    const p = microsoftProvider();
+    if (!a || !p) throw new Error("Firebase not configured");
+    const result = await signInWithPopup(a, p);
+    const fbUser = result.user;
+    const token = await fbUser.getIdToken();
+    const user: AuthUser = {
+      email: fbUser.email ?? "",
+      uid: fbUser.uid,
+      idToken: token,
+      refreshToken: fbUser.refreshToken,
+    };
+    saveUser(user);
+    set({ user });
   },
 
   resetPassword: async (email) => {
