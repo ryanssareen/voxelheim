@@ -9,6 +9,7 @@ import {
   CHUNK_SIZE,
   WORLD_SIZE_CHUNKS,
   WORLD_HEIGHT_CHUNKS,
+  type WorldType,
 } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
 
@@ -19,6 +20,8 @@ import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
 export class ChunkManager {
   private readonly renderer: Renderer;
   private readonly seed: string;
+  private readonly worldType: WorldType;
+  private readonly sizeChunks: number;
   private readonly registry = BlockRegistry.getInstance();
   private readonly chunks = new Map<string, Chunk>();
   private readonly modifiedChunks = new Set<string>();
@@ -31,9 +34,11 @@ export class ChunkManager {
     return { u0: 0, v0: 0, u1: 1, v1: 1 };
   };
 
-  constructor(renderer: Renderer, seed: string) {
+  constructor(renderer: Renderer, seed: string, worldType: WorldType = "island") {
     this.renderer = renderer;
     this.seed = seed;
+    this.worldType = worldType;
+    this.sizeChunks = worldType === "infinite" ? 8 : WORLD_SIZE_CHUNKS;
   }
 
   /**
@@ -45,13 +50,13 @@ export class ChunkManager {
     if (this.loaded) return;
     this.loaded = true;
 
-    const gen = new TerrainGenerator(this.seed);
+    const gen = new TerrainGenerator(this.seed, this.worldType);
     const surfaceMap = new Map<string, number>();
 
     // Generate all chunks
-    for (let cx = 0; cx < WORLD_SIZE_CHUNKS; cx++) {
+    for (let cx = 0; cx < this.sizeChunks; cx++) {
       for (let cy = 0; cy < WORLD_HEIGHT_CHUNKS; cy++) {
-        for (let cz = 0; cz < WORLD_SIZE_CHUNKS; cz++) {
+        for (let cz = 0; cz < this.sizeChunks; cz++) {
           const chunk = gen.generateChunk(cx, cy, cz, surfaceMap);
           this.chunks.set(chunkKey(cx, cy, cz), chunk);
         }

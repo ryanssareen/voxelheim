@@ -10,7 +10,7 @@ const HEART_PATH = "M6.5 11.5L1.5 6.5C0.2 5.2 0.2 3.1 1.5 1.8C2.8 0.5 4.9 0.5 6.
 function HeartIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: number }) {
   const clipId = `hh${index}`;
   return (
-    <svg width="13" height="13" viewBox="0 0 13 13" className="block">
+    <svg width="18" height="18" viewBox="0 0 13 13" className="block">
       <path d={HEART_PATH} fill="#3a1111" stroke="#1a0808" strokeWidth="0.8" />
       {fill === "full" && <path d={HEART_PATH} fill="#e53935" />}
       {fill === "half" && (
@@ -26,7 +26,7 @@ function HeartIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: nu
 function HungerIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: number }) {
   const clipId = `hd${index}`;
   return (
-    <svg width="13" height="13" viewBox="0 0 13 13" className="block">
+    <svg width="18" height="18" viewBox="0 0 13 13" className="block">
       <ellipse cx="7.5" cy="4.5" rx="3.5" ry="3" fill="#2a1f0f" stroke="#1a1408" strokeWidth="0.8" />
       {fill === "full" && (
         <ellipse cx="7.5" cy="4.5" rx="3.5" ry="3" fill="#c68c53" />
@@ -43,6 +43,43 @@ function HungerIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: n
         stroke="#1a1408" strokeWidth="0.6"
         transform="rotate(-15, 3.25, 9)"
       />
+    </svg>
+  );
+}
+
+function SunMoonIcon({ timeOfDay }: { timeOfDay: number }) {
+  const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
+  const progress = isNight
+    ? (timeOfDay - 0.35) / 0.4
+    : timeOfDay <= 0.35
+      ? 0.5 + timeOfDay / 0.7
+      : 0.5 - (1 - timeOfDay) / 0.5;
+  const arcY = 4 + Math.sin(Math.max(0, Math.min(1, progress)) * Math.PI) * -8;
+
+  return (
+    <svg width="36" height="20" viewBox="0 0 36 20" className="block">
+      <line x1="2" y1="18" x2="34" y2="18" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
+      {isNight ? (
+        <>
+          <circle cx="18" cy={12 + arcY} r="5" fill="#e0e0e0" />
+          <circle cx="20" cy={10 + arcY} r="5" fill="transparent" stroke="#c0c0c0" strokeWidth="0" />
+          <circle cx="20.5" cy={10.5 + arcY} r="4.5" fill="#1a1a3a" />
+        </>
+      ) : (
+        <>
+          <circle cx="18" cy={12 + arcY} r="5" fill="#fdd835" />
+          {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
+            const rad = (angle * Math.PI) / 180;
+            const x1 = 18 + Math.cos(rad) * 6.5;
+            const y1 = 12 + arcY + Math.sin(rad) * 6.5;
+            const x2 = 18 + Math.cos(rad) * 8;
+            const y2 = 12 + arcY + Math.sin(rad) * 8;
+            return (
+              <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#fdd835" strokeWidth="1.2" strokeLinecap="round" />
+            );
+          })}
+        </>
+      )}
     </svg>
   );
 }
@@ -64,7 +101,7 @@ function HealthBar({ health, maxHealth }: { health: number; maxHealth: number })
 
   const hearts = maxHealth / 2;
   return (
-    <div className={`flex gap-[1px] ${shaking ? "animate-shake" : ""}`}>
+    <div className={`flex gap-[2px] ${shaking ? "animate-shake" : ""}`}>
       {Array.from({ length: hearts }, (_, i) => {
         const hp = health - i * 2;
         const fill = hp >= 2 ? "full" : hp >= 1 ? "half" : "empty";
@@ -87,7 +124,7 @@ function HungerBar({ hunger, maxHunger }: { hunger: number; maxHunger: number })
 
   const icons = maxHunger / 2;
   return (
-    <div className={`flex flex-row-reverse gap-[1px] ${shaking ? "animate-shake" : ""}`}>
+    <div className={`flex flex-row-reverse gap-[2px] ${shaking ? "animate-shake" : ""}`}>
       {Array.from({ length: icons }, (_, i) => {
         const h = hunger - i * 2;
         const fill = h >= 2 ? "full" : h >= 1 ? "half" : "empty";
@@ -113,9 +150,7 @@ export function HUD() {
   const [showContinue, setShowContinue] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
 
-  // Time display
   const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
-  const timeIcon = isNight ? "🌙" : "☀️";
 
   useEffect(() => {
     if (!isComplete) {
@@ -159,12 +194,9 @@ export function HUD() {
         </div>
       )}
 
-      {/* Time indicator — top left */}
-      <div
-        className="absolute top-3 left-3 flex items-center gap-1.5 px-2 py-1 bg-black/50 border border-white/10 rounded"
-        style={{ textShadow: "1px 1px 0 #000" }}
-      >
-        <span className="text-sm">{timeIcon}</span>
+      {/* Sun/Moon indicator — top left */}
+      <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 border border-white/10 rounded">
+        <SunMoonIcon timeOfDay={timeOfDay} />
       </div>
 
       {/* Shard Counter — top center, Minecraft achievement style */}
@@ -192,14 +224,13 @@ export function HUD() {
 
       {/* Health & Hunger bars — positioned above hotbar */}
       <div
-        className="absolute bottom-[72px] left-1/2 -translate-x-1/2 flex items-end gap-2"
-        style={{ width: "min(100vw, 480px)" }}
+        className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex items-end justify-between"
+        style={{ width: "min(100vw, 560px)" }}
       >
-        <div className="flex-1 flex justify-end">
+        <div className="flex justify-end">
           <HealthBar health={health} maxHealth={maxHealth} />
         </div>
-        <div style={{ width: 8 }} />
-        <div className="flex-1 flex justify-start">
+        <div className="flex justify-start">
           <HungerBar hunger={hunger} maxHunger={maxHunger} />
         </div>
       </div>

@@ -13,6 +13,7 @@ export interface WorldMeta {
   hotbarSlots: Array<{ blockId: number; count: number }>;
   health?: number;
   hunger?: number;
+  worldType?: string;
 }
 
 interface ChunkRecord {

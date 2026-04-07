@@ -2,20 +2,120 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useSettingsStore } from "@/store/useSettingsStore";
+
+function SliderOption({
+  label,
+  value,
+  min,
+  max,
+  displayValue,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  displayValue: string;
+  onChange: (v: number) => void;
+}) {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div className="w-full">
+      <div className="text-white font-mono text-sm mb-1 text-center" style={{ textShadow: "2px 2px 0 #2a2a2a" }}>
+        {label}: {displayValue}
+      </div>
+      <div
+        className="relative w-full h-[30px] cursor-pointer"
+        style={{
+          background: "linear-gradient(to bottom, #5a5a5a 0%, #3a3a3a 40%, #2e2e2e 60%, #222 100%)",
+          border: "3px solid #1a1a1a",
+          boxShadow: "inset 0 2px 0 rgba(255,255,255,0.08), inset 0 -2px 0 rgba(0,0,0,0.3)",
+        }}
+        onMouseDown={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const update = (clientX: number) => {
+            const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            onChange(Math.round(min + x * (max - min)));
+          };
+          update(e.clientX);
+          const onMove = (ev: MouseEvent) => update(ev.clientX);
+          const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+          };
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+        }}
+      >
+        <div
+          className="absolute top-0 left-0 h-full"
+          style={{
+            width: `${pct}%`,
+            background: "linear-gradient(to bottom, #7a7a7a 0%, #5a5a5a 40%, #484848 60%, #3a3a3a 100%)",
+            boxShadow: "inset 0 2px 0 rgba(255,255,255,0.15), inset 0 -2px 0 rgba(0,0,0,0.3)",
+          }}
+        />
+        <div
+          className="absolute top-[-2px] w-[8px] h-[calc(100%+4px)]"
+          style={{
+            left: `calc(${pct}% - 4px)`,
+            background: "linear-gradient(to bottom, #eee 0%, #aaa 100%)",
+            border: "2px solid #555",
+            boxShadow: "0 0 4px rgba(0,0,0,0.5)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function OptionsModal({ onClose }: { onClose: () => void }) {
+  const { musicEnabled, musicVolume, renderDistance, fov, setMusicEnabled, setMusicVolume, setRenderDistance, setFov } =
+    useSettingsStore();
+
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
       <div className="flex flex-col items-center gap-4 w-[380px]">
         <h2 className="text-2xl font-mono text-white font-bold" style={{ textShadow: "2px 2px 0 #2a2a2a" }}>
           Options
         </h2>
-        <div className="w-full flex flex-col gap-2">
-          {["Music: OFF", "Render Distance: 4 chunks", "FOV: 75"].map((label) => (
-            <div key={label} className="w-full py-2.5 text-center text-white/50 font-mono text-sm" style={DISABLED_STYLE}>
-              {label}
-            </div>
-          ))}
+        <div className="w-full flex flex-col gap-3">
+          <div className="flex gap-2 w-full">
+            <button
+              onClick={() => setMusicEnabled(!musicEnabled)}
+              className={MC_BTN + " flex-1 text-sm"}
+              style={BTN_STYLE}
+            >
+              Music: {musicEnabled ? "ON" : "OFF"}
+            </button>
+          </div>
+          {musicEnabled && (
+            <SliderOption
+              label="Music Volume"
+              value={musicVolume}
+              min={0}
+              max={100}
+              displayValue={`${musicVolume}%`}
+              onChange={setMusicVolume}
+            />
+          )}
+          <SliderOption
+            label="Render Distance"
+            value={renderDistance}
+            min={2}
+            max={8}
+            displayValue={`${renderDistance} chunks`}
+            onChange={setRenderDistance}
+          />
+          <SliderOption
+            label="FOV"
+            value={fov}
+            min={60}
+            max={110}
+            displayValue={String(fov)}
+            onChange={setFov}
+          />
         </div>
         <button onClick={onClose} className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
           Done

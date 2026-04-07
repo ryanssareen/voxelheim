@@ -6,6 +6,7 @@ import {
   SEA_LEVEL,
   CRYSTAL_SHARD_COUNT,
   CRYSTAL_MIN_DEPTH,
+  type WorldType,
 } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
 
@@ -29,9 +30,11 @@ function clamp(value: number, min: number, max: number): number {
 export class TerrainGenerator {
   private readonly noise: SeededNoise;
   private readonly seed: string;
+  private readonly worldType: WorldType;
 
-  constructor(seed: string) {
+  constructor(seed: string, worldType: WorldType = "island") {
     this.seed = seed;
+    this.worldType = worldType;
     this.noise = new SeededNoise(hashString(seed));
   }
 
@@ -57,27 +60,29 @@ export class TerrainGenerator {
         const wx = cx * CHUNK_SIZE + x;
         const wz = cz * CHUNK_SIZE + z;
 
-        const baseHeight = 30;
-        const noiseValue = this.noise.octaveNoise2D(
-          wx,
-          wz,
-          4,
-          0.5,
-          2.0,
-          50
-        );
-        let surfaceY = Math.floor(baseHeight + noiseValue * 14);
+        let surfaceY: number;
 
-        // Island shaping: smooth falloff from center (32, 32)
-        const dx = wx - 32;
-        const dz = wz - 32;
-        const distFromCenter = Math.sqrt(dx * dx + dz * dz);
-        // Use a larger radius and gentler curve so most of the island is above sea level
-        const normalizedDist = clamp(distFromCenter / 38, 0, 1);
-        // Smoothstep keeps the center plateau high and drops sharply only at the edges
-        const falloff = 1 - normalizedDist * normalizedDist * normalizedDist;
-        surfaceY = Math.floor(surfaceY * falloff);
-        if (surfaceY < 1) surfaceY = 0;
+        if (this.worldType === "flat") {
+          surfaceY = 30;
+        } else if (this.worldType === "infinite") {
+          const baseHeight = 30;
+          const noiseValue = this.noise.octaveNoise2D(wx, wz, 5, 0.5, 2.0, 40);
+          surfaceY = Math.floor(baseHeight + noiseValue * 14);
+        } else {
+          // "island" (default)
+          const baseHeight = 30;
+          const noiseValue = this.noise.octaveNoise2D(wx, wz, 4, 0.5, 2.0, 50);
+          surfaceY = Math.floor(baseHeight + noiseValue * 14);
+
+          // Island shaping: smooth falloff from center (32, 32)
+          const dx = wx - 32;
+          const dz = wz - 32;
+          const distFromCenter = Math.sqrt(dx * dx + dz * dz);
+          const normalizedDist = clamp(distFromCenter / 38, 0, 1);
+          const falloff = 1 - normalizedDist * normalizedDist * normalizedDist;
+          surfaceY = Math.floor(surfaceY * falloff);
+          if (surfaceY < 1) surfaceY = 0;
+        }
 
         if (surfaceMap) {
           surfaceMap.set(`${wx},${wz}`, surfaceY);
@@ -86,16 +91,28 @@ export class TerrainGenerator {
         for (let y = 0; y < CHUNK_SIZE; y++) {
           const wy = cy * CHUNK_SIZE + y;
 
-          if (wy > surfaceY) {
-            // AIR — already default
-          } else if (wy === surfaceY && surfaceY > SEA_LEVEL) {
-            chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
-          } else if (wy === surfaceY && surfaceY <= SEA_LEVEL) {
-            chunk.setBlock(x, y, z, BLOCK_ID.SAND);
-          } else if (wy > surfaceY - 4) {
-            chunk.setBlock(x, y, z, BLOCK_ID.DIRT);
+          if (this.worldType === "flat") {
+            if (wy > surfaceY) {
+              // AIR
+            } else if (wy === surfaceY) {
+              chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
+            } else if (wy > surfaceY - 4) {
+              chunk.setBlock(x, y, z, BLOCK_ID.DIRT);
+            } else {
+              chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+            }
           } else {
-            chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+            if (wy > surfaceY) {
+              // AIR — already default
+            } else if (wy === surfaceY && surfaceY > SEA_LEVEL) {
+              chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
+            } else if (wy === surfaceY && surfaceY <= SEA_LEVEL) {
+              chunk.setBlock(x, y, z, BLOCK_ID.SAND);
+            } else if (wy > surfaceY - 4) {
+              chunk.setBlock(x, y, z, BLOCK_ID.DIRT);
+            } else {
+              chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+            }
           }
         }
       }

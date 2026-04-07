@@ -24,3 +24,6 @@ export const CRYSTAL_SHARD_COUNT = 5;
 
 /** Minimum depth below surface at which crystal shards can spawn. */
 export const CRYSTAL_MIN_DEPTH = 4;
+
+/** Supported world generation types. */
+export type WorldType = "island" | "flat" | "infinite";

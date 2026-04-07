@@ -14,8 +14,10 @@ import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { DayNightCycle } from "@engine/world/DayNightCycle";
 import { MobManager } from "@engine/entities/MobManager";
+import { MusicManager } from "@engine/audio/MusicManager";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useGameStore } from "@store/useGameStore";
+import { useSettingsStore } from "@store/useSettingsStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 import {
   saveWorld,
@@ -23,6 +25,7 @@ import {
   loadWorldChunks,
   type WorldMeta,
 } from "@systems/persistence/WorldStorage";
+import type { WorldType } from "@engine/world/constants";
 import { BLOCK_DEFINITIONS } from "@data/blocks";
 
 const MOUSE_SENSITIVITY = 0.002;
@@ -47,6 +50,7 @@ export class Engine {
   private itemDrops: ItemDropManager | null = null;
   private dayNight: DayNightCycle | null = null;
   private mobManager: MobManager | null = null;
+  private music: MusicManager | null = null;
   private ambientLight: any = null;
   private directionalLight: any = null;
   private animationFrameId = 0;
@@ -62,6 +66,7 @@ export class Engine {
   private passiveHungerTimer = 0;
   private regenTimer = 0;
   private starvationTimer = 0;
+  private frameCount = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -75,10 +80,15 @@ export class Engine {
     this.worldId = worldId ?? null;
     let savedMeta: WorldMeta | null = null;
 
+    let worldType: WorldType = "island";
+
     if (worldId) {
       savedMeta = await loadWorldMeta(worldId);
       if (savedMeta) {
         this.seed = savedMeta.seed;
+        if (savedMeta.worldType === "flat" || savedMeta.worldType === "infinite") {
+          worldType = savedMeta.worldType;
+        }
       }
     } else {
       // Read seed from sessionStorage (from create world page)
@@ -87,12 +97,22 @@ export class Engine {
           sessionStorage.getItem("voxelheim-world-config") || "{}"
         );
         if (config.seed) this.seed = config.seed;
+        if (config.worldType === "flat" || config.worldType === "infinite") {
+          worldType = config.worldType;
+        }
       } catch {
         /* ignore */
       }
     }
 
-    this.chunkManager = new ChunkManager(this.renderer, this.seed);
+    // Adjust spawn based on world type
+    if (worldType === "infinite") {
+      SPAWN.x = 64; SPAWN.y = 50; SPAWN.z = 64;
+    } else if (worldType === "flat") {
+      SPAWN.x = 32; SPAWN.y = 35; SPAWN.z = 32;
+    }
+
+    this.chunkManager = new ChunkManager(this.renderer, this.seed, worldType);
     this.chunkManager.update(0, 0, 0);
 
     // Load saved chunk modifications
@@ -165,6 +185,14 @@ export class Engine {
     }
 
     this.renderer.resize(this.canvas.clientWidth, this.canvas.clientHeight);
+
+    // Ambient music
+    this.music = new MusicManager();
+    this.music.init();
+    const settings = useSettingsStore.getState();
+    this.music.setVolume(settings.musicVolume);
+    this.music.setEnabled(settings.musicEnabled);
+    this.music.start();
 
     // Auto-save
     this.autoSaveTimer = setInterval(() => this.save(), AUTOSAVE_INTERVAL);
@@ -253,6 +281,13 @@ export class Engine {
 
     const dt = this.clock.getDelta();
     if (dt === 0) return;
+
+    this.frameCount++;
+    if (this.frameCount % 60 === 0 && this.music) {
+      const settings = useSettingsStore.getState();
+      this.music.setEnabled(settings.musicEnabled);
+      this.music.setVolume(settings.musicVolume);
+    }
 
     const state = useGameStore.getState();
     if (state.isPaused || state.isDead) return;
@@ -552,6 +587,7 @@ export class Engine {
     cancelAnimationFrame(this.animationFrameId);
     if (this.autoSaveTimer) clearInterval(this.autoSaveTimer);
     await this.save();
+    this.music?.dispose();
     this.input.dispose();
     this.handRenderer?.dispose();
     this.offhandRenderer?.dispose();

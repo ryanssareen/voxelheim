@@ -34,13 +34,20 @@ export default function CreateWorldPage() {
   const [worldType, setWorldType] = useState(0);
 
   const handleCreate = async () => {
-    const actualSeed = seed || "voxelheim-mvp";
+    const actualSeed = seed || Math.random().toString(36).slice(2, 10);
+    const actualWorldType = WORLD_TYPES[worldType].toLowerCase();
 
     // Save initial world metadata to IndexedDB
     const { generateWorldId, saveWorld } = await import(
       "@systems/persistence/WorldStorage"
     );
     const id = generateWorldId();
+    const spawnPos = actualWorldType === "infinite"
+      ? { x: 64, y: 50, z: 64 }
+      : actualWorldType === "flat"
+        ? { x: 32, y: 35, z: 32 }
+        : { x: 32, y: 50, z: 32 };
+
     await saveWorld(
       {
         id,
@@ -48,11 +55,12 @@ export default function CreateWorldPage() {
         seed: actualSeed,
         createdAt: Date.now(),
         lastPlayedAt: Date.now(),
-        playerPos: { x: 32, y: 50, z: 32 },
+        playerPos: spawnPos,
         playerYaw: 0,
         playerPitch: 0,
         shardsCollected: 0,
         hotbarSlots: Array.from({ length: 8 }, () => ({ blockId: 0, count: 0 })),
+        worldType: actualWorldType,
       },
       new Map()
     );
@@ -60,7 +68,7 @@ export default function CreateWorldPage() {
     // Also store seed in sessionStorage as fallback
     sessionStorage.setItem(
       "voxelheim-world-config",
-      JSON.stringify({ seed: actualSeed })
+      JSON.stringify({ seed: actualSeed, worldType: actualWorldType })
     );
     router.push(`/game?worldId=${id}`);
   };
@@ -139,8 +147,8 @@ export default function CreateWorldPage() {
         {/* World Type toggle */}
         <button
           onClick={() => setWorldType((t) => (t + 1) % WORLD_TYPES.length)}
-          className="w-full py-2.5 text-white/50 font-mono text-sm tracking-wide mb-6 cursor-not-allowed"
-          style={MC_DISABLED_STYLE}
+          className="w-full py-2.5 text-white font-mono text-sm tracking-wide mb-6 hover:brightness-125 active:brightness-90 transition-all"
+          style={MC_BUTTON_STYLE}
         >
           World Type: {WORLD_TYPES[worldType]}
         </button>
