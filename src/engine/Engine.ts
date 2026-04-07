@@ -381,6 +381,9 @@ export class Engine {
       this.registry
     );
 
+    // Update item drops (floating pickups) — run early so pickup always works
+    this.itemDrops!.update(dt, this.player!.position);
+
     // Fall damage (Minecraft-style: damage = fallDistance - 3)
     const isFalling = !this.player!.onGround && this.player!.velocity.y < 0;
     if (isFalling && !this.wasFalling) {
@@ -559,9 +562,6 @@ export class Engine {
       }
       return;
     }
-
-    // Update item drops (floating pickups)
-    this.itemDrops!.update(dt, this.player!.position);
 
     // Update break overlay and HUD
     this.breakOverlay!.update(breakState.breakTarget, breakState.breakProgress);

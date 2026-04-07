@@ -29,7 +29,9 @@ interface ItemDrop {
   settled: boolean;
 }
 
-const PICKUP_DISTANCE = 1.8;
+const PICKUP_DISTANCE = 1.5;
+const MAGNET_DISTANCE = 3.0;
+const MAGNET_SPEED = 8;
 const DROP_LIFETIME = 60;
 const BOB_SPEED = 3;
 const BOB_HEIGHT = 0.15;
@@ -150,23 +152,29 @@ export class ItemDropManager {
       const scale = 1 + Math.sin(drop.age * 4) * 0.05;
       drop.mesh.scale.setScalar(scale);
 
-      // Pickup check
+      // Pickup + magnet check
       const dx = playerPos.x - drop.position.x;
-      const dy = playerPos.y + 0.9 - drop.position.y; // check against player center
+      const dy = playerPos.y + 0.9 - drop.position.y;
       const dz = playerPos.z - drop.position.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      // Only pick up after initial pop (0.3s delay)
-      if (dist < PICKUP_DISTANCE && drop.age > 0.3) {
-        try {
+      if (drop.age > 0.3) {
+        // Magnet: pull drops toward player when close
+        if (dist < MAGNET_DISTANCE && dist > PICKUP_DISTANCE) {
+          const pull = MAGNET_SPEED * dt / dist;
+          drop.position.x += dx * pull;
+          drop.position.y += dy * pull;
+          drop.position.z += dz * pull;
+          drop.settled = false;
+        }
+
+        // Pickup: add to inventory
+        if (dist < PICKUP_DISTANCE) {
           const added = useHotbarStore.getState().addItem(drop.blockId);
           if (added) {
             this.removeDrop(i);
             continue;
           }
-        } catch {
-          this.removeDrop(i);
-          continue;
         }
       }
     }
