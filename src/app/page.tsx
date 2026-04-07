@@ -162,7 +162,7 @@ const DISABLED_STYLE: React.CSSProperties = {
 export default function Home() {
   const [showOptions, setShowOptions] = useState(false);
   const [showQuit, setShowQuit] = useState(false);
-  const { user, loading: authLoading, configured, signOut } = useAuthStore();
+  const { user, loading: authLoading, signOut } = useAuthStore();
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden select-none">
@@ -231,21 +231,7 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col items-center gap-2.5 mt-10 w-[300px] sm:w-[380px]">
-          {!configured ? (
-            <>
-              <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
-                Play Game
-              </Link>
-              <div className="flex gap-2.5 w-full">
-                <button onClick={() => setShowOptions(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
-                  Options...
-                </button>
-                <button onClick={() => setShowQuit(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
-                  Quit Game
-                </button>
-              </div>
-            </>
-          ) : authLoading ? (
+          {authLoading ? (
             <div className={MC_BTN + " w-full text-lg"} style={DISABLED_STYLE}>
               Loading...
             </div>

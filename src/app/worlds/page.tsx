@@ -20,16 +20,16 @@ export default function WorldsPage() {
   const router = useRouter();
   const [worlds, setWorlds] = useState<WorldMeta[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user, loading: authLoading, configured } = useAuthStore();
+  const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
-    if (configured && !authLoading && !user) {
+    if (!authLoading && !user) {
       router.replace("/login");
     }
-  }, [authLoading, user, configured, router]);
+  }, [authLoading, user, router]);
 
   useEffect(() => {
-    if (configured && !user) return;
+    if (!user) return;
     import("@systems/persistence/WorldStorage").then(async (mod) => {
       const list = await mod.listWorlds();
       setWorlds(list);

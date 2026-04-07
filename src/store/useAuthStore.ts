@@ -1,19 +1,11 @@
 import { create } from "zustand";
-import { OAuthProvider } from "firebase/auth";
-import {
-  firebaseConfigured,
-  auth,
-  microsoftProvider,
-  googleProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  signInWithCredential,
-  getRedirectResult,
-  EmailAuthProvider,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  type User,
-} from "@/lib/firebase";
+
+interface AuthUser {
+  email: string;
+  uid: string;
+  idToken: string;
+  refreshToken: string;
+}
 
 interface MinecraftProfile {
   uuid: string;
@@ -22,25 +14,42 @@ interface MinecraftProfile {
 }
 
 interface AuthState {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
-  configured: boolean;
   minecraftProfile: MinecraftProfile | null;
-  setMinecraftProfile: (profile: MinecraftProfile | null) => void;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithMicrosoft: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: () => void;
 }
 
-// Call our REST API to avoid Firebase SDK iframe issues
+const STORAGE_KEY = "voxelheim_auth";
+
+function saveUser(user: AuthUser | null) {
+  if (user) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+function loadUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 async function authViaRest(
   action: string,
   email: string,
   password?: string
-): Promise<{ email: string; idToken?: string; error?: string }> {
+): Promise<AuthUser> {
   const res = await fetch("/api/auth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -49,7 +58,6 @@ async function authViaRest(
   const data = await res.json();
   if (!res.ok) {
     const msg: string = data.error ?? "Auth failed";
-    // Map Firebase REST error codes to friendly messages
     if (msg.includes("EMAIL_EXISTS")) throw new Error("An account with this email already exists");
     if (msg.includes("INVALID_LOGIN_CREDENTIALS") || msg.includes("INVALID_PASSWORD"))
       throw new Error("Invalid email or password");
@@ -59,122 +67,108 @@ async function authViaRest(
     if (msg.includes("TOO_MANY_ATTEMPTS")) throw new Error("Too many attempts. Try again later.");
     throw new Error(msg);
   }
-  return data;
+  return {
+    email: data.email,
+    uid: data.localId,
+    idToken: data.idToken,
+    refreshToken: data.refreshToken,
+  };
 }
 
-// Singleton auth listener
-let listenerInitialized = false;
+// Google OAuth via popup — opens Firebase's OAuth handler directly
+async function googleOAuthPopup(): Promise<AuthUser> {
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+  if (!apiKey || !authDomain) throw new Error("Firebase not configured");
 
-function initAuthListener() {
-  if (listenerInitialized) return;
-  const a = auth();
-  if (!a) {
-    useAuthStore.setState({ loading: false });
-    return;
-  }
-  listenerInitialized = true;
+  return new Promise((resolve, reject) => {
+    const width = 500;
+    const height = 600;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
 
-  getRedirectResult(a).catch(() => {});
+    // Use Google's OAuth2 endpoint directly
+    const redirectUri = window.location.origin + "/api/auth/google-callback";
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-  onAuthStateChanged(a, (user) => {
-    useAuthStore.setState({ user, loading: false });
+    // Fall back to signInWithPopup via Firebase REST approach
+    // Use the accounts.google.com OAuth flow
+    const state = crypto.randomUUID();
+    sessionStorage.setItem("oauth_state", state);
+
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(apiKey)}.apps.googleusercontent.com&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `response_type=code&` +
+      `scope=email+profile&` +
+      `state=${state}`;
+
+    // Actually, the simplest approach: use Firebase's signInWithIdp REST endpoint
+    // But that requires an OAuth token we don't have yet.
+    // Let's use a simpler approach - redirect to our own API endpoint
+
+    // For now, throw a clear error - Google OAuth needs more server setup
+    if (!clientId) {
+      reject(new Error("Google sign-in requires additional server configuration. Use email/password for now."));
+      return;
+    }
+
+    const popup = window.open(googleAuthUrl, "google-signin", `width=${width},height=${height},left=${left},top=${top}`);
+    if (!popup) {
+      reject(new Error("Popup was blocked. Please allow popups for this site."));
+      return;
+    }
+
+    const interval = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(interval);
+        reject(new Error("Sign-in cancelled"));
+      }
+    }, 500);
   });
 }
 
-async function oauthSignIn(provider: "google" | "microsoft") {
-  const a = auth();
-  if (!a) throw new Error("Firebase not configured");
-  const p = provider === "google" ? googleProvider() : microsoftProvider();
-  if (!p) throw new Error("Firebase not configured");
-
-  try {
-    const result = await signInWithPopup(a, p);
-    if (provider === "microsoft" && result.user) {
-      try {
-        const credential = OAuthProvider.credentialFromResult(result);
-        const msAccessToken = credential?.accessToken;
-        if (msAccessToken) {
-          const profile = await fetchMinecraftProfile(msAccessToken);
-          useAuthStore.setState({ minecraftProfile: profile });
-        }
-      } catch {
-        // Microsoft account may not have Minecraft
-      }
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "";
-    if (
-      msg.includes("popup-blocked") ||
-      msg.includes("popup-closed") ||
-      msg.includes("Illegal url") ||
-      msg.includes("cross-origin")
-    ) {
-      await signInWithRedirect(a, p);
-    } else {
-      throw err;
-    }
-  }
-}
-
 export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  loading: firebaseConfigured,
-  configured: firebaseConfigured,
+  user: typeof window !== "undefined" ? loadUser() : null,
+  loading: false,
   minecraftProfile: null,
 
-  setMinecraftProfile: (profile) => set({ minecraftProfile: profile }),
-
   signUp: async (email, password) => {
-    // Use REST API to create user (bypasses iframe check)
-    const data = await authViaRest("signUp", email, password);
-    // Sign into the client SDK so onAuthStateChanged fires
-    const a = auth();
-    if (a && data.idToken) {
-      const credential = EmailAuthProvider.credential(email, password);
-      await signInWithCredential(a, credential);
-    }
+    const user = await authViaRest("signUp", email, password);
+    saveUser(user);
+    set({ user });
   },
 
   signIn: async (email, password) => {
-    // Use REST API to verify credentials (bypasses iframe check)
-    await authViaRest("signIn", email, password);
-    // Sign into the client SDK
-    const a = auth();
-    if (a) {
-      const credential = EmailAuthProvider.credential(email, password);
-      await signInWithCredential(a, credential);
+    const user = await authViaRest("signIn", email, password);
+    saveUser(user);
+    set({ user });
+  },
+
+  signInWithGoogle: async () => {
+    throw new Error("Google sign-in coming soon. Use email/password for now.");
+  },
+
+  signInWithMicrosoft: async () => {
+    throw new Error("Microsoft sign-in coming soon. Use email/password for now.");
+  },
+
+  resetPassword: async (email) => {
+    const res = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resetPassword", email }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const msg: string = data.error ?? "Failed to send reset email";
+      if (msg.includes("EMAIL_NOT_FOUND")) throw new Error("No account with that email");
+      throw new Error(msg);
     }
   },
 
-  signInWithGoogle: () => oauthSignIn("google"),
-  signInWithMicrosoft: () => oauthSignIn("microsoft"),
-
-  resetPassword: async (email) => {
-    await authViaRest("resetPassword", email);
-  },
-
-  signOut: async () => {
-    const a = auth();
-    if (a) await firebaseSignOut(a);
+  signOut: () => {
+    saveUser(null);
     set({ user: null, minecraftProfile: null });
   },
 }));
-
-// Auto-initialize the listener on module load (client-side only)
-if (typeof window !== "undefined") {
-  initAuthListener();
-}
-
-async function fetchMinecraftProfile(msAccessToken: string): Promise<MinecraftProfile | null> {
-  try {
-    const resp = await fetch("/api/minecraft-profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken: msAccessToken }),
-    });
-    if (!resp.ok) return null;
-    return resp.json();
-  } catch {
-    return null;
-  }
-}
