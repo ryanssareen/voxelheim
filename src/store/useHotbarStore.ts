@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { BLOCK_ID } from "@data/blocks";
 
-const MAX_STACK = 64;
+const MAX_STACK = 99;
 const HOTBAR_SLOTS = 9;
 const INVENTORY_SLOTS = 27;
 const TOTAL_SLOTS = HOTBAR_SLOTS + INVENTORY_SLOTS; // 36
@@ -18,10 +18,13 @@ interface HotbarState {
   slots: ItemStack[];
   /** 4 armor slots: helmet, chestplate, leggings, boots */
   armor: ItemStack[];
+  /** Offhand slot */
+  offhand: ItemStack;
   select: (index: number) => void;
   scrollUp: () => void;
   scrollDown: () => void;
   getSelectedBlockId: () => number;
+  getOffhandBlockId: () => number;
   addItem: (blockId: number) => boolean;
   removeSelectedItem: () => number;
   resetSlots: () => void;
@@ -45,6 +48,7 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
   selectedIndex: 0,
   slots: emptySlots(),
   armor: emptyArmor(),
+  offhand: { blockId: BLOCK_ID.AIR, count: 0 },
 
   select: (index: number) =>
     set({ selectedIndex: Math.max(0, Math.min(HOTBAR_SLOTS - 1, index)) }),
@@ -63,6 +67,11 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
     const { slots, selectedIndex } = get();
     const slot = slots[selectedIndex];
     return slot.count > 0 ? slot.blockId : BLOCK_ID.AIR;
+  },
+
+  getOffhandBlockId: () => {
+    const { offhand } = get();
+    return offhand.count > 0 ? offhand.blockId : BLOCK_ID.AIR;
   },
 
   addItem: (blockId: number) => {
@@ -104,7 +113,7 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
   },
 
   resetSlots: () =>
-    set({ slots: emptySlots(), armor: emptyArmor(), selectedIndex: 0 }),
+    set({ slots: emptySlots(), armor: emptyArmor(), offhand: { blockId: BLOCK_ID.AIR, count: 0 }, selectedIndex: 0 }),
 }));
 
 export { HOTBAR_SLOTS, INVENTORY_SLOTS, TOTAL_SLOTS, ARMOR_SLOTS };

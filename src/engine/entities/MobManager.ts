@@ -5,6 +5,7 @@ import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { ChunkManager } from "@engine/world/ChunkManager";
 import { BLOCK_ID } from "@data/blocks";
 import { SEA_LEVEL } from "@engine/world/constants";
+import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { useHotbarStore } from "@store/useHotbarStore";
 
 const MAX_PASSIVE = 15;
@@ -22,16 +23,22 @@ export class MobManager {
   private readonly mobs: Mob[] = [];
   private spawnTimer = 0;
   private readonly registry = BlockRegistry.getInstance();
+  private itemDrops: ItemDropManager | null = null;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  setItemDrops(drops: ItemDropManager): void {
+    this.itemDrops = drops;
   }
 
   update(
     dt: number,
     chunkManager: ChunkManager,
     playerPos: { x: number; y: number; z: number },
-    timeOfDay: number
+    timeOfDay: number,
+    onDamagePlayer?: (amount: number, fromX: number, fromZ: number) => void
   ): void {
     const getBlock = (x: number, y: number, z: number) => chunkManager.getBlock(x, y, z);
     const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
@@ -65,18 +72,29 @@ export class MobManager {
     for (const mob of this.mobs) {
       mob.update(dt, getBlock, this.registry, playerPos);
 
-      // Zombie melee attack
-      if (mob.type === "zombie" && !mob.dead) {
-        if (mob.distanceTo(playerPos) < 1.5) {
-          // Knockback player (handled via return value or store)
+      // Mob attacks
+      if (!mob.dead && mob.attackCooldown <= 0 && onDamagePlayer) {
+        if (mob.type === "zombie" && mob.distanceTo(playerPos) < 1.5) {
+          onDamagePlayer(3, mob.position.x, mob.position.z);
+          mob.attackCooldown = 1;
+        } else if (mob.type === "skeleton" && mob.distanceTo(playerPos) < 10 && mob.distanceTo(playerPos) > 2) {
+          onDamagePlayer(2, mob.position.x, mob.position.z);
+          mob.attackCooldown = 2;
         }
       }
     }
 
     // Handle creeper explosions
     for (const mob of this.mobs) {
-      if (mob.type === "creeper" && mob.dead && mob.age > 0) {
+      if (mob.type === "creeper" && mob.dead && mob.deathTimer < 0 && mob.age > 0) {
         this.explodeCreeper(mob, chunkManager);
+        if (onDamagePlayer) {
+          const dist = mob.distanceTo(playerPos);
+          if (dist < 4) {
+            const dmg = Math.round(8 * (1 - dist / 4));
+            if (dmg > 0) onDamagePlayer(dmg, mob.position.x, mob.position.z);
+          }
+        }
       }
     }
 
@@ -88,12 +106,21 @@ export class MobManager {
         (mob.position.z - playerPos.z) ** 2
       );
 
-      if (mob.dead || dist > DESPAWN_DISTANCE || mob.position.y < -10) {
+      const shouldRemove = (mob.dead && mob.deathTimer < 0) || dist > DESPAWN_DISTANCE || mob.position.y < -10;
+      if (shouldRemove) {
         if (mob.dead && mob.health <= 0) {
-          // Drop items
           const dropCount = 1 + Math.floor(Math.random() * 2);
           for (let d = 0; d < dropCount; d++) {
-            useHotbarStore.getState().addItem(mob.config.dropId);
+            if (this.itemDrops) {
+              this.itemDrops.spawnDrop(
+                mob.config.dropId,
+                Math.floor(mob.position.x),
+                Math.floor(mob.position.y),
+                Math.floor(mob.position.z)
+              );
+            } else {
+              useHotbarStore.getState().addItem(mob.config.dropId);
+            }
           }
         }
         this.scene.remove(mob.group);

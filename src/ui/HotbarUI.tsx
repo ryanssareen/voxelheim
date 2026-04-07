@@ -14,6 +14,9 @@ const BLOCK_VISUALS: Record<
   [BLOCK_ID.LOG]: { top: "#D7CCC8", side: "#5D4037", name: "Log" },
   [BLOCK_ID.LEAVES]: { top: "#43a047", side: "#2E7D32", name: "Leaves" },
   [BLOCK_ID.CRYSTAL]: { top: "#4dd0e1", side: "#0097a7", name: "Crystal" },
+  [BLOCK_ID.RAW_PORK]: { top: "#f0a0a0", side: "#d08080", name: "Raw Pork" },
+  [BLOCK_ID.RAW_BEEF]: { top: "#c45050", side: "#a03030", name: "Raw Beef" },
+  [BLOCK_ID.RAW_MUTTON]: { top: "#d4836a", side: "#b0654a", name: "Raw Mutton" },
   [BLOCK_ID.AIR]: null,
 };
 
@@ -36,6 +39,7 @@ function BlockIcon({ blockId }: { blockId: number }) {
 export function HotbarUI() {
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const slots = useHotbarStore((s) => s.slots);
+  const offhand = useHotbarStore((s) => s.offhand);
 
   const selectedSlot = slots[selectedIndex];
   const selectedVisual =
@@ -55,9 +59,9 @@ export function HotbarUI() {
         </div>
       )}
 
-      {/* Full-width hotbar */}
+      {/* Full-width hotbar with offhand */}
       <div
-        className="flex w-full"
+        className="flex w-full items-end"
         style={{
           background: "#1a1a1a",
           borderTop: "3px solid #0f0f0f",
@@ -65,6 +69,33 @@ export function HotbarUI() {
           imageRendering: "pixelated",
         }}
       >
+        {/* Offhand slot — left side */}
+        <div
+          className="relative flex items-center justify-center shrink-0"
+          style={{
+            width: 56,
+            height: 56,
+            margin: "4px",
+            background: offhand.count > 0 ? "#7a7aaa" : "#6a6a6a",
+            border: "2px solid #373737",
+            boxShadow: "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
+          }}
+        >
+          {offhand.count > 0 && offhand.blockId !== BLOCK_ID.AIR && (
+            <BlockIcon blockId={offhand.blockId} />
+          )}
+          {offhand.count > 1 && (
+            <span
+              className="absolute bottom-0.5 right-1 text-[12px] font-mono font-bold text-white"
+              style={{ textShadow: "1px 1px 0 #000" }}
+            >
+              {offhand.count}
+            </span>
+          )}
+          {offhand.count === 0 && (
+            <span className="text-[9px] font-mono text-[#888]">Off</span>
+          )}
+        </div>
         {slots.slice(0, HOTBAR_SLOTS).map((slot, i) => {
           const isSelected = i === selectedIndex;
           return (

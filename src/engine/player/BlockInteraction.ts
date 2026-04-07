@@ -1,7 +1,7 @@
 import { ChunkManager } from "@engine/world/ChunkManager";
 import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import { useGameStore } from "@store/useGameStore";
 import { useHotbarStore } from "@store/useHotbarStore";
 
@@ -143,7 +143,8 @@ export class BlockInteraction {
       // Check we have items to place
       const hotbar = useHotbarStore.getState();
       const placeId = hotbar.getSelectedBlockId();
-      if (placeId !== BLOCK_ID.AIR) {
+      const placeDef = BLOCK_DEFINITIONS[placeId];
+      if (placeId !== BLOCK_ID.AIR && placeDef?.solid) {
         const px = target.facePos.x;
         const py = target.facePos.y;
         const pz = target.facePos.z;

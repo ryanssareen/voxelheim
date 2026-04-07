@@ -20,11 +20,13 @@ export interface BlockDefinition {
   /** Texture paths for each face. */
   textures: BlockTextures;
   /** Special behavior tag for gameplay systems. */
-  special: "none" | "crystal_shard";
+  special: "none" | "crystal_shard" | "food";
   /** Seconds to break this block. 0 = instant / unbreakable. */
   breakTime: number;
   /** Block ID dropped when broken. */
   dropId: number;
+  /** Hunger points restored when eaten (food items only). */
+  hungerRestore?: number;
 }
 
 /** Canonical block type IDs. */
@@ -37,6 +39,9 @@ export const BLOCK_ID = {
   LOG: 5,
   LEAVES: 6,
   CRYSTAL: 7,
+  RAW_PORK: 8,
+  RAW_BEEF: 9,
+  RAW_MUTTON: 10,
 } as const;
 
 /** All block definitions indexed by their ID. */
@@ -96,5 +101,29 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: true, transparent: true, breakable: true,
     textures: { top: "crystal_shard", bottom: "crystal_shard", side: "crystal_shard" },
     special: "crystal_shard", breakTime: 3.0, dropId: BLOCK_ID.CRYSTAL,
+  },
+  {
+    id: BLOCK_ID.RAW_PORK,
+    name: "Raw Pork",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "food", breakTime: 0, dropId: BLOCK_ID.RAW_PORK,
+    hungerRestore: 3,
+  },
+  {
+    id: BLOCK_ID.RAW_BEEF,
+    name: "Raw Beef",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "food", breakTime: 0, dropId: BLOCK_ID.RAW_BEEF,
+    hungerRestore: 3,
+  },
+  {
+    id: BLOCK_ID.RAW_MUTTON,
+    name: "Raw Mutton",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "food", breakTime: 0, dropId: BLOCK_ID.RAW_MUTTON,
+    hungerRestore: 2,
   },
 ];

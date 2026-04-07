@@ -17,9 +17,9 @@ interface MobConfig {
 }
 
 const MOB_CONFIGS: Record<MobType, MobConfig> = {
-  pig:      { health: 5,  speed: 1.5, halfWidth: 0.25, height: 0.6,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.DIRT },
-  cow:      { health: 5,  speed: 1.5, halfWidth: 0.3,  height: 0.7,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.DIRT },
-  sheep:    { health: 5,  speed: 1.5, halfWidth: 0.25, height: 0.65, hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.LEAVES },
+  pig:      { health: 5,  speed: 1.5, halfWidth: 0.25, height: 0.6,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_PORK },
+  cow:      { health: 5,  speed: 1.5, halfWidth: 0.3,  height: 0.7,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_BEEF },
+  sheep:    { health: 5,  speed: 1.5, halfWidth: 0.25, height: 0.65, hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_MUTTON },
   zombie:   { health: 10, speed: 2.5, halfWidth: 0.25, height: 1.6,  hostile: true,  detectRange: 16, attackRange: 1.5, dropId: BLOCK_ID.DIRT },
   skeleton: { health: 10, speed: 2.0, halfWidth: 0.2,  height: 1.6,  hostile: true,  detectRange: 16, attackRange: 10,  dropId: BLOCK_ID.STONE },
   creeper:  { health: 10, speed: 2.0, halfWidth: 0.2,  height: 1.2,  hostile: true,  detectRange: 16, attackRange: 2,   dropId: BLOCK_ID.SAND },
@@ -46,6 +46,12 @@ export class Mob {
   private exploding = false;
   private explodeTimer = 0;
   private originalColors: Map<THREE.Mesh, number> = new Map();
+  public attackCooldown = 0;
+  public deathTimer = -1;
+  private healthBarSprite: THREE.Sprite | null = null;
+  private healthBarCanvas: HTMLCanvasElement | null = null;
+  private healthBarVisible = false;
+  private healthBarFadeTimer = 0;
 
   constructor(type: MobType, x: number, y: number, z: number) {
     this.type = type;
@@ -75,6 +81,16 @@ export class Mob {
     playerPos: { x: number; y: number; z: number }
   ): void {
     this.age += dt;
+    if (this.attackCooldown > 0) this.attackCooldown -= dt;
+
+    // Death animation
+    if (this.deathTimer >= 0) {
+      this.deathTimer -= dt;
+      const tilt = Math.min(1, (0.5 - this.deathTimer) / 0.5) * (Math.PI / 2);
+      this.model.group.rotation.z = tilt;
+      this.model.group.position.y = this.position.y - tilt * 0.3;
+      return;
+    }
     if (this.dead) return;
 
     // AI
@@ -108,6 +124,44 @@ export class Mob {
     } else {
       this.walkTime = 0;
       for (const leg of this.model.legs) leg.rotation.x = 0;
+
+      // Idle breathing: subtle body bob when standing still
+      const breathe = Math.sin(this.age * 2) * 0.01;
+      this.model.body.position.y += breathe;
+    }
+
+    // Head tracking: look toward player when nearby
+    if (this.model.head) {
+      const dx = playerPos.x - this.position.x;
+      const dz = playerPos.z - this.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const trackRange = this.config.hostile ? this.config.detectRange : 8;
+      if (dist < trackRange && dist > 0.5) {
+        const targetYaw = Math.atan2(-dx, -dz) - this.yaw;
+        let headYaw = targetYaw;
+        while (headYaw > Math.PI) headYaw -= Math.PI * 2;
+        while (headYaw < -Math.PI) headYaw += Math.PI * 2;
+        headYaw = Math.max(-1.05, Math.min(1.05, headYaw));
+        this.model.head.rotation.y = headYaw;
+
+        const dy = (playerPos.y + 1) - (this.position.y + this.config.height);
+        const pitch = Math.atan2(dy, dist);
+        this.model.head.rotation.x = Math.max(-0.5, Math.min(0.5, pitch));
+      } else {
+        this.model.head.rotation.y = 0;
+        this.model.head.rotation.x = 0;
+      }
+    }
+
+    // Health bar fade
+    if (this.healthBarFadeTimer > 0) {
+      this.healthBarFadeTimer -= dt;
+      if (!this.healthBarVisible && this.health < this.config.health) {
+        this.showHealthBar();
+      }
+      if (this.healthBarFadeTimer <= 0) {
+        this.hideHealthBar();
+      }
     }
 
     // Hurt flash
@@ -238,14 +292,28 @@ export class Mob {
     }
   }
 
-  takeDamage(amount: number): void {
+  takeDamage(amount: number, attackerPos?: { x: number; z: number }): void {
     this.health -= amount;
     this.hurtFlashTimer = 0.3;
+    this.healthBarFadeTimer = 3;
+    this.updateHealthBar();
     if (!this.config.hostile) {
       this.fleeTimer = 3;
     }
+    if (attackerPos) {
+      const dx = this.position.x - attackerPos.x;
+      const dz = this.position.z - attackerPos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > 0.01) {
+        this.velocity.x += (dx / dist) * 3;
+        this.velocity.z += (dz / dist) * 3;
+        this.velocity.y = 2;
+        this.onGround = false;
+      }
+    }
     if (this.health <= 0) {
       this.dead = true;
+      this.deathTimer = 0.5;
     }
   }
 
@@ -303,6 +371,58 @@ export class Mob {
     }
 
     if (axis === "y" && delta <= 0) this.onGround = false;
+  }
+
+  private createHealthBar(): void {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 8;
+    this.healthBarCanvas = canvas;
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+
+    const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(0.8, 0.1, 1);
+    sprite.position.set(0, this.config.height + 0.15, 0);
+    this.healthBarSprite = sprite;
+    this.model.group.add(sprite);
+    this.updateHealthBar();
+  }
+
+  private updateHealthBar(): void {
+    if (!this.healthBarCanvas) return;
+    const ctx = this.healthBarCanvas.getContext("2d")!;
+    const w = this.healthBarCanvas.width;
+    const h = this.healthBarCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Background
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, 0, w, h);
+
+    // Health fill
+    const pct = Math.max(0, this.health / this.config.health);
+    const fillW = Math.round(pct * (w - 2));
+    ctx.fillStyle = pct > 0.5 ? "#4caf50" : pct > 0.25 ? "#ffeb3b" : "#f44336";
+    ctx.fillRect(1, 1, fillW, h - 2);
+
+    if (this.healthBarSprite) {
+      (this.healthBarSprite.material as THREE.SpriteMaterial).map!.needsUpdate = true;
+    }
+  }
+
+  private showHealthBar(): void {
+    if (!this.healthBarSprite) this.createHealthBar();
+    if (this.healthBarSprite) this.healthBarSprite.visible = true;
+    this.healthBarVisible = true;
+  }
+
+  private hideHealthBar(): void {
+    if (this.healthBarSprite) this.healthBarSprite.visible = false;
+    this.healthBarVisible = false;
   }
 
   dispose(): void {

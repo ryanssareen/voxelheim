@@ -5,6 +5,7 @@ import { Camera } from "@engine/player/Camera";
 import { PlayerController } from "@engine/player/PlayerController";
 import { PlayerModel } from "@engine/player/PlayerModel";
 import { HandRenderer } from "@engine/player/HandRenderer";
+import { OffhandRenderer } from "@engine/player/OffhandRenderer";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
@@ -22,6 +23,7 @@ import {
   loadWorldChunks,
   type WorldMeta,
 } from "@systems/persistence/WorldStorage";
+import { BLOCK_DEFINITIONS } from "@data/blocks";
 
 const MOUSE_SENSITIVITY = 0.002;
 const SPAWN = { x: 32, y: 50, z: 32 };
@@ -39,6 +41,7 @@ export class Engine {
   private player: PlayerController | null = null;
   private playerModel: PlayerModel | null = null;
   private handRenderer: HandRenderer | null = null;
+  private offhandRenderer: OffhandRenderer | null = null;
   private blockInteraction: BlockInteraction | null = null;
   private breakOverlay: BlockBreakOverlay | null = null;
   private itemDrops: ItemDropManager | null = null;
@@ -54,6 +57,11 @@ export class Engine {
   private seed = "voxelheim-mvp";
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private playerAttackCooldown = 0;
+  private qWasDown = false;
+  private hungerAccumulator = 0;
+  private passiveHungerTimer = 0;
+  private regenTimer = 0;
+  private starvationTimer = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -112,6 +120,7 @@ export class Engine {
     }
 
     this.itemDrops = new ItemDropManager(this.renderer.getScene());
+    this.itemDrops.setGetBlock((x, y, z) => this.chunkManager!.getBlock(x, y, z));
     this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry, this.itemDrops);
 
     // Player model (3rd person)
@@ -120,6 +129,7 @@ export class Engine {
 
     // Hand (1st person)
     this.handRenderer = new HandRenderer(this.renderer.getCamera());
+    this.offhandRenderer = new OffhandRenderer(this.renderer.getCamera());
 
     // Break overlay
     this.breakOverlay = new BlockBreakOverlay();
@@ -130,6 +140,7 @@ export class Engine {
 
     // Mob manager
     this.mobManager = new MobManager(this.renderer.getScene());
+    this.mobManager.setItemDrops(this.itemDrops);
 
     // Get light references from scene for day/night updates
     this.renderer.getScene().traverse((obj: any) => {
@@ -139,13 +150,17 @@ export class Engine {
 
     // Restore state
     if (savedMeta) {
-      useGameStore.setState({ shardsCollected: savedMeta.shardsCollected });
-      // Restore hotbar
+      useGameStore.setState({
+        shardsCollected: savedMeta.shardsCollected,
+        health: savedMeta.health ?? 20,
+        hunger: savedMeta.hunger ?? 20,
+      });
       if (savedMeta.hotbarSlots) {
         useHotbarStore.setState({ slots: savedMeta.hotbarSlots });
       }
     } else {
       useGameStore.getState().resetObjective();
+      useGameStore.setState({ health: 20, hunger: 20 });
       useHotbarStore.getState().resetSlots();
     }
 
@@ -173,6 +188,8 @@ export class Engine {
       playerPitch: this.camera.pitch,
       shardsCollected: useGameStore.getState().shardsCollected,
       hotbarSlots: useHotbarStore.getState().slots,
+      health: useGameStore.getState().health,
+      hunger: useGameStore.getState().hunger,
     };
 
     await saveWorld(meta, this.chunkManager.getModifiedChunks());
@@ -208,7 +225,11 @@ export class Engine {
             this.player.velocity = { x: 0, y: 0, z: 0 };
             this.player.onGround = false;
             useHotbarStore.getState().resetSlots();
-            useGameStore.getState().setDead(false);
+            useGameStore.getState().respawnPlayer();
+            this.hungerAccumulator = 0;
+            this.passiveHungerTimer = 0;
+            this.regenTimer = 0;
+            this.starvationTimer = 0;
             return;
           }
         }
@@ -219,7 +240,11 @@ export class Engine {
     this.player.velocity = { x: 0, y: 0, z: 0 };
     this.player.onGround = false;
     useHotbarStore.getState().resetSlots();
-    useGameStore.getState().setDead(false);
+    useGameStore.getState().respawnPlayer();
+    this.hungerAccumulator = 0;
+    this.passiveHungerTimer = 0;
+    this.regenTimer = 0;
+    this.starvationTimer = 0;
   }
 
   private gameLoop = (): void => {
@@ -273,6 +298,23 @@ export class Engine {
       }
     }
 
+    // Q key: drop held item
+    const qDown = this.input.isKeyDown("KeyQ");
+    if (qDown && !this.qWasDown) {
+      const hotbar = useHotbarStore.getState();
+      const droppedId = hotbar.removeSelectedItem();
+      if (droppedId !== 0) {
+        const fwd = this.camera.getLookDirection();
+        this.itemDrops!.spawnDrop(
+          droppedId,
+          Math.floor(this.player!.position.x + fwd.x),
+          Math.floor(this.player!.position.y + 1),
+          Math.floor(this.player!.position.z + fwd.z)
+        );
+      }
+    }
+    this.qWasDown = qDown;
+
     // Camera rotation
     if (this.input.isPointerLocked()) {
       const { dx, dy } = this.input.getMouseDelta();
@@ -292,8 +334,8 @@ export class Engine {
 
     // Void death
     if (this.player!.position.y < VOID_Y) {
+      useGameStore.getState().setHealth(0);
       useGameStore.getState().setDead(true);
-      // Exit pointer lock so user can click death screen buttons
       if (document.pointerLockElement) {
         document.exitPointerLock();
       }
@@ -337,7 +379,7 @@ export class Engine {
     }
 
     if (hitMob && isLeftHeld && this.playerAttackCooldown <= 0) {
-      hitMob.takeDamage(1);
+      hitMob.takeDamage(1, { x: this.player!.position.x, z: this.player!.position.z });
       this.playerAttackCooldown = 0.4;
     }
 
@@ -350,6 +392,21 @@ export class Engine {
       selectedBlockId,
       dt
     );
+
+    // Eating: right-click with food in hand when not aiming at a block
+    if (rightClick && selectedBlockId !== 0) {
+      const blockDef = BLOCK_DEFINITIONS[selectedBlockId];
+      if (blockDef?.special === "food" && blockDef.hungerRestore) {
+        const target = this.blockInteraction!.getTargetBlock(this.player!.position, lookDir);
+        if (!target.hit) {
+          const gs2 = useGameStore.getState();
+          if (gs2.hunger < gs2.maxHunger) {
+            gs2.setHunger(gs2.hunger + blockDef.hungerRestore);
+            useHotbarStore.getState().removeSelectedItem();
+          }
+        }
+      }
+    }
 
     // Update day/night cycle
     this.dayNight!.update(dt);
@@ -368,8 +425,70 @@ export class Engine {
       dt,
       this.chunkManager!,
       this.player!.position,
-      this.dayNight!.timeOfDay
+      this.dayNight!.timeOfDay,
+      (amount, fromX, fromZ) => {
+        useGameStore.getState().damagePlayer(amount);
+        this.player!.applyKnockback(fromX, fromZ, 6);
+        // Hunger drain on damage
+        const s = useGameStore.getState();
+        useGameStore.getState().setHunger(s.hunger - 1);
+      }
     );
+
+    // Hunger mechanics
+    const gs = useGameStore.getState();
+    // Passive hunger drain: -1 every 60 seconds
+    this.passiveHungerTimer += dt;
+    if (this.passiveHungerTimer >= 60) {
+      this.passiveHungerTimer -= 60;
+      gs.setHunger(gs.hunger - 1);
+    }
+    // Movement hunger drain
+    const isPlayerMoving = this.player!.velocity.x !== 0 || this.player!.velocity.z !== 0;
+    if (isPlayerMoving) {
+      const drainRate = this.player!.isSprinting ? 0.5 : 0.1;
+      this.hungerAccumulator += drainRate * dt;
+      if (this.hungerAccumulator >= 1) {
+        const drain = Math.floor(this.hungerAccumulator);
+        this.hungerAccumulator -= drain;
+        useGameStore.getState().setHunger(useGameStore.getState().hunger - drain);
+      }
+    }
+    // Hunger effects
+    const currentHunger = useGameStore.getState().hunger;
+    const currentHealth = useGameStore.getState().health;
+    // Sprint block when hunger <= 6
+    if (currentHunger <= 6) {
+      this.player!.isSprinting = false;
+    }
+    // Regen when hunger > 16
+    if (currentHunger > 16 && currentHealth < gs.maxHealth) {
+      this.regenTimer += dt;
+      if (this.regenTimer >= 4) {
+        this.regenTimer -= 4;
+        useGameStore.getState().setHealth(useGameStore.getState().health + 1);
+      }
+    } else {
+      this.regenTimer = 0;
+    }
+    // Starvation when hunger <= 0
+    if (currentHunger <= 0) {
+      this.starvationTimer += dt;
+      if (this.starvationTimer >= 4) {
+        this.starvationTimer -= 4;
+        useGameStore.getState().damagePlayer(1);
+      }
+    } else {
+      this.starvationTimer = 0;
+    }
+
+    // Check for health death
+    if (useGameStore.getState().isDead && !state.isDead) {
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+      return;
+    }
 
     // Update item drops (floating pickups)
     this.itemDrops!.update(dt, this.player!.position);
@@ -393,6 +512,17 @@ export class Engine {
     this.handRenderer!.setHeldBlock(selectedBlockId);
     this.handRenderer!.update(dt, handState);
     this.handRenderer!.setVisible(this.camera.mode === "first-person");
+
+    // Offhand (left hand)
+    const offhandBlockId = useHotbarStore.getState().getOffhandBlockId();
+    this.offhandRenderer!.setHeldBlock(offhandBlockId);
+    const isWalking = this.player!.velocity.x !== 0 || this.player!.velocity.z !== 0;
+    this.offhandRenderer!.update(dt, isWalking);
+    if (offhandBlockId === 0) {
+      this.offhandRenderer!.setVisible(false);
+    } else {
+      this.offhandRenderer!.setVisible(this.camera.mode === "first-person");
+    }
 
     // Player model (3rd person)
     const isMoving =
@@ -424,6 +554,7 @@ export class Engine {
     await this.save();
     this.input.dispose();
     this.handRenderer?.dispose();
+    this.offhandRenderer?.dispose();
     this.breakOverlay?.dispose();
     this.itemDrops?.dispose();
     this.mobManager?.dispose();

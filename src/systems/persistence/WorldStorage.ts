@@ -11,6 +11,8 @@ export interface WorldMeta {
   playerPitch: number;
   shardsCollected: number;
   hotbarSlots: Array<{ blockId: number; count: number }>;
+  health?: number;
+  hunger?: number;
 }
 
 interface ChunkRecord {

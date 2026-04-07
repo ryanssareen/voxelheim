@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { useHotbarStore } from "@store/useHotbarStore";
+import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { BLOCK_ID } from "@data/blocks";
 
 /** Block colors for item drop rendering. */
@@ -11,6 +12,9 @@ const DROP_COLORS: Record<number, number> = {
   [BLOCK_ID.LOG]: 0x5d4037,
   [BLOCK_ID.LEAVES]: 0x2e7d32,
   [BLOCK_ID.CRYSTAL]: 0x00e5ff,
+  [BLOCK_ID.RAW_PORK]: 0xf0a0a0,
+  [BLOCK_ID.RAW_BEEF]: 0xc45050,
+  [BLOCK_ID.RAW_MUTTON]: 0xd4836a,
 };
 
 interface ItemDrop {
@@ -20,13 +24,16 @@ interface ItemDrop {
   velocity: THREE.Vector3;
   age: number;
   bobOffset: number;
+  settled: boolean;
 }
 
 const PICKUP_DISTANCE = 1.8;
-const DROP_LIFETIME = 60; // seconds before despawn
+const DROP_LIFETIME = 60;
 const BOB_SPEED = 3;
 const BOB_HEIGHT = 0.15;
 const SPIN_SPEED = 2;
+const DROP_GRAVITY = 18;
+const DROP_FRICTION = 0.9;
 
 /**
  * Manages floating item drops in the world.
@@ -35,9 +42,15 @@ const SPIN_SPEED = 2;
 export class ItemDropManager {
   private readonly scene: THREE.Scene;
   private readonly drops: ItemDrop[] = [];
+  private readonly registry = BlockRegistry.getInstance();
+  private getBlock: ((x: number, y: number, z: number) => number) | null = null;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+  }
+
+  setGetBlock(fn: (x: number, y: number, z: number) => number): void {
+    this.getBlock = fn;
   }
 
   /** Spawn a floating item at a block position. */
@@ -71,6 +84,7 @@ export class ItemDropManager {
       velocity: vel,
       age: 0,
       bobOffset: Math.random() * Math.PI * 2,
+      settled: false,
     });
   }
 
@@ -89,16 +103,44 @@ export class ItemDropManager {
         continue;
       }
 
-      // Physics (first 0.5 seconds: pop out, then settle)
-      if (drop.age < 0.5) {
-        drop.velocity.y -= 15 * dt;
-        drop.position.add(drop.velocity.clone().multiplyScalar(dt));
+      // Physics: gravity + collision until settled
+      if (!drop.settled) {
+        drop.velocity.y -= DROP_GRAVITY * dt;
+        drop.position.x += drop.velocity.x * dt;
+        drop.position.y += drop.velocity.y * dt;
+        drop.position.z += drop.velocity.z * dt;
+
+        // Ground collision
+        if (this.getBlock) {
+          const bx = Math.floor(drop.position.x);
+          const by = Math.floor(drop.position.y);
+          const bz = Math.floor(drop.position.z);
+          if (by >= 0 && this.registry.isSolid(this.getBlock(bx, by, bz))) {
+            drop.position.y = by + 1;
+            drop.velocity.y = -drop.velocity.y * 0.3;
+            drop.velocity.x *= DROP_FRICTION;
+            drop.velocity.z *= DROP_FRICTION;
+            if (Math.abs(drop.velocity.y) < 0.5) {
+              drop.velocity.set(0, 0, 0);
+              drop.settled = true;
+            }
+          }
+        } else if (drop.age > 0.5) {
+          drop.velocity.set(0, 0, 0);
+          drop.settled = true;
+        }
+
+        // Clamp to not fall through world
+        if (drop.position.y < -5) {
+          this.removeDrop(i);
+          continue;
+        }
       }
 
       // Bob and spin
-      const bobY =
-        drop.position.y +
-        Math.sin(drop.age * BOB_SPEED + drop.bobOffset) * BOB_HEIGHT * 0.5;
+      const baseY = drop.settled ? drop.position.y + 0.15 : drop.position.y;
+      const bobY = baseY +
+        (drop.settled ? Math.sin(drop.age * BOB_SPEED + drop.bobOffset) * BOB_HEIGHT : 0);
       drop.mesh.position.set(drop.position.x, bobY, drop.position.z);
       drop.mesh.rotation.y = drop.age * SPIN_SPEED;
 

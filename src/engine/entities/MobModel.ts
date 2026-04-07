@@ -226,14 +226,32 @@ function createCreeper(): MobModelData {
   return { group, legs, head, body };
 }
 
+function addShadow(group: THREE.Group, radius: number): void {
+  const geo = new THREE.CircleGeometry(radius, 16);
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.25,
+    depthWrite: false,
+  });
+  const shadow = new THREE.Mesh(geo, shadowMat);
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.01;
+  group.add(shadow);
+}
+
 /** Create a blocky 3D model for the given mob type. */
 export function createMobModel(type: MobType): MobModelData {
+  let result: MobModelData;
   switch (type) {
-    case "pig": return createPig();
-    case "cow": return createCow();
-    case "sheep": return createSheep();
-    case "zombie": return createZombie();
-    case "skeleton": return createSkeleton();
-    case "creeper": return createCreeper();
+    case "pig": result = createPig(); break;
+    case "cow": result = createCow(); break;
+    case "sheep": result = createSheep(); break;
+    case "zombie": result = createZombie(); break;
+    case "skeleton": result = createSkeleton(); break;
+    case "creeper": result = createCreeper(); break;
   }
+  const shadowRadius = type === "cow" ? 0.4 : type === "sheep" ? 0.35 : 0.3;
+  addShadow(result.group, shadowRadius);
+  return result;
 }

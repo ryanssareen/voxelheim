@@ -1,4 +1,15 @@
 import * as THREE from "three";
+import { useHotbarStore, type ItemStack } from "@store/useHotbarStore";
+import { BLOCK_ID } from "@data/blocks";
+
+const ARMOR_COLORS: Record<number, number> = {
+  [BLOCK_ID.STONE]: 0x999999,
+  [BLOCK_ID.DIRT]: 0x8b6914,
+  [BLOCK_ID.LOG]: 0x5d4037,
+  [BLOCK_ID.SAND]: 0xfdd835,
+  [BLOCK_ID.CRYSTAL]: 0x00ccdd,
+  [BLOCK_ID.LEAVES]: 0x2e7d32,
+};
 
 /**
  * Simple blocky player model (Steve-style) made from box geometries.
@@ -14,7 +25,15 @@ export class PlayerModel {
   private leftLeg: THREE.Mesh;
   private rightLeg: THREE.Mesh;
 
+  private helmetMesh: THREE.Mesh;
+  private chestplateMesh: THREE.Mesh;
+  private leggingsLeft: THREE.Mesh;
+  private leggingsRight: THREE.Mesh;
+  private bootsLeft: THREE.Mesh;
+  private bootsRight: THREE.Mesh;
+
   private walkTime = 0;
+  private lastArmorHash = "";
 
   constructor() {
     this.group = new THREE.Group();
@@ -78,7 +97,36 @@ export class PlayerModel {
     rightShoe.position.set(0, -0.3, -0.02);
     this.rightLeg.add(rightShoe);
 
+    // Armor overlay meshes (slightly larger, hidden by default)
+    const armorMat = new THREE.MeshLambertMaterial({ color: 0x999999, transparent: true, opacity: 0.85 });
+
+    this.helmetMesh = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.56), armorMat.clone());
+    this.helmetMesh.position.set(0, 1.55, 0);
+    this.helmetMesh.visible = false;
+
+    this.chestplateMesh = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.8, 0.36), armorMat.clone());
+    this.chestplateMesh.position.set(0, 0.95, 0);
+    this.chestplateMesh.visible = false;
+
+    this.leggingsLeft = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.72, 0.27), armorMat.clone());
+    this.leggingsLeft.visible = false;
+    this.leggingsRight = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.72, 0.27), armorMat.clone());
+    this.leggingsRight.visible = false;
+
+    this.bootsLeft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.15, 0.32), armorMat.clone());
+    this.bootsLeft.visible = false;
+    this.bootsRight = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.15, 0.32), armorMat.clone());
+    this.bootsRight.visible = false;
+
+    this.leftLeg.add(this.leggingsLeft);
+    this.rightLeg.add(this.leggingsRight);
+    this.leftLeg.add(this.bootsLeft);
+    this.bootsLeft.position.set(0, -0.28, -0.02);
+    this.rightLeg.add(this.bootsRight);
+    this.bootsRight.position.set(0, -0.28, -0.02);
+
     this.group.add(this.head, this.body, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg);
+    this.group.add(this.helmetMesh, this.chestplateMesh);
   }
 
   /** Update position, rotation, and walk animation. */
@@ -108,6 +156,18 @@ export class PlayerModel {
       this.rightLeg.rotation.x = 0;
     }
 
+    // Sync armor visuals from store
+    const armorSlots = useHotbarStore.getState().armor;
+    const armorHash = armorSlots.map(s => `${s.blockId}:${s.count}`).join(",");
+    if (armorHash !== this.lastArmorHash) {
+      this.lastArmorHash = armorHash;
+      this.updateArmor(armorSlots);
+    }
+
+    // Armor follows body positions
+    this.helmetMesh.position.copy(this.head.position);
+    this.chestplateMesh.position.copy(this.body.position);
+
     // Crouch: lower body slightly
     if (isCrouching) {
       this.body.position.y = 0.8;
@@ -120,6 +180,25 @@ export class PlayerModel {
       this.leftArm.position.y = 0.95;
       this.rightArm.position.y = 0.95;
     }
+  }
+
+  private updateArmor(armorSlots: ItemStack[]): void {
+    const setSlot = (mesh: THREE.Mesh, slot: ItemStack) => {
+      if (slot.count > 0 && slot.blockId !== BLOCK_ID.AIR) {
+        mesh.visible = true;
+        const color = ARMOR_COLORS[slot.blockId] ?? 0x888888;
+        (mesh.material as THREE.MeshLambertMaterial).color.setHex(color);
+      } else {
+        mesh.visible = false;
+      }
+    };
+    // 0=helmet, 1=chestplate, 2=leggings, 3=boots
+    setSlot(this.helmetMesh, armorSlots[0]);
+    setSlot(this.chestplateMesh, armorSlots[1]);
+    setSlot(this.leggingsLeft, armorSlots[2]);
+    setSlot(this.leggingsRight, armorSlots[2]);
+    setSlot(this.bootsLeft, armorSlots[3]);
+    setSlot(this.bootsRight, armorSlots[3]);
   }
 
   /** Show or hide the model (hide in 1st person). */

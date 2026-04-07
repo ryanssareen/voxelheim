@@ -3,14 +3,14 @@
   "configurations": [
     {
       "name": "next-dev",
-      "runtimeExecutable": "/usr/local/bin/node",
-      "runtimeArgs": ["node_modules/.bin/next", "dev"],
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH && exec /opt/homebrew/bin/node node_modules/.bin/next dev --webpack"],
       "port": 3000
     },
     {
       "name": "next-prod",
-      "runtimeExecutable": "/usr/local/bin/node",
-      "runtimeArgs": ["node_modules/.bin/next", "start"],
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export PATH=/opt/homebrew/bin:$PATH && exec node node_modules/.bin/next start"],
       "port": 3000
     }
   ]

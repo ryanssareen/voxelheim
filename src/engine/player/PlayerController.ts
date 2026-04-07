@@ -32,6 +32,18 @@ export class PlayerController {
     return this.isCrouching ? CROUCH_HEIGHT : STAND_HEIGHT;
   }
 
+  applyKnockback(fromX: number, fromZ: number, force: number): void {
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist > 0.01) {
+      this.velocity.x = (dx / dist) * force;
+      this.velocity.z = (dz / dist) * force;
+    }
+    this.velocity.y = force * 0.4;
+    this.onGround = false;
+  }
+
   update(
     dt: number,
     input: InputManager,
