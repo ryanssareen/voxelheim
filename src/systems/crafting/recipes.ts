@@ -35,19 +35,26 @@ export const RECIPES: CraftingRecipe[] = [
     count: 4,
     name: "Sand",
   },
-  // 2 log (top row) → 4 leaves (planks equivalent)
+  // 1 log → 4 planks
   {
-    grid: [BLOCK_ID.LOG, BLOCK_ID.LOG, 0, 0],
+    grid: [BLOCK_ID.LOG, 0, 0, 0],
+    result: BLOCK_ID.PLANKS,
+    count: 4,
+    name: "Planks",
+  },
+  // 4 planks → 1 crafting table
+  {
+    grid: [BLOCK_ID.PLANKS, BLOCK_ID.PLANKS, BLOCK_ID.PLANKS, BLOCK_ID.PLANKS],
+    result: BLOCK_ID.CRAFTING_TABLE,
+    count: 1,
+    name: "Crafting Table",
+  },
+  // 2 planks → 4 sticks (placeholder — gives leaves for now)
+  {
+    grid: [BLOCK_ID.PLANKS, 0, BLOCK_ID.PLANKS, 0],
     result: BLOCK_ID.LEAVES,
     count: 4,
     name: "Leaves",
-  },
-  // 1 log → 4 dirt (stripping)
-  {
-    grid: [BLOCK_ID.LOG, 0, 0, 0],
-    result: BLOCK_ID.DIRT,
-    count: 4,
-    name: "Dirt",
   },
   // 2 sand + 2 stone → 2 crystal (rare synthesis)
   {

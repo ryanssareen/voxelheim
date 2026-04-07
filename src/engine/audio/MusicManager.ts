@@ -1,20 +1,49 @@
-const PENTATONIC = [261.63, 293.66, 329.63, 392, 440, 523.25];
+const AMBIENT_CHORDS = [
+  [261.63, 329.63, 392],    // C major
+  [220, 261.63, 329.63],    // A minor
+  [246.94, 311.13, 369.99], // B diminished-ish → dreamy
+  [196, 246.94, 293.66],    // G major low
+  [174.61, 220, 261.63],    // F major low
+  [261.63, 311.13, 392],    // C minor-ish
+];
 
 export class MusicManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private reverbNode: ConvolverNode | null = null;
   private playing = false;
   private enabled = true;
   private volume = 0.5;
   private timeoutId: ReturnType<typeof setTimeout> | null = null;
-  private activeNodes: { osc: OscillatorNode; gain: GainNode }[] = [];
+  private activeNodes: OscillatorNode[] = [];
+  private chordIndex = 0;
 
   init(): void {
     if (this.ctx) return;
     this.ctx = new AudioContext();
     this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.value = this.volume * 0.3;
+    this.masterGain.gain.value = this.volume * 0.15;
+
+    this.reverbNode = this.createReverb();
+    this.reverbNode.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
+  }
+
+  private createReverb(): ConvolverNode {
+    const ctx = this.ctx!;
+    const conv = ctx.createConvolver();
+    const rate = ctx.sampleRate;
+    const length = rate * 3;
+    const impulse = ctx.createBuffer(2, length, rate);
+
+    for (let ch = 0; ch < 2; ch++) {
+      const data = impulse.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
+      }
+    }
+    conv.buffer = impulse;
+    return conv;
   }
 
   setEnabled(enabled: boolean): void {
@@ -30,7 +59,7 @@ export class MusicManager {
     this.volume = Math.max(0, Math.min(1, volume / 100));
     if (this.masterGain) {
       this.masterGain.gain.setTargetAtTime(
-        this.volume * 0.3,
+        this.volume * 0.15,
         this.ctx!.currentTime,
         0.1
       );
@@ -44,7 +73,7 @@ export class MusicManager {
       this.ctx!.resume();
     }
     this.playing = true;
-    this.scheduleNextPhrase(1);
+    this.scheduleNext(2);
   }
 
   stop(): void {
@@ -53,86 +82,112 @@ export class MusicManager {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
-    for (const node of this.activeNodes) {
-      try {
-        node.osc.stop();
-      } catch {}
+    for (const osc of this.activeNodes) {
+      try { osc.stop(); } catch {}
     }
     this.activeNodes = [];
   }
 
-  private scheduleNextPhrase(delaySeconds: number): void {
+  private scheduleNext(delaySec: number): void {
     if (!this.playing) return;
     this.timeoutId = setTimeout(() => {
-      if (this.playing) this.playAmbientPhrase();
-    }, delaySeconds * 1000);
+      if (this.playing) this.playPad();
+    }, delaySec * 1000);
   }
 
-  private playNote(
-    frequency: number,
-    duration: number,
-    delay: number,
-    type: OscillatorType
-  ): void {
-    if (!this.ctx || !this.masterGain) return;
+  private playPad(): void {
+    if (!this.playing || !this.ctx || !this.masterGain || !this.reverbNode) return;
 
-    const now = this.ctx.currentTime + delay;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+    const chord = AMBIENT_CHORDS[this.chordIndex % AMBIENT_CHORDS.length];
+    this.chordIndex++;
 
-    osc.type = type;
-    osc.frequency.value = frequency;
+    const now = this.ctx.currentTime;
+    const padDuration = 6 + Math.random() * 4;
+    const attackTime = 2 + Math.random();
+    const releaseTime = 2 + Math.random();
 
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.15, now + 0.1);
-    gain.gain.setValueAtTime(0.15, now + duration - 0.3);
-    gain.gain.linearRampToValueAtTime(0, now + duration);
+    for (const freq of chord) {
+      const detune = (Math.random() - 0.5) * 6;
 
-    osc.connect(gain);
-    gain.connect(this.masterGain);
+      const osc = this.ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.detune.value = detune;
 
-    const reverbGain = this.ctx.createGain();
-    const reverbDelay = this.ctx.createDelay();
-    reverbDelay.delayTime.value = 0.15;
-    reverbGain.gain.value = 0.06;
+      const noteGain = this.ctx.createGain();
+      noteGain.gain.setValueAtTime(0, now);
+      noteGain.gain.linearRampToValueAtTime(0.08, now + attackTime);
+      noteGain.gain.setValueAtTime(0.08, now + padDuration - releaseTime);
+      noteGain.gain.linearRampToValueAtTime(0, now + padDuration);
 
-    osc.connect(reverbDelay);
-    reverbDelay.connect(reverbGain);
-    reverbGain.connect(this.masterGain);
+      osc.connect(noteGain);
+      noteGain.connect(this.reverbNode);
+      noteGain.connect(this.masterGain);
 
-    const entry = { osc, gain };
-    this.activeNodes.push(entry);
+      // Add a very quiet second harmonic for warmth
+      const osc2 = this.ctx.createOscillator();
+      osc2.type = "triangle";
+      osc2.frequency.value = freq * 2;
+      osc2.detune.value = detune + (Math.random() - 0.5) * 4;
 
-    osc.start(now);
-    osc.stop(now + duration + 0.05);
-    osc.onended = () => {
-      const idx = this.activeNodes.indexOf(entry);
-      if (idx !== -1) this.activeNodes.splice(idx, 1);
-      try {
-        gain.disconnect();
-        reverbGain.disconnect();
-        reverbDelay.disconnect();
-      } catch {}
-    };
-  }
+      const harm2Gain = this.ctx.createGain();
+      harm2Gain.gain.setValueAtTime(0, now);
+      harm2Gain.gain.linearRampToValueAtTime(0.015, now + attackTime);
+      harm2Gain.gain.setValueAtTime(0.015, now + padDuration - releaseTime);
+      harm2Gain.gain.linearRampToValueAtTime(0, now + padDuration);
 
-  private playAmbientPhrase(): void {
-    if (!this.playing) return;
+      osc2.connect(harm2Gain);
+      harm2Gain.connect(this.reverbNode);
 
-    const noteCount = 3 + Math.floor(Math.random() * 3);
-    let offset = 0;
+      this.activeNodes.push(osc, osc2);
 
-    for (let i = 0; i < noteCount; i++) {
-      const freq = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)];
-      const duration = 0.5 + Math.random() * 1.5;
-      const type: OscillatorType = Math.random() < 0.5 ? "sine" : "triangle";
+      osc.start(now);
+      osc.stop(now + padDuration + 0.1);
+      osc2.start(now);
+      osc2.stop(now + padDuration + 0.1);
 
-      this.playNote(freq, duration, offset, type);
-      offset += 0.3 + Math.random() * 1.2;
+      const cleanup = (o: OscillatorNode) => {
+        o.onended = () => {
+          const idx = this.activeNodes.indexOf(o);
+          if (idx !== -1) this.activeNodes.splice(idx, 1);
+          try { noteGain.disconnect(); } catch {}
+          try { harm2Gain.disconnect(); } catch {}
+        };
+      };
+      cleanup(osc);
+      cleanup(osc2);
     }
 
-    const pauseAfter = 4 + Math.random() * 6;
-    this.scheduleNextPhrase(offset + pauseAfter);
+    // Occasional single high note melody
+    if (Math.random() < 0.4) {
+      const melodyDelay = 1 + Math.random() * 3;
+      const melodyFreq = chord[Math.floor(Math.random() * chord.length)] * 2;
+      const melodyDur = 3 + Math.random() * 2;
+
+      const osc = this.ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = melodyFreq;
+
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, now + melodyDelay);
+      g.gain.linearRampToValueAtTime(0.04, now + melodyDelay + 1.5);
+      g.gain.linearRampToValueAtTime(0, now + melodyDelay + melodyDur);
+
+      osc.connect(g);
+      g.connect(this.reverbNode);
+
+      this.activeNodes.push(osc);
+      osc.start(now + melodyDelay);
+      osc.stop(now + melodyDelay + melodyDur + 0.1);
+      osc.onended = () => {
+        const idx = this.activeNodes.indexOf(osc);
+        if (idx !== -1) this.activeNodes.splice(idx, 1);
+        try { g.disconnect(); } catch {}
+      };
+    }
+
+    const pauseAfter = padDuration - 2 + Math.random() * 4;
+    this.scheduleNext(pauseAfter);
   }
 
   dispose(): void {
@@ -142,5 +197,6 @@ export class MusicManager {
       this.ctx = null;
     }
     this.masterGain = null;
+    this.reverbNode = null;
   }
 }

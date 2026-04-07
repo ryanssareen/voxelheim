@@ -42,6 +42,8 @@ export const BLOCK_ID = {
   RAW_PORK: 8,
   RAW_BEEF: 9,
   RAW_MUTTON: 10,
+  PLANKS: 11,
+  CRAFTING_TABLE: 12,
 } as const;
 
 /** All block definitions indexed by their ID. */
@@ -125,5 +127,19 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     textures: { top: "", bottom: "", side: "" },
     special: "food", breakTime: 0, dropId: BLOCK_ID.RAW_MUTTON,
     hungerRestore: 2,
+  },
+  {
+    id: BLOCK_ID.PLANKS,
+    name: "Planks",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "planks", bottom: "planks", side: "planks" },
+    special: "none", breakTime: 1.0, dropId: BLOCK_ID.PLANKS,
+  },
+  {
+    id: BLOCK_ID.CRAFTING_TABLE,
+    name: "Crafting Table",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "crafting_table_top", bottom: "planks", side: "crafting_table_side" },
+    special: "none", breakTime: 1.2, dropId: BLOCK_ID.CRAFTING_TABLE,
   },
 ];

@@ -9,4 +9,7 @@ export const ATLAS_UVS: Record<string, { u0: number; v0: number; u1: number; v1:
   log_top: { u0: 0.5, v0: 0.3333333333333333, u1: 0.75, v1: 0.6666666666666666 },
   leaves: { u0: 0.75, v0: 0.3333333333333333, u1: 1, v1: 0.6666666666666666 },
   crystal_shard: { u0: 0, v0: 0.6666666666666666, u1: 0.25, v1: 1 },
+  planks: { u0: 0.25, v0: 0.6666666666666666, u1: 0.5, v1: 1 },
+  crafting_table_top: { u0: 0.5, v0: 0.6666666666666666, u1: 0.75, v1: 1 },
+  crafting_table_side: { u0: 0.75, v0: 0.6666666666666666, u1: 1, v1: 1 },
 };

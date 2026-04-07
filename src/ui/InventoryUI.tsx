@@ -23,6 +23,8 @@ const BLOCK_COLORS: Record<number, string> = {
   [BLOCK_ID.RAW_PORK]: "#f0a0a0",
   [BLOCK_ID.RAW_BEEF]: "#c45050",
   [BLOCK_ID.RAW_MUTTON]: "#d4836a",
+  [BLOCK_ID.PLANKS]: "#c8a55a",
+  [BLOCK_ID.CRAFTING_TABLE]: "#9b7653",
 };
 
 const BLOCK_NAMES: Record<number, string> = {
@@ -36,6 +38,8 @@ const BLOCK_NAMES: Record<number, string> = {
   [BLOCK_ID.RAW_PORK]: "Raw Pork",
   [BLOCK_ID.RAW_BEEF]: "Raw Beef",
   [BLOCK_ID.RAW_MUTTON]: "Raw Mutton",
+  [BLOCK_ID.PLANKS]: "Planks",
+  [BLOCK_ID.CRAFTING_TABLE]: "Crafting Table",
 };
 
 const ARMOR_LABELS = ["Helmet", "Chest", "Legs", "Boots"];

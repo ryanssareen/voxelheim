@@ -21,6 +21,9 @@ const TEXTURES: TextureDef[] = [
   { name: "log_top", color: "#D7CCC8" },
   { name: "leaves", color: "#2E7D32" },
   { name: "crystal_shard", color: "#00E5FF" },
+  { name: "planks", color: "#C8A55A" },
+  { name: "crafting_table_top", color: "", split: { topColor: "#8B6914", bottomColor: "#A0783C" } },
+  { name: "crafting_table_side", color: "", split: { topColor: "#A0783C", bottomColor: "#C8A55A" } },
 ];
 
 function hexToRGB(hex: string): { r: number; g: number; b: number } {

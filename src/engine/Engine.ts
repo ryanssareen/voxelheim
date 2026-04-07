@@ -62,10 +62,12 @@ export class Engine {
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private playerAttackCooldown = 0;
   private qWasDown = false;
-  private hungerAccumulator = 0;
+  private hungerExhaustion = 0;
   private passiveHungerTimer = 0;
   private regenTimer = 0;
   private starvationTimer = 0;
+  private fallStartY = 0;
+  private wasFalling = false;
   private frameCount = 0;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -254,10 +256,12 @@ export class Engine {
             this.player.onGround = false;
             useHotbarStore.getState().resetSlots();
             useGameStore.getState().respawnPlayer();
-            this.hungerAccumulator = 0;
+            this.hungerExhaustion = 0;
             this.passiveHungerTimer = 0;
             this.regenTimer = 0;
             this.starvationTimer = 0;
+            this.fallStartY = 0;
+            this.wasFalling = false;
             return;
           }
         }
@@ -269,10 +273,12 @@ export class Engine {
     this.player.onGround = false;
     useHotbarStore.getState().resetSlots();
     useGameStore.getState().respawnPlayer();
-    this.hungerAccumulator = 0;
+    this.hungerExhaustion = 0;
     this.passiveHungerTimer = 0;
     this.regenTimer = 0;
     this.starvationTimer = 0;
+    this.fallStartY = 0;
+    this.wasFalling = false;
   }
 
   private gameLoop = (): void => {
@@ -366,6 +372,20 @@ export class Engine {
       (wx, wy, wz) => this.chunkManager!.getBlock(wx, wy, wz),
       this.registry
     );
+
+    // Fall damage (Minecraft-style: damage = fallDistance - 3)
+    const isFalling = !this.player!.onGround && this.player!.velocity.y < 0;
+    if (isFalling && !this.wasFalling) {
+      this.fallStartY = this.player!.position.y;
+    }
+    if (this.wasFalling && this.player!.onGround) {
+      const fallDistance = this.fallStartY - this.player!.position.y;
+      if (fallDistance > 3) {
+        const damage = Math.floor(fallDistance - 3);
+        useGameStore.getState().damagePlayer(damage);
+      }
+    }
+    this.wasFalling = isFalling;
 
     // Void death
     if (this.player!.position.y < VOID_Y) {
@@ -464,31 +484,37 @@ export class Engine {
       (amount, fromX, fromZ) => {
         useGameStore.getState().damagePlayer(amount);
         this.player!.applyKnockback(fromX, fromZ, 6);
-        // Hunger drain on damage
-        const s = useGameStore.getState();
-        useGameStore.getState().setHunger(s.hunger - 1);
+        // Exhaustion from taking damage
+        this.hungerExhaustion += 2;
       }
     );
 
-    // Hunger mechanics
+    // Hunger mechanics (Minecraft-style exhaustion system)
+    // Exhaustion accumulates from actions, -1 hunger when exhaustion >= 4
     const gs = useGameStore.getState();
-    // Passive hunger drain: -1 every 60 seconds
-    this.passiveHungerTimer += dt;
-    if (this.passiveHungerTimer >= 60) {
-      this.passiveHungerTimer -= 60;
-      gs.setHunger(gs.hunger - 1);
-    }
-    // Movement hunger drain
     const isPlayerMoving = this.player!.velocity.x !== 0 || this.player!.velocity.z !== 0;
-    if (isPlayerMoving) {
-      const drainRate = this.player!.isSprinting ? 0.5 : 0.1;
-      this.hungerAccumulator += drainRate * dt;
-      if (this.hungerAccumulator >= 1) {
-        const drain = Math.floor(this.hungerAccumulator);
-        this.hungerAccumulator -= drain;
-        useGameStore.getState().setHunger(useGameStore.getState().hunger - drain);
-      }
+
+    // Passive exhaustion: very slow background drain
+    this.passiveHungerTimer += dt;
+    if (this.passiveHungerTimer >= 90) {
+      this.passiveHungerTimer -= 90;
+      this.hungerExhaustion += 1;
     }
+    // Walking exhaustion: ~0.1 per second
+    if (isPlayerMoving && !this.player!.isSprinting) {
+      this.hungerExhaustion += 0.01 * dt;
+    }
+    // Sprinting exhaustion: ~0.6 per second
+    if (isPlayerMoving && this.player!.isSprinting) {
+      this.hungerExhaustion += 0.1 * dt;
+    }
+    // Convert exhaustion to hunger drain (4 exhaustion = 1 hunger point)
+    if (this.hungerExhaustion >= 4) {
+      const drain = Math.floor(this.hungerExhaustion / 4);
+      this.hungerExhaustion -= drain * 4;
+      useGameStore.getState().setHunger(useGameStore.getState().hunger - drain);
+    }
+
     // Hunger effects
     const currentHunger = useGameStore.getState().hunger;
     const currentHealth = useGameStore.getState().health;
@@ -496,12 +522,13 @@ export class Engine {
     if (currentHunger <= 6) {
       this.player!.isSprinting = false;
     }
-    // Regen when hunger > 16
-    if (currentHunger > 16 && currentHealth < gs.maxHealth) {
+    // Regen when hunger > 17 (like MC: 18+), costs exhaustion
+    if (currentHunger > 17 && currentHealth < gs.maxHealth) {
       this.regenTimer += dt;
       if (this.regenTimer >= 4) {
         this.regenTimer -= 4;
         useGameStore.getState().setHealth(useGameStore.getState().health + 1);
+        this.hungerExhaustion += 6; // regen costs hunger
       }
     } else {
       this.regenTimer = 0;

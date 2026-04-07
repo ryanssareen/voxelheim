@@ -17,6 +17,8 @@ const BLOCK_VISUALS: Record<
   [BLOCK_ID.RAW_PORK]: { top: "#f0a0a0", side: "#d08080", name: "Raw Pork" },
   [BLOCK_ID.RAW_BEEF]: { top: "#c45050", side: "#a03030", name: "Raw Beef" },
   [BLOCK_ID.RAW_MUTTON]: { top: "#d4836a", side: "#b0654a", name: "Raw Mutton" },
+  [BLOCK_ID.PLANKS]: { top: "#c8a55a", side: "#a68940", name: "Planks" },
+  [BLOCK_ID.CRAFTING_TABLE]: { top: "#9b7653", side: "#7a5c3a", name: "Crafting Table" },
   [BLOCK_ID.AIR]: null,
 };
 

@@ -81,11 +81,21 @@ export class ChunkManager {
     }
   }
 
-  /** Returns the block ID at world coordinates, or 0 (AIR) if chunk not loaded. */
+  /** Returns the block ID at world coordinates, or 0 (AIR) if chunk not loaded.
+   *  For non-island worlds, returns STONE at world boundaries (invisible barrier). */
   getBlock(wx: number, wy: number, wz: number): number {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
-    if (!chunk) return 0;
+    if (!chunk) {
+      if (this.worldType !== "island") {
+        const worldBlocks = this.sizeChunks * CHUNK_SIZE;
+        if (wx < 0 || wx >= worldBlocks || wz < 0 || wz >= worldBlocks) {
+          return wy >= 0 ? 3 : 0; // barrier wall above y=0
+        }
+        if (wy < 0) return 3; // bedrock floor
+      }
+      return 0;
+    }
     const { lx, ly, lz } = worldToLocal(wx, wy, wz);
     return chunk.getBlock(lx, ly, lz);
   }
