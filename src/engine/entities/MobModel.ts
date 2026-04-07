@@ -108,40 +108,65 @@ function createSheep(): MobModelData {
 
 function createZombie(): MobModelData {
   const group = new THREE.Group();
-  const green = mat(0x5a7a5a);
+  const skinGreen = mat(0x5a8a5a);
+  const shirtCyan = mat(0x3a9a8a);
+  const pantsPurple = mat(0x2e2e6e);
   const darkGreen = mat(0x3a5a3a);
-  const pants = mat(0x2a2a6e);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.25), green);
-  body.position.set(0, 0.85, 0);
+  // Body (teal/cyan shirt)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.25), shirtCyan);
+  body.position.set(0, 0.95, 0);
   group.add(body);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), darkGreen);
-  head.position.set(0, 1.35, 0);
+  // Head (8x8x8 proportional)
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinGreen);
+  head.position.set(0, 1.52, 0);
   group.add(head);
 
-  // Eyes
-  const eyeMat = mat(0x000000);
-  for (const z of [0.08, -0.08]) {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), eyeMat);
-    eye.position.set(0, 0.05, z);
+  // Face details - dark hollow eyes
+  const eyeMat = mat(0x1a1a1a);
+  for (const z of [0.1, -0.1]) {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.02), eyeMat);
+    eye.position.set(0.26, 0.06, z);
     head.add(eye);
   }
+  // Brow ridge (darker green above eyes)
+  const browMat = mat(0x2a4a2a);
+  for (const z of [0.1, -0.1]) {
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.02), browMat);
+    brow.position.set(0.26, 0.13, z);
+    head.add(brow);
+  }
+  // Nose
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), darkGreen);
+  nose.position.set(0.26, 0.0, 0);
+  head.add(nose);
+  // Mouth (dark frown)
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.02), eyeMat);
+  mouth.position.set(0.26, -0.1, 0);
+  head.add(mouth);
 
-  // Arms (stretched forward like zombie)
-  const arms: THREE.Mesh[] = [];
+  // Arms (stretched forward like classic zombie)
   for (const z of [0.2, -0.2]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.55, 0.15), green);
-    arm.position.set(0.15, 0.85, z);
-    arm.rotation.x = -Math.PI / 3; // arms stretched forward
-    group.add(arm);
-    arms.push(arm);
+    // Upper arm (shirt color)
+    const armPivot = new THREE.Group();
+    armPivot.position.set(0, 1.15, z);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), shirtCyan);
+    arm.position.set(0.2, 0, 0);
+    armPivot.add(arm);
+    // Hand (green skin)
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.15), skinGreen);
+    hand.position.set(0, -0.36, 0);
+    arm.add(hand);
+    armPivot.rotation.x = -Math.PI / 2.5;
+    group.add(armPivot);
   }
 
+  // Legs (dark purple pants)
   const legs: THREE.Mesh[] = [];
   for (const z of [0.08, -0.08]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 0.18), pants);
-    leg.position.set(0, 0.28, z);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), pantsPurple);
+    leg.position.set(0, 0.3, z);
     group.add(leg);
     legs.push(leg);
   }
@@ -151,35 +176,75 @@ function createZombie(): MobModelData {
 
 function createSkeleton(): MobModelData {
   const group = new THREE.Group();
-  const bone = mat(0xe0e0e0);
-  const dark = mat(0x2a2a2a);
+  const bone = mat(0xd4cfc4);
+  const boneDark = mat(0xb0a898);
+  const dark = mat(0x1a1a1a);
+  const gray = mat(0x555555);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.55, 0.15), bone);
-  body.position.set(0, 0.83, 0);
+  // Ribcage body (thinner than other humanoids)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.18), bone);
+  body.position.set(0, 0.95, 0);
   group.add(body);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), bone);
-  head.position.set(0, 1.3, 0);
+  // Rib lines (horizontal dark stripes)
+  for (let i = 0; i < 3; i++) {
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.19), boneDark);
+    rib.position.set(0, 0.15 - i * 0.15, 0);
+    body.add(rib);
+  }
+
+  // Skull head
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), bone);
+  head.position.set(0, 1.52, 0);
   group.add(head);
 
-  // Dark eye sockets
-  for (const z of [0.06, -0.06]) {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), dark);
-    eye.position.set(0, 0.04, z);
-    head.add(eye);
+  // Deep dark eye sockets
+  for (const z of [0.1, -0.1]) {
+    const socket = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), dark);
+    socket.position.set(0.23, 0.06, z);
+    head.add(socket);
+  }
+  // Nose hole (triangle-ish)
+  const noseHole = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), dark);
+  noseHole.position.set(0.26, -0.02, 0);
+  head.add(noseHole);
+  // Jaw/teeth line
+  const jawLine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.02), gray);
+  jawLine.position.set(0.26, -0.12, 0);
+  head.add(jawLine);
+  // Individual teeth marks
+  for (const z of [0.04, -0.04]) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.02), bone);
+    tooth.position.set(0.26, -0.09, z);
+    head.add(tooth);
   }
 
-  // Thin arms
-  for (const z of [0.15, -0.15]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.08), bone);
-    arm.position.set(0, 0.83, z);
+  // Thin bony arms
+  for (const z of [0.18, -0.18]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.08), bone);
+    arm.position.set(0, 0.95, z);
     group.add(arm);
+    // Bony hand
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.1), boneDark);
+    hand.position.set(0, -0.3, 0);
+    arm.add(hand);
   }
 
+  // Bow (held in right hand area) — simple cross shape
+  const bowStick = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), mat(0x5D4037));
+  bowStick.position.set(0.08, 0.75, -0.28);
+  bowStick.rotation.z = 0.2;
+  group.add(bowStick);
+  // Bowstring
+  const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.4, 0.01), mat(0xcccccc));
+  bowString.position.set(0.04, 0, 0.03);
+  bowStick.add(bowString);
+
+  // Thin legs
   const legs: THREE.Mesh[] = [];
-  for (const z of [0.05, -0.05]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.55, 0.1), bone);
-    leg.position.set(0, 0.28, z);
+  for (const z of [0.06, -0.06]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), bone);
+    leg.position.set(0, 0.3, z);
     group.add(leg);
     legs.push(leg);
   }
@@ -189,36 +254,73 @@ function createSkeleton(): MobModelData {
 
 function createCreeper(): MobModelData {
   const group = new THREE.Group();
-  const green = mat(0x4caf50);
-  const darkGreen = mat(0x2e7d32);
+  // Creeper uses mottled green - lighter and darker patches
+  const green = mat(0x5da85d);
+  const darkGreen = mat(0x3a7a3a);
+  const faceMat = mat(0x1a1a1a);
 
-  // Tall body
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.7, 0.35), green);
-  body.position.set(0, 0.7, 0);
+  // Tall rectangular body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.3), green);
+  body.position.set(0, 0.75, 0);
   group.add(body);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), green);
-  head.position.set(0, 1.22, 0);
+  // Darker mottled patches on body
+  const patch1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.31), darkGreen);
+  patch1.position.set(0.05, 0.1, 0);
+  body.add(patch1);
+  const patch2 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.31), darkGreen);
+  patch2.position.set(-0.1, -0.2, 0);
+  body.add(patch2);
+
+  // Head — same width as body, cube-shaped
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), green);
+  head.position.set(0, 1.37, 0);
   group.add(head);
 
-  // Face (sad creeper face)
-  const faceMat = mat(0x1a1a1a);
-  // Eyes
-  for (const z of [0.06, -0.06]) {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), faceMat);
-    eye.position.set(0, 0.05, z);
-    head.add(eye);
-  }
-  // Mouth
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.02), faceMat);
-  mouth.position.set(0, -0.06, 0);
-  head.add(mouth);
+  // Dark patches on head
+  const headPatch = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.01), darkGreen);
+  headPatch.position.set(0.26, 0.08, 0.08);
+  head.add(headPatch);
 
-  // 4 short legs
+  // === ICONIC CREEPER FACE ===
+  // Eyes — two tall rectangles, wider apart
+  for (const z of [0.1, -0.1]) {
+    // Each eye is a tall pixel shape
+    const eyeOuter = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.02), faceMat);
+    eyeOuter.position.set(0.26, 0.08, z);
+    head.add(eyeOuter);
+    // Inner eye extension (going down-inward for the droopy look)
+    const eyeInner = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), faceMat);
+    eyeInner.position.set(0.26, 0.0, z * 0.5);
+    head.add(eyeInner);
+  }
+
+  // Mouth — the iconic frown: vertical line down from between eyes, then wider at bottom
+  // Vertical center strip
+  const mouthCenter = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.02), faceMat);
+  mouthCenter.position.set(0.26, -0.1, 0);
+  head.add(mouthCenter);
+  // Bottom wider part (the frown extensions)
+  for (const z of [0.06, -0.06]) {
+    const mouthSide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), faceMat);
+    mouthSide.position.set(0.26, -0.19, z);
+    head.add(mouthSide);
+  }
+  // Even wider bottom corners
+  for (const z of [0.12, -0.12]) {
+    const mouthCorner = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), faceMat);
+    mouthCorner.position.set(0.26, -0.19, z);
+    head.add(mouthCorner);
+  }
+
+  // 4 short stubby legs (no arms — creepers have no arms!)
   const legs: THREE.Mesh[] = [];
-  for (const [x, z] of [[0.08, 0.08], [0.08, -0.08], [-0.08, 0.08], [-0.08, -0.08]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.35, 0.15), darkGreen);
-    leg.position.set(x, 0.175, z);
+  for (const [x, z] of [
+    [0.12, 0.12], [0.12, -0.12],
+    [-0.12, 0.12], [-0.12, -0.12],
+  ] as const) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.38, 0.2), darkGreen);
+    leg.position.set(x, 0.19, z);
     group.add(leg);
     legs.push(leg);
   }

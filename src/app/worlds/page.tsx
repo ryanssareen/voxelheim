@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { WorldMeta } from "@systems/persistence/WorldStorage";
+import { useAuthStore } from "@store/useAuthStore";
 
 const MC_BTN =
   "block text-center py-2.5 text-white font-mono tracking-wide hover:brightness-125 active:brightness-90 transition-all select-none";
@@ -19,14 +20,22 @@ export default function WorldsPage() {
   const router = useRouter();
   const [worlds, setWorlds] = useState<WorldMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading, configured } = useAuthStore();
 
   useEffect(() => {
+    if (configured && !authLoading && !user) {
+      router.replace("/login");
+    }
+  }, [authLoading, user, configured, router]);
+
+  useEffect(() => {
+    if (configured && !user) return;
     import("@systems/persistence/WorldStorage").then(async (mod) => {
       const list = await mod.listWorlds();
       setWorlds(list);
       setLoading(false);
     });
-  }, []);
+  }, [user]);
 
   const handleDelete = async (worldId: string) => {
     if (!confirm("Delete this world? This cannot be undone.")) return;

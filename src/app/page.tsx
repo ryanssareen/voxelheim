@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useSettingsStore } from "@/store/useSettingsStore";
+import { useAuthStore } from "@/store/useAuthStore";
 
 function SliderOption({
   label,
@@ -161,6 +162,7 @@ const DISABLED_STYLE: React.CSSProperties = {
 export default function Home() {
   const [showOptions, setShowOptions] = useState(false);
   const [showQuit, setShowQuit] = useState(false);
+  const { user, loading: authLoading, configured, signOut } = useAuthStore();
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden select-none">
@@ -229,20 +231,64 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col items-center gap-2.5 mt-10 w-[300px] sm:w-[380px]">
-          <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
-            Play Game
-          </Link>
-          <div className="flex gap-2.5 w-full">
-            <button onClick={() => setShowOptions(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
-              Options...
-            </button>
-            <button onClick={() => setShowQuit(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
-              Quit Game
-            </button>
-          </div>
+          {!configured ? (
+            <>
+              <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
+                Play Game
+              </Link>
+              <div className="flex gap-2.5 w-full">
+                <button onClick={() => setShowOptions(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
+                  Options...
+                </button>
+                <button onClick={() => setShowQuit(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
+                  Quit Game
+                </button>
+              </div>
+            </>
+          ) : authLoading ? (
+            <div className={MC_BTN + " w-full text-lg"} style={DISABLED_STYLE}>
+              Loading...
+            </div>
+          ) : user ? (
+            <>
+              <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
+                Play Game
+              </Link>
+              <div className="flex gap-2.5 w-full">
+                <button onClick={() => setShowOptions(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
+                  Options...
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  className={MC_BTN + " flex-1 text-sm"}
+                  style={BTN_STYLE}
+                >
+                  Sign Out
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
+                Sign In
+              </Link>
+              <Link href="/signup" className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
+                Create Account
+              </Link>
+              <button onClick={() => setShowOptions(true)} className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
+                Options...
+              </button>
+            </>
+          )}
         </div>
 
-        <p className="mt-8 text-[11px] text-white/40 font-mono" style={{ textShadow: "1px 1px 0 #000" }}>
+        {user && (
+          <p className="mt-4 text-[11px] text-white/50 font-mono" style={{ textShadow: "1px 1px 0 #000" }}>
+            Signed in as {user.email}
+          </p>
+        )}
+
+        <p className="mt-4 text-[11px] text-white/40 font-mono" style={{ textShadow: "1px 1px 0 #000" }}>
           Voxelheim Island Edition (v0.1.0)
         </p>
       </div>

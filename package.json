@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@types/three": "^0.183.1",
+    "firebase": "^12.11.0",
     "idb": "^8.0.3",
     "next": "16.2.2",
     "react": "19.2.4",
