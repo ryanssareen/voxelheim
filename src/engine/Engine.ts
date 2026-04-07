@@ -53,6 +53,7 @@ export class Engine {
   private worldId: string | null = null;
   private seed = "voxelheim-mvp";
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+  private playerAttackCooldown = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -305,27 +306,50 @@ export class Engine {
     const lookDir = this.camera.getLookDirection();
     const selectedBlockId = useHotbarStore.getState().getSelectedBlockId();
 
+    // Check mob hit FIRST — mob takes priority over block breaking
+    this.playerAttackCooldown = Math.max(0, this.playerAttackCooldown - dt);
+    let hitMob: import("@engine/entities/Mob").Mob | null = null;
+    const eyePos = {
+      x: this.player!.position.x,
+      y: this.player!.position.y + 1.6,
+      z: this.player!.position.z,
+    };
+    if (isLeftHeld) {
+      hitMob = this.mobManager!.hitTest(eyePos, lookDir, 5);
+      if (hitMob) {
+        const blockTarget = this.blockInteraction!.getTargetBlock(this.player!.position, lookDir);
+        if (blockTarget.hit && blockTarget.blockPos) {
+          const mobDist = Math.sqrt(
+            (hitMob.position.x - eyePos.x) ** 2 +
+            (hitMob.position.y + hitMob.config.height / 2 - eyePos.y) ** 2 +
+            (hitMob.position.z - eyePos.z) ** 2
+          );
+          const blockDist = Math.sqrt(
+            (blockTarget.blockPos.x + 0.5 - eyePos.x) ** 2 +
+            (blockTarget.blockPos.y + 0.5 - eyePos.y) ** 2 +
+            (blockTarget.blockPos.z + 0.5 - eyePos.z) ** 2
+          );
+          if (blockDist < mobDist) {
+            hitMob = null;
+          }
+        }
+      }
+    }
+
+    if (hitMob && isLeftHeld && this.playerAttackCooldown <= 0) {
+      hitMob.takeDamage(1);
+      this.playerAttackCooldown = 0.4;
+    }
+
+    // Only break blocks if we didn't hit a mob
     const breakState = this.blockInteraction!.update(
       this.player!.position,
       lookDir,
-      isLeftHeld,
+      isLeftHeld && !hitMob,
       rightClick,
       selectedBlockId,
       dt
     );
-
-    // Mob combat: left-click hits mob if not breaking a block
-    if (isLeftHeld && !breakState.isBreaking) {
-      const eyePos = {
-        x: this.player!.position.x,
-        y: this.player!.position.y + 1.6,
-        z: this.player!.position.z,
-      };
-      const hitMob = this.mobManager!.hitTest(eyePos, lookDir, 4);
-      if (hitMob) {
-        hitMob.takeDamage(1);
-      }
-    }
 
     // Update day/night cycle
     this.dayNight!.update(dt);

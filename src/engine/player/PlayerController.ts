@@ -149,6 +149,8 @@ export class PlayerController {
     const bMinZ = Math.floor(minZ);
     const bMaxZ = Math.floor(maxZ);
 
+    let collided = false;
+
     for (let bx = bMinX; bx <= bMaxX; bx++) {
       for (let by = bMinY; by <= bMaxY; by++) {
         for (let bz = bMinZ; bz <= bMaxZ; bz++) {
@@ -167,30 +169,32 @@ export class PlayerController {
             return;
           } else if (axis === "x") {
             if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
-              // Don't revert position — we stepped up in place
               return;
             }
-            if (delta < 0) {
-              this.position.x = bx + 1 + HALF_WIDTH;
+            if (delta > 0) {
+              this.position.x = Math.min(this.position.x, bx - HALF_WIDTH);
             } else {
-              this.position.x = bx - HALF_WIDTH;
+              this.position.x = Math.max(this.position.x, bx + 1 + HALF_WIDTH);
             }
-            this.velocity.x = 0;
-            return;
+            collided = true;
           } else {
             if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
               return;
             }
-            if (delta < 0) {
-              this.position.z = bz + 1 + HALF_WIDTH;
+            if (delta > 0) {
+              this.position.z = Math.min(this.position.z, bz - HALF_WIDTH);
             } else {
-              this.position.z = bz - HALF_WIDTH;
+              this.position.z = Math.max(this.position.z, bz + 1 + HALF_WIDTH);
             }
-            this.velocity.z = 0;
-            return;
+            collided = true;
           }
         }
       }
+    }
+
+    if (collided) {
+      if (axis === "x") this.velocity.x = 0;
+      else if (axis === "z") this.velocity.z = 0;
     }
 
     if (axis === "y" && delta <= 0) {
