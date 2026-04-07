@@ -16,6 +16,14 @@ export interface CraftingRecipe {
   name: string;
 }
 
+/** A crafting recipe for the 3x3 crafting table grid. Row-major order. */
+export interface CraftingRecipe3x3 {
+  grid: [number, number, number, number, number, number, number, number, number];
+  result: number;
+  count: number;
+  name: string;
+}
+
 /**
  * All 2x2 crafting recipes.
  * Pattern matching is exact — items must be in the right positions.
@@ -114,6 +122,90 @@ export const RECIPES: CraftingRecipe[] = [
   },
 ];
 
+const _ = 0;
+const P = BLOCK_ID.PLANKS;
+const S = BLOCK_ID.STONE;
+const L = BLOCK_ID.LOG;
+const D = BLOCK_ID.DIRT;
+const G = BLOCK_ID.GRASS;
+const C = BLOCK_ID.CRYSTAL;
+const SN = BLOCK_ID.SAND;
+const LV = BLOCK_ID.LEAVES;
+
+/** All 3x3 crafting table recipes. */
+export const RECIPES_3x3: CraftingRecipe3x3[] = [
+  // 8 planks around center → chest (gives stone for now)
+  {
+    grid: [P, P, P, P, _, P, P, P, P],
+    result: BLOCK_ID.STONE,
+    count: 4,
+    name: "Stonework",
+  },
+  // 3 planks top row → slab equivalent (gives 6 planks)
+  {
+    grid: [_, _, _, _, _, _, P, P, P],
+    result: BLOCK_ID.PLANKS,
+    count: 6,
+    name: "Planks (Efficient)",
+  },
+  // 9 dirt → 4 grass
+  {
+    grid: [D, D, D, D, D, D, D, D, D],
+    result: BLOCK_ID.GRASS,
+    count: 4,
+    name: "Grass Block (Bulk)",
+  },
+  // 9 sand → 4 stone
+  {
+    grid: [SN, SN, SN, SN, SN, SN, SN, SN, SN],
+    result: BLOCK_ID.STONE,
+    count: 4,
+    name: "Stone (Bulk Smelt)",
+  },
+  // 9 stone → 4 crystal
+  {
+    grid: [S, S, S, S, S, S, S, S, S],
+    result: BLOCK_ID.CRYSTAL,
+    count: 4,
+    name: "Crystal (Compression)",
+  },
+  // 9 leaves → 3 log
+  {
+    grid: [LV, LV, LV, LV, LV, LV, LV, LV, LV],
+    result: BLOCK_ID.LOG,
+    count: 3,
+    name: "Log (Bulk)",
+  },
+  // Cross of stone + 4 crystal corners → 8 crystal
+  {
+    grid: [C, S, C, S, C, S, C, S, C],
+    result: BLOCK_ID.CRYSTAL,
+    count: 8,
+    name: "Crystal Matrix",
+  },
+  // Diamond of planks → crafting table
+  {
+    grid: [_, P, _, P, L, P, _, P, _],
+    result: BLOCK_ID.CRAFTING_TABLE,
+    count: 4,
+    name: "Crafting Tables (Bulk)",
+  },
+  // Grass border with sand center → 4 dirt
+  {
+    grid: [G, G, G, G, SN, G, G, G, G],
+    result: BLOCK_ID.DIRT,
+    count: 8,
+    name: "Dirt (Erosion Bulk)",
+  },
+  // Column of logs → 12 planks
+  {
+    grid: [_, L, _, _, L, _, _, L, _],
+    result: BLOCK_ID.PLANKS,
+    count: 12,
+    name: "Planks (Column Mill)",
+  },
+];
+
 /** Find a matching recipe for the given 2x2 grid. Returns null if no match. */
 export function findRecipe(
   grid: [number, number, number, number]
@@ -127,6 +219,34 @@ export function findRecipe(
     ) {
       return recipe;
     }
+  }
+  return null;
+}
+
+/** Find a matching recipe for the given 3x3 grid. Returns null if no match. */
+export function findRecipe3x3(
+  grid: [number, number, number, number, number, number, number, number, number]
+): CraftingRecipe3x3 | null {
+  for (const recipe of RECIPES_3x3) {
+    let match = true;
+    for (let i = 0; i < 9; i++) {
+      if (recipe.grid[i] !== grid[i]) { match = false; break; }
+    }
+    if (match) return recipe;
+  }
+  // Also check if it fits as a 2x2 recipe placed in any valid 2x2 subgrid
+  const subgrids: [number, number, number, number, number, number, number, number][] = [
+    [0, 1, 3, 4, 2, 5, 6, 7], // top-left 2x2
+    [1, 2, 4, 5, 0, 3, 6, 7], // top-right 2x2
+    [3, 4, 6, 7, 0, 1, 2, 5], // bottom-left 2x2
+    [4, 5, 7, 8, 0, 1, 2, 3], // bottom-right 2x2
+  ];
+  for (const [a, b, c, d, ...rest] of subgrids) {
+    const allRestEmpty = rest.every((idx) => grid[idx] === 0);
+    if (!allRestEmpty) continue;
+    const sub: [number, number, number, number] = [grid[a], grid[b], grid[c], grid[d]];
+    const match2x2 = findRecipe(sub);
+    if (match2x2) return { grid, result: match2x2.result, count: match2x2.count, name: match2x2.name };
   }
   return null;
 }

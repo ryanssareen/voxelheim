@@ -125,16 +125,27 @@ export class Engine {
       }
     }
 
+    // Find safe spawn Y on solid ground (not mid-air)
+    SPAWN.y = this.findSafeSpawnY(SPAWN.x, SPAWN.z);
+
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
       // Don't pause if dead or inventory is open
-      if (!useGameStore.getState().isDead && !useInventoryStore.getState().isOpen) {
+      const invS = useInventoryStore.getState();
+      if (!useGameStore.getState().isDead && !invS.isOpen && !invS.tableOpen) {
         useGameStore.getState().setPaused(true);
       }
     };
 
-    // Player
+    // Player — use saved position if returning to a world, otherwise safe spawn
     const spawnPos = savedMeta?.playerPos ?? SPAWN;
+    // For new worlds, override saved Y with safe ground level
+    if (savedMeta && savedMeta.playerPos) {
+      const safeY = this.findSafeSpawnY(savedMeta.playerPos.x, savedMeta.playerPos.z);
+      if (savedMeta.playerPos.y > safeY + 3) {
+        spawnPos.y = safeY;
+      }
+    }
     this.player = new PlayerController(spawnPos.x, spawnPos.y, spawnPos.z);
     if (savedMeta) {
       this.camera.yaw = savedMeta.playerYaw;
@@ -306,11 +317,14 @@ export class Engine {
     const state = useGameStore.getState();
     if (state.isPaused || state.isDead) return;
 
-    // E key: toggle inventory (single press)
+    // E key: toggle inventory / close crafting table (single press)
     const eDown = this.input.isKeyDown("KeyE");
     if (eDown && !this.eWasDown) {
       const inv = useInventoryStore.getState();
-      if (inv.isOpen) {
+      if (inv.tableOpen) {
+        inv.closeTable();
+        this.canvas.requestPointerLock();
+      } else if (inv.isOpen) {
         inv.close();
         this.canvas.requestPointerLock();
       } else {
@@ -322,8 +336,9 @@ export class Engine {
     }
     this.eWasDown = eDown;
 
-    // Skip game input while inventory is open
-    if (useInventoryStore.getState().isOpen) {
+    // Skip game input while inventory or crafting table is open
+    const invState = useInventoryStore.getState();
+    if (invState.isOpen || invState.tableOpen) {
       this.input.getMouseDelta(); // consume
       this.input.getMouseButton(); // consume
       this.camera.applyToThreeCamera(

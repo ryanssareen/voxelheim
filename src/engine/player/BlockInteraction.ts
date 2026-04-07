@@ -4,6 +4,7 @@ import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import { useGameStore } from "@store/useGameStore";
 import { useHotbarStore } from "@store/useHotbarStore";
+import { useInventoryStore } from "@store/useInventoryStore";
 
 const MAX_DISTANCE = 6;
 const STEP_SIZE = 0.1;
@@ -139,6 +140,21 @@ export class BlockInteraction {
     }
 
     // --- Single-frame placing (right click) ---
+    if (rightClick && target.hit && target.blockPos) {
+      // Right-click on crafting table opens 3x3 UI
+      if (target.blockId === BLOCK_ID.CRAFTING_TABLE) {
+        const inv = useInventoryStore.getState();
+        if (!inv.tableOpen) {
+          inv.openTable();
+          if (document.pointerLockElement) document.exitPointerLock();
+        }
+        return {
+          isBreaking: this.breakingPos !== null,
+          breakProgress: this.breakProgress,
+          breakTarget: this.breakingPos,
+        };
+      }
+    }
     if (rightClick && target.hit && target.facePos && target.facePos.x >= 0) {
       // Check we have items to place
       const hotbar = useHotbarStore.getState();

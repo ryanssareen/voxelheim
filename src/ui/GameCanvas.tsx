@@ -8,6 +8,7 @@ import { PauseMenu } from "@ui/PauseMenu";
 import { DeathScreen } from "@ui/DeathScreen";
 import { LoadingScreen } from "@ui/LoadingScreen";
 import { InventoryUI } from "@ui/InventoryUI";
+import { CraftingTableUI } from "@ui/CraftingTableUI";
 
 export function GameCanvas({ worldId }: { worldId?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,6 +61,7 @@ export function GameCanvas({ worldId }: { worldId?: string }) {
           <PauseMenu canvasRef={canvasRef} />
           <DeathScreen onRespawn={handleRespawn} />
           <InventoryUI />
+          <CraftingTableUI />
         </>
       )}
     </div>
