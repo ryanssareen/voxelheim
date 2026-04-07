@@ -285,6 +285,14 @@ export class Engine {
     if (!this.running) return;
     this.animationFrameId = requestAnimationFrame(this.gameLoop);
 
+    try {
+      this.gameLoopInner();
+    } catch (err) {
+      console.error("[Voxelheim] Game loop error:", err);
+    }
+  };
+
+  private gameLoopInner(): void {
     const dt = this.clock.getDelta();
     if (dt === 0) return;
 
@@ -607,7 +615,7 @@ export class Engine {
     );
 
     this.renderer!.render();
-  };
+  }
 
   async dispose(): Promise<void> {
     this.running = false;

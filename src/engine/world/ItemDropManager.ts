@@ -15,6 +15,8 @@ const DROP_COLORS: Record<number, number> = {
   [BLOCK_ID.RAW_PORK]: 0xf0a0a0,
   [BLOCK_ID.RAW_BEEF]: 0xc45050,
   [BLOCK_ID.RAW_MUTTON]: 0xd4836a,
+  [BLOCK_ID.PLANKS]: 0xc8a55a,
+  [BLOCK_ID.CRAFTING_TABLE]: 0x9b7653,
 };
 
 interface ItemDrop {
@@ -156,9 +158,15 @@ export class ItemDropManager {
 
       // Only pick up after initial pop (0.3s delay)
       if (dist < PICKUP_DISTANCE && drop.age > 0.3) {
-        const added = useHotbarStore.getState().addItem(drop.blockId);
-        if (added) {
+        try {
+          const added = useHotbarStore.getState().addItem(drop.blockId);
+          if (added) {
+            this.removeDrop(i);
+            continue;
+          }
+        } catch {
           this.removeDrop(i);
+          continue;
         }
       }
     }
