@@ -2,6 +2,8 @@
 
 import { useHotbarStore, HOTBAR_SLOTS } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
+import { ITEM_NAMES, getToolDef } from "@data/items";
+import { ItemIcon, DurabilityBar } from "@ui/ItemIcon";
 
 const BLOCK_VISUALS: Record<
   number,
@@ -44,19 +46,21 @@ export function HotbarUI() {
   const offhand = useHotbarStore((s) => s.offhand);
 
   const selectedSlot = slots[selectedIndex];
-  const selectedVisual =
-    selectedSlot.count > 0 ? BLOCK_VISUALS[selectedSlot.blockId] : null;
+  const selectedName =
+    selectedSlot.count > 0
+      ? (BLOCK_VISUALS[selectedSlot.blockId]?.name ?? ITEM_NAMES[selectedSlot.blockId] ?? null)
+      : null;
 
   return (
     <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10">
-      {/* Block name tooltip */}
-      {selectedVisual && (
+      {/* Item name tooltip */}
+      {selectedName && (
         <div className="text-center mb-1">
           <span
             className="text-white font-mono text-sm px-3 py-1 bg-black/60 rounded-sm"
             style={{ textShadow: "1px 1px 0 #000" }}
           >
-            {selectedVisual.name}
+            {selectedName}
           </span>
         </div>
       )}
@@ -84,7 +88,9 @@ export function HotbarUI() {
           }}
         >
           {offhand.count > 0 && offhand.blockId !== BLOCK_ID.AIR && (
-            <BlockIcon blockId={offhand.blockId} />
+            BLOCK_VISUALS[offhand.blockId]
+              ? <BlockIcon blockId={offhand.blockId} />
+              : <ItemIcon blockId={offhand.blockId} size={48} />
           )}
           {offhand.count > 1 && (
             <span
@@ -114,7 +120,19 @@ export function HotbarUI() {
                   : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
               }}
             >
-              {slot.count > 0 && <BlockIcon blockId={slot.blockId} />}
+              {slot.count > 0 && (
+                BLOCK_VISUALS[slot.blockId]
+                  ? <BlockIcon blockId={slot.blockId} />
+                  : <ItemIcon blockId={slot.blockId} size={56} />
+              )}
+
+              {/* Durability bar for tools */}
+              {slot.count > 0 && (() => {
+                const td = getToolDef(slot.blockId);
+                return td && slot.durability !== undefined && slot.durability < td.durability
+                  ? <DurabilityBar durability={slot.durability} maxDurability={td.durability} width={64} />
+                  : null;
+              })()}
 
               {/* Item count */}
               {slot.count > 1 && (

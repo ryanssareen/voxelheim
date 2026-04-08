@@ -30,7 +30,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 59,
     miningSpeedMultiplier: 2,
     attackDamage: 3,
-    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE],
+    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
   },
   [BLOCK_ID.WOODEN_SHOVEL]: {
     itemId: BLOCK_ID.WOODEN_SHOVEL,
@@ -66,7 +66,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 131,
     miningSpeedMultiplier: 4,
     attackDamage: 4,
-    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE],
+    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
   },
   [BLOCK_ID.STONE_SHOVEL]: {
     itemId: BLOCK_ID.STONE_SHOVEL,
@@ -119,6 +119,31 @@ export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.STONE_AXE]: "Stone Axe",
   [BLOCK_ID.STONE_SHOVEL]: "Stone Shovel",
   [BLOCK_ID.STONE_SWORD]: "Stone Sword",
+};
+
+/** Numeric hex colors for Three.js renderers (hand, offhand, item drops). */
+export const BLOCK_HEX_COLORS: Record<number, number> = {
+  [BLOCK_ID.GRASS]: 0x5cb85c,
+  [BLOCK_ID.DIRT]: 0x8d6e63,
+  [BLOCK_ID.STONE]: 0x9e9e9e,
+  [BLOCK_ID.SAND]: 0xfdd835,
+  [BLOCK_ID.LOG]: 0x5d4037,
+  [BLOCK_ID.LEAVES]: 0x2e7d32,
+  [BLOCK_ID.CRYSTAL]: 0x00e5ff,
+  [BLOCK_ID.RAW_PORK]: 0xf0a0a0,
+  [BLOCK_ID.RAW_BEEF]: 0xc45050,
+  [BLOCK_ID.RAW_MUTTON]: 0xd4836a,
+  [BLOCK_ID.PLANKS]: 0xc8a55a,
+  [BLOCK_ID.CRAFTING_TABLE]: 0x9b7653,
+  [BLOCK_ID.STICK]: 0xb8945a,
+  [BLOCK_ID.WOODEN_PICKAXE]: 0xa0783c,
+  [BLOCK_ID.WOODEN_AXE]: 0xa0783c,
+  [BLOCK_ID.WOODEN_SHOVEL]: 0xa0783c,
+  [BLOCK_ID.WOODEN_SWORD]: 0xa0783c,
+  [BLOCK_ID.STONE_PICKAXE]: 0xaaaaaa,
+  [BLOCK_ID.STONE_AXE]: 0xaaaaaa,
+  [BLOCK_ID.STONE_SHOVEL]: 0xaaaaaa,
+  [BLOCK_ID.STONE_SWORD]: 0xaaaaaa,
 };
 
 export const ITEM_COLORS: Record<number, string> = {

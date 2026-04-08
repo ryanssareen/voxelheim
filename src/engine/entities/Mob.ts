@@ -207,8 +207,8 @@ export class Mob {
   private updatePassiveAI(
     dt: number,
     playerPos: { x: number; y: number; z: number },
-    getBlock?: (x: number, y: number, z: number) => number,
-    registry?: BlockRegistry
+    getBlock: (x: number, y: number, z: number) => number,
+    registry: BlockRegistry
   ): void {
     // Flee if recently hit
     if (this.fleeTimer > 0) {
@@ -245,14 +245,12 @@ export class Mob {
       this.yaw += diff * dt * 3;
 
       // Check for cliff or wall ahead — pick a new direction if stuck
-      if (getBlock && registry) {
-        if (!this.hasGroundAhead(getBlock, registry) || this.isBlockedAhead(getBlock, registry)) {
-          this.aiTargetYaw = this.yaw + Math.PI * (0.5 + Math.random());
-          this.aiTimer = 0.5 + Math.random();
-          this.velocity.x = 0;
-          this.velocity.z = 0;
-          return;
-        }
+      if (!this.hasGroundAhead(getBlock, registry) || this.isBlockedAhead(getBlock, registry)) {
+        this.aiTargetYaw = this.yaw + Math.PI * (0.5 + Math.random());
+        this.aiTimer = 0.5 + Math.random();
+        this.velocity.x = 0;
+        this.velocity.z = 0;
+        return;
       }
 
       this.velocity.x = -Math.sin(this.yaw) * this.config.speed;

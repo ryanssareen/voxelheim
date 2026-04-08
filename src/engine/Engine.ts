@@ -190,7 +190,12 @@ export class Engine {
         hunger: savedMeta.hunger ?? 20,
       });
       if (savedMeta.hotbarSlots) {
-        useHotbarStore.setState({ slots: savedMeta.hotbarSlots });
+        // Pad saved slots to current TOTAL_SLOTS length (handles old saves)
+        const saved = savedMeta.hotbarSlots as Array<{ blockId: number; count: number; durability?: number }>;
+        const padded = Array.from({ length: 36 }, (_, i) =>
+          saved[i] ?? { blockId: 0, count: 0 }
+        );
+        useHotbarStore.setState({ slots: padded });
       }
     } else {
       useGameStore.getState().resetObjective();

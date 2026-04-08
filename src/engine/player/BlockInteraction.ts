@@ -128,10 +128,16 @@ export class BlockInteraction {
         // Block broken!
         if (this.breakProgress >= 1.0) {
           this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
-          this.itemDrops.spawnDrop(blockDef.dropId, bp.x, bp.y, bp.z);
 
-          if (target.blockId === BLOCK_ID.CRYSTAL) {
-            useGameStore.getState().collectShard();
+          // Only drop if the correct tool is used (or no tool required)
+          const needsTool = blockDef.requiresTool;
+          const hasRightTool = !needsTool || (toolDef && toolDef.toolType === needsTool);
+          if (hasRightTool) {
+            this.itemDrops.spawnDrop(blockDef.dropId, bp.x, bp.y, bp.z);
+
+            if (target.blockId === BLOCK_ID.CRYSTAL) {
+              useGameStore.getState().collectShard();
+            }
           }
 
           // Damage the held tool

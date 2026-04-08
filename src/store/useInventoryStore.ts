@@ -3,19 +3,19 @@ import { create } from "zustand";
 interface InventoryState {
   isOpen: boolean;
   /** 2x2 crafting grid: [TL, TR, BL, BR] as { blockId, count } */
-  craftingGrid: Array<{ blockId: number; count: number }>;
+  craftingGrid: Array<{ blockId: number; count: number; durability?: number }>;
   /** Currently held item on cursor (from clicking a slot) */
-  cursorItem: { blockId: number; count: number };
+  cursorItem: { blockId: number; count: number; durability?: number };
   /** Whether the 3x3 crafting table UI is open */
   tableOpen: boolean;
   /** 3x3 crafting table grid (9 slots, row-major) */
-  tableGrid: Array<{ blockId: number; count: number }>;
+  tableGrid: Array<{ blockId: number; count: number; durability?: number }>;
   open: () => void;
   close: () => void;
   toggle: () => void;
   setCraftingSlot: (index: number, blockId: number, count: number) => void;
   clearCraftingGrid: () => void;
-  setCursorItem: (blockId: number, count: number) => void;
+  setCursorItem: (blockId: number, count: number, durability?: number) => void;
   clearCursor: () => void;
   openTable: () => void;
   closeTable: () => void;
@@ -59,8 +59,8 @@ export const useInventoryStore = create<InventoryState>((set) => ({
 
   clearCraftingGrid: () => set({ craftingGrid: emptyGrid() }),
 
-  setCursorItem: (blockId, count) =>
-    set({ cursorItem: { blockId, count } }),
+  setCursorItem: (blockId, count, durability) =>
+    set({ cursorItem: { blockId, count, durability } }),
 
   clearCursor: () => set({ cursorItem: { blockId: 0, count: 0 } }),
 

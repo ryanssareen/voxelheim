@@ -1,32 +1,9 @@
 import * as THREE from "three";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_HEX_COLORS } from "@data/items";
 
-/** Block colors for item drop rendering. */
-const DROP_COLORS: Record<number, number> = {
-  [BLOCK_ID.GRASS]: 0x5cb85c,
-  [BLOCK_ID.DIRT]: 0x8d6e63,
-  [BLOCK_ID.STONE]: 0x9e9e9e,
-  [BLOCK_ID.SAND]: 0xfdd835,
-  [BLOCK_ID.LOG]: 0x5d4037,
-  [BLOCK_ID.LEAVES]: 0x2e7d32,
-  [BLOCK_ID.CRYSTAL]: 0x00e5ff,
-  [BLOCK_ID.RAW_PORK]: 0xf0a0a0,
-  [BLOCK_ID.RAW_BEEF]: 0xc45050,
-  [BLOCK_ID.RAW_MUTTON]: 0xd4836a,
-  [BLOCK_ID.PLANKS]: 0xc8a55a,
-  [BLOCK_ID.CRAFTING_TABLE]: 0x9b7653,
-  [BLOCK_ID.STICK]: 0xb8945a,
-  [BLOCK_ID.WOODEN_PICKAXE]: 0xa0783c,
-  [BLOCK_ID.WOODEN_AXE]: 0xa0783c,
-  [BLOCK_ID.WOODEN_SHOVEL]: 0xa0783c,
-  [BLOCK_ID.WOODEN_SWORD]: 0xa0783c,
-  [BLOCK_ID.STONE_PICKAXE]: 0xaaaaaa,
-  [BLOCK_ID.STONE_AXE]: 0xaaaaaa,
-  [BLOCK_ID.STONE_SHOVEL]: 0xaaaaaa,
-  [BLOCK_ID.STONE_SWORD]: 0xaaaaaa,
-};
+const DROP_COLORS = BLOCK_HEX_COLORS;
 
 interface ItemDrop {
   mesh: THREE.Mesh;

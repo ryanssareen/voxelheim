@@ -263,16 +263,25 @@ export const RECIPES_3x3: CraftingRecipe3x3[] = [
   },
 ];
 
+/** Shift non-empty cells to top-left corner so recipes match in any position. */
+function normalize2x2(grid: [number, number, number, number]): [number, number, number, number] {
+  let [tl, tr, bl, br] = grid;
+  if (tl === 0 && tr === 0) { tl = bl; tr = br; bl = 0; br = 0; }
+  if (tl === 0 && bl === 0) { tl = tr; bl = br; tr = 0; br = 0; }
+  return [tl, tr, bl, br];
+}
+
 /** Find a matching recipe for the given 2x2 grid. Returns null if no match. */
 export function findRecipe(
   grid: [number, number, number, number]
 ): CraftingRecipe | null {
+  const n = normalize2x2(grid);
   for (const recipe of RECIPES) {
     if (
-      recipe.grid[0] === grid[0] &&
-      recipe.grid[1] === grid[1] &&
-      recipe.grid[2] === grid[2] &&
-      recipe.grid[3] === grid[3]
+      recipe.grid[0] === n[0] &&
+      recipe.grid[1] === n[1] &&
+      recipe.grid[2] === n[2] &&
+      recipe.grid[3] === n[3]
     ) {
       return recipe;
     }

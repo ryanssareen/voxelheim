@@ -1,7 +1,7 @@
 "use client";
 
 import { BLOCK_ID } from "@data/blocks";
-import { ITEM_COLORS, ITEM_NAMES, isToolItem, getToolDef, type ToolType } from "@data/items";
+import { ITEM_COLORS, getToolDef, type ToolType } from "@data/items";
 
 const FOOD_IDS: Set<number> = new Set([BLOCK_ID.RAW_PORK, BLOCK_ID.RAW_BEEF, BLOCK_ID.RAW_MUTTON]);
 
@@ -141,4 +141,52 @@ export function DurabilityBar({ durability, maxDurability, width }: { durability
   );
 }
 
-export { ITEM_COLORS, ITEM_NAMES, FOOD_IDS };
+export function InventorySlot({
+  item,
+  onClick,
+  size = 44,
+  highlight = false,
+  label,
+}: {
+  item: { blockId: number; count: number; durability?: number };
+  onClick?: () => void;
+  size?: number;
+  highlight?: boolean;
+  label?: string;
+}) {
+  const hasItem = item.count > 0 && item.blockId !== BLOCK_ID.AIR;
+  const toolDef = hasItem ? getToolDef(item.blockId) : null;
+  return (
+    <div
+      onClick={onClick}
+      className="relative flex items-center justify-center cursor-pointer select-none"
+      style={{
+        width: size,
+        height: size,
+        background: highlight ? "#c6c6c6" : "#8b8b8b",
+        border: highlight ? "2px solid #fff" : "2px solid #373737",
+        boxShadow: highlight
+          ? "inset 2px 2px 0 #fafafa, inset -2px -2px 0 #aaa"
+          : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
+      }}
+    >
+      {hasItem && <ItemIcon blockId={item.blockId} size={size} />}
+      {hasItem && item.count > 1 && (
+        <span
+          className="absolute bottom-0 right-0.5 text-[12px] font-mono font-bold text-white"
+          style={{ textShadow: "1px 1px 0 #000" }}
+        >
+          {item.count}
+        </span>
+      )}
+      {hasItem && toolDef && item.durability !== undefined && (
+        <DurabilityBar durability={item.durability} maxDurability={toolDef.durability} width={size} />
+      )}
+      {label && !hasItem && (
+        <span className="text-[10px] text-[#666] font-mono">{label}</span>
+      )}
+    </div>
+  );
+}
+
+export { ITEM_COLORS, FOOD_IDS };

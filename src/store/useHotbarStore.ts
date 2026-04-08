@@ -84,7 +84,14 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
   },
 
   addItem: (blockId: number) => {
-    const { slots } = get();
+    let { slots } = get();
+    // Guard against corrupted short arrays from old saves
+    if (slots.length < TOTAL_SLOTS) {
+      slots = Array.from({ length: TOTAL_SLOTS }, (_, i) =>
+        slots[i] ?? { blockId: BLOCK_ID.AIR, count: 0 }
+      );
+      set({ slots });
+    }
     const tool = isToolItem(blockId);
     // Tools don't stack — always go to empty slot
     if (!tool) {

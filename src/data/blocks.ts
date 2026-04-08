@@ -25,6 +25,8 @@ export interface BlockDefinition {
   breakTime: number;
   /** Block ID dropped when broken. */
   dropId: number;
+  /** Tool type required for the block to drop an item. If unset, drops with any tool or fist. */
+  requiresTool?: "pickaxe" | "axe" | "shovel" | "sword";
   /** Hunger points restored when eaten (food items only). */
   hungerRestore?: number;
 }
@@ -83,7 +85,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     name: "Stone",
     solid: true, transparent: false, breakable: true,
     textures: { top: "stone", bottom: "stone", side: "stone" },
-    special: "none", breakTime: 1.5, dropId: BLOCK_ID.STONE,
+    special: "none", breakTime: 1.5, dropId: BLOCK_ID.STONE, requiresTool: "pickaxe",
   },
   {
     id: BLOCK_ID.SAND,
@@ -104,14 +106,14 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     name: "Leaves",
     solid: true, transparent: true, breakable: true,
     textures: { top: "leaves", bottom: "leaves", side: "leaves" },
-    special: "none", breakTime: 0.2, dropId: BLOCK_ID.LEAVES,
+    special: "none", breakTime: 0.2, dropId: BLOCK_ID.LEAVES, requiresTool: "axe",
   },
   {
     id: BLOCK_ID.CRYSTAL,
     name: "Crystal",
     solid: true, transparent: true, breakable: true,
     textures: { top: "crystal_shard", bottom: "crystal_shard", side: "crystal_shard" },
-    special: "crystal_shard", breakTime: 3.0, dropId: BLOCK_ID.CRYSTAL,
+    special: "crystal_shard", breakTime: 3.0, dropId: BLOCK_ID.CRYSTAL, requiresTool: "pickaxe",
   },
   {
     id: BLOCK_ID.RAW_PORK,

@@ -10,50 +10,7 @@ import {
 import { BLOCK_ID } from "@data/blocks";
 import { getToolDef } from "@data/items";
 import { findRecipe3x3 } from "@systems/crafting/recipes";
-import { ItemIcon, DurabilityBar } from "@ui/ItemIcon";
-
-function Slot({
-  item,
-  onClick,
-  size = 44,
-  highlight = false,
-}: {
-  item: { blockId: number; count: number; durability?: number };
-  onClick?: () => void;
-  size?: number;
-  highlight?: boolean;
-}) {
-  const hasItem = item.count > 0 && item.blockId !== BLOCK_ID.AIR;
-  const toolDef = hasItem ? getToolDef(item.blockId) : null;
-  return (
-    <div
-      onClick={onClick}
-      className="relative flex items-center justify-center cursor-pointer select-none"
-      style={{
-        width: size,
-        height: size,
-        background: highlight ? "#c6c6c6" : "#8b8b8b",
-        border: highlight ? "2px solid #fff" : "2px solid #373737",
-        boxShadow: highlight
-          ? "inset 2px 2px 0 #fafafa, inset -2px -2px 0 #aaa"
-          : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
-      }}
-    >
-      {hasItem && <ItemIcon blockId={item.blockId} size={size} />}
-      {hasItem && item.count > 1 && (
-        <span
-          className="absolute bottom-0 right-0.5 text-[12px] font-mono font-bold text-white"
-          style={{ textShadow: "1px 1px 0 #000" }}
-        >
-          {item.count}
-        </span>
-      )}
-      {hasItem && toolDef && item.durability !== undefined && (
-        <DurabilityBar durability={item.durability} maxDurability={toolDef.durability} width={size} />
-      )}
-    </div>
-  );
-}
+import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
 
 export function CraftingTableUI() {
   const tableOpen = useInventoryStore((s) => s.tableOpen);
@@ -83,16 +40,16 @@ export function CraftingTableUI() {
     const cursor = invStore.cursorItem;
 
     if (cursor.count === 0 && slot.count > 0) {
-      invStore.setCursorItem(slot.blockId, slot.count);
+      invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       invStore.setTableSlot(index, 0, 0);
     } else if (cursor.count > 0 && slot.count === 0) {
       invStore.setTableSlot(index, cursor.blockId, 1);
       if (cursor.count === 1) invStore.clearCursor();
-      else invStore.setCursorItem(cursor.blockId, cursor.count - 1);
+      else invStore.setCursorItem(cursor.blockId, cursor.count - 1, cursor.durability);
     } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId === slot.blockId) {
       invStore.setTableSlot(index, slot.blockId, slot.count + 1);
       if (cursor.count === 1) invStore.clearCursor();
-      else invStore.setCursorItem(cursor.blockId, cursor.count - 1);
+      else invStore.setCursorItem(cursor.blockId, cursor.count - 1, cursor.durability);
     }
   }, []);
 
@@ -103,17 +60,17 @@ export function CraftingTableUI() {
     const cursor = invStore.cursorItem;
 
     if (cursor.count === 0 && slot.count > 0) {
-      invStore.setCursorItem(slot.blockId, slot.count);
+      invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       const newSlots = [...store.slots];
       newSlots[index] = { blockId: BLOCK_ID.AIR, count: 0 };
       useHotbarStore.setState({ slots: newSlots });
     } else if (cursor.count > 0 && slot.count === 0) {
       const newSlots = [...store.slots];
-      newSlots[index] = { blockId: cursor.blockId, count: cursor.count };
+      newSlots[index] = { blockId: cursor.blockId, count: cursor.count, durability: cursor.durability };
       useHotbarStore.setState({ slots: newSlots });
       invStore.clearCursor();
     } else if (cursor.count > 0 && slot.count > 0) {
-      if (cursor.blockId === slot.blockId) {
+      if (cursor.blockId === slot.blockId && !getToolDef(cursor.blockId)) {
         const total = slot.count + cursor.count;
         const fit = Math.min(total, 99);
         const leftover = total - fit;
@@ -124,9 +81,9 @@ export function CraftingTableUI() {
         else invStore.clearCursor();
       } else {
         const newSlots = [...store.slots];
-        newSlots[index] = { blockId: cursor.blockId, count: cursor.count };
+        newSlots[index] = { blockId: cursor.blockId, count: cursor.count, durability: cursor.durability };
         useHotbarStore.setState({ slots: newSlots });
-        invStore.setCursorItem(slot.blockId, slot.count);
+        invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       }
     }
   }, []);
@@ -141,12 +98,13 @@ export function CraftingTableUI() {
 
     const cursor = invStore.cursorItem;
     const isTool = !!getToolDef(recipe.result);
+    const craftDur = getToolDef(recipe.result)?.durability;
     if (cursor.count === 0) {
-      invStore.setCursorItem(recipe.result, recipe.count);
+      invStore.setCursorItem(recipe.result, recipe.count, craftDur);
     } else if (!isTool && cursor.blockId === recipe.result && cursor.count + recipe.count <= 64) {
       invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
     } else {
-      return;
+      useHotbarStore.getState().addItem(recipe.result);
     }
     useInventoryStore.setState({ tableGrid: newGrid });
   }, [recipe]);
@@ -176,7 +134,7 @@ export function CraftingTableUI() {
         <div className="flex items-center gap-5">
           <div className="grid grid-cols-3 gap-1">
             {tableGrid.map((slot, i) => (
-              <Slot
+              <InventorySlot
                 key={`tbl-${i}`}
                 item={slot}
                 onClick={() => handleGridClick(i)}
@@ -185,7 +143,7 @@ export function CraftingTableUI() {
             ))}
           </div>
           <div className="text-3xl text-[#606060] font-bold select-none">→</div>
-          <Slot
+          <InventorySlot
             item={
               recipe
                 ? { blockId: recipe.result, count: recipe.count }
@@ -212,7 +170,7 @@ export function CraftingTableUI() {
         {/* Main inventory: 3 rows x 9 columns */}
         <div className="grid grid-cols-9 gap-1">
           {mainSlots.map((slot, i) => (
-            <Slot
+            <InventorySlot
               key={`inv-${i}`}
               item={slot}
               onClick={() => handleSlotClick(HOTBAR_SLOTS + i)}
@@ -227,7 +185,7 @@ export function CraftingTableUI() {
         {/* Hotbar */}
         <div className="grid grid-cols-9 gap-1">
           {hotbarSlots.map((slot, i) => (
-            <Slot
+            <InventorySlot
               key={`hot-${i}`}
               item={slot}
               onClick={() => handleSlotClick(i)}
