@@ -275,6 +275,11 @@ export class Engine {
   respawn(): void {
     if (!this.player) return;
 
+    // Infinite: ensure spawn chunks are loaded before respawning
+    if (this.worldType === "infinite" && this.chunkManager) {
+      this.chunkManager.generateSpawnArea(SPAWN.x, SPAWN.z);
+    }
+
     // Check if default spawn is safe (has solid ground below)
     let spawnY = this.findSafeSpawnY(SPAWN.x, SPAWN.z);
 

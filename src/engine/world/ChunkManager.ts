@@ -359,15 +359,20 @@ export class ChunkManager {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
     if (!chunk) {
+      if (this.worldType === "infinite") {
+        // Unloaded chunks: use noise-estimated surface to prevent falling through
+        const surfaceY = this.terrainGen.getSurfaceHeight(wx, wz);
+        return wy <= surfaceY ? 3 : 0; // STONE below surface, AIR above
+      }
       // Finite worlds: barrier walls at edges
-      if (this.worldType !== "infinite" && this.worldType !== "island") {
+      if (this.worldType !== "island") {
         const worldBlocks = this.sizeChunks * CHUNK_SIZE;
         if (wx < 0 || wx >= worldBlocks || wz < 0 || wz >= worldBlocks) {
           return wy >= 0 ? 3 : 0;
         }
         if (wy < 0) return 3;
       }
-      return 0; // AIR for unloaded chunks (infinite) or out-of-bounds (island)
+      return 0;
     }
     const { lx, ly, lz } = worldToLocal(wx, wy, wz);
     return chunk.getBlock(lx, ly, lz);
