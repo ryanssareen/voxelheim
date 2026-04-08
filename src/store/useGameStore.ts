@@ -37,12 +37,55 @@ interface GameState {
 }
 
 const DEATH_MESSAGES: Record<DeathCause, string[]> = {
-  void: ["Player left the confines of this world", "Player fell out of the world", "Player discovered the void"],
-  fall: ["Player fell from a high place", "Player hit the ground too hard", "Player didn't bounce"],
-  zombie: ["Player was slain by Zombie", "Player was eaten by Zombie"],
-  skeleton: ["Player was shot by Skeleton", "Player was sniped by Skeleton"],
-  creeper: ["Player was blown up by Creeper", "Player hugged a Creeper"],
-  starvation: ["Player starved to death", "Player forgot to eat"],
+  void: [
+    "Player left the confines of this world",
+    "Player fell out of the world",
+    "Player discovered the void",
+    "Player thought Terraria had no fall damage",
+    "Player wanted to see what was under the map",
+    "Player tried to speedrun to the backrooms",
+  ],
+  fall: [
+    "Player fell from a high place",
+    "Player hit the ground too hard",
+    "Player didn't bounce",
+    "Player thought gravity was a myth",
+    "Player believed they could fly",
+    "Player forgot this isn't creative mode",
+    "Player tested the fall damage. It works.",
+    "Player tried to MLG water bucket... without the water",
+    "Player's legs disagreed with the landing",
+    "Player discovered that voxels are not soft",
+  ],
+  zombie: [
+    "Player was slain by Zombie",
+    "Player was eaten by Zombie",
+    "Player tried to reason with a Zombie",
+    "Player forgot Zombies don't accept apologies",
+    "Player thought Zombies just wanted a hug",
+  ],
+  skeleton: [
+    "Player was shot by Skeleton",
+    "Player was sniped by Skeleton",
+    "Player brought fists to a bow fight",
+    "Player thought they could dodge arrows",
+    "Player forgot to strafe",
+  ],
+  creeper: [
+    "Player was blown up by Creeper",
+    "Player hugged a Creeper",
+    "Player heard 'ssssss' and chose to investigate",
+    "Player thought Creepers were just misunderstood",
+    "Player learned what that hissing sound meant",
+    "Player and Creeper had an explosive friendship",
+  ],
+  starvation: [
+    "Player starved to death",
+    "Player forgot to eat",
+    "Player was on an involuntary diet",
+    "Player thought hunger was just a suggestion",
+    "Player's meal prep game was nonexistent",
+  ],
 };
 
 function getDeathMessage(cause: DeathCause): string {

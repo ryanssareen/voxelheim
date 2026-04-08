@@ -1,7 +1,8 @@
 import { Chunk } from "@engine/world/Chunk";
 import { BLOCK_ID } from "@data/blocks";
-import { CHUNK_SIZE, SEA_LEVEL } from "@engine/world/constants";
+import { CHUNK_SIZE, SEA_LEVEL, CRYSTAL_MIN_DEPTH } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
+import type { TerrainGenerator } from "@engine/generation/TerrainGenerator";
 
 /** Simple deterministic string hash producing a 32-bit integer. */
 function hashString(s: string): number {
@@ -115,6 +116,100 @@ export class StructureGenerator {
       }
 
       treeIndex++;
+    }
+  }
+
+  /**
+   * Per-chunk decoration for infinite worlds.
+   * Checks a 2-block border around the chunk to handle tree canopy overlap.
+   * Only places blocks that fall within this chunk's bounds.
+   */
+  decorateChunk(
+    cx: number,
+    cy: number,
+    cz: number,
+    terrainGen: TerrainGenerator,
+    chunk: Chunk
+  ): void {
+    const chunkMinX = cx * CHUNK_SIZE;
+    const chunkMinZ = cz * CHUNK_SIZE;
+    const chunkMinY = cy * CHUNK_SIZE;
+    const chunkMaxY = chunkMinY + CHUNK_SIZE - 1;
+
+    // Check columns in chunk + 2-block border (canopy overhang)
+    for (let wx = chunkMinX - 2; wx < chunkMinX + CHUNK_SIZE + 2; wx++) {
+      for (let wz = chunkMinZ - 2; wz < chunkMinZ + CHUNK_SIZE + 2; wz++) {
+        const surfaceY = terrainGen.getSurfaceHeight(wx, wz);
+        if (surfaceY <= SEA_LEVEL + 2) continue;
+
+        // Same hash-based 3% tree check as placeTrees
+        const chance = mixHash(wx + this.seedHash, wz) / 4294967296;
+        if (chance > 0.03) continue;
+
+        const trunkRand = mixHash(wx + this.seedHash + 1000, wz + 1000) / 4294967296;
+        const trunkHeight = 4 + Math.floor(trunkRand * 3);
+
+        // Place trunk blocks that fall in this chunk
+        for (let ty = 1; ty <= trunkHeight; ty++) {
+          const by = surfaceY + ty;
+          if (by < chunkMinY || by > chunkMaxY) continue;
+          const tc = worldToChunk(wx, by, wz);
+          if (tc.cx !== cx || tc.cz !== cz) continue;
+          const local = worldToLocal(wx, by, wz);
+          chunk.setBlock(local.lx, local.ly, local.lz, BLOCK_ID.LOG);
+        }
+
+        // Place canopy blocks that fall in this chunk
+        const canopyBase = surfaceY + trunkHeight + 1;
+        let treeIndex = 0;
+        for (let ly = 0; ly < 2; ly++) {
+          for (let lx = -1; lx <= 1; lx++) {
+            for (let lz = -1; lz <= 1; lz++) {
+              if (Math.abs(lx) === 1 && Math.abs(lz) === 1) {
+                const cornerRand =
+                  mixHash(wx + lx * 100 + ly * 200 + this.seedHash, wz + lz * 100 + treeIndex) / 4294967296;
+                if (cornerRand < 0.5) continue;
+              }
+              const bx = wx + lx;
+              const by = canopyBase + ly;
+              const bz = wz + lz;
+              if (by < chunkMinY || by > chunkMaxY) continue;
+              const tc = worldToChunk(bx, by, bz);
+              if (tc.cx !== cx || tc.cy !== cy || tc.cz !== cz) continue;
+              const local = worldToLocal(bx, by, bz);
+              chunk.setBlock(local.lx, local.ly, local.lz, BLOCK_ID.LEAVES);
+            }
+          }
+        }
+        treeIndex++;
+      }
+    }
+
+    // Per-chunk crystal placement for infinite worlds
+    const crystalCount = Math.abs(mixHash(cx + this.seedHash, cz)) % 3;
+    if (crystalCount === 0) return;
+
+    const candidates: Array<{ lx: number; ly: number; lz: number }> = [];
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let y = 0; y < CHUNK_SIZE; y++) {
+        for (let z = 0; z < CHUNK_SIZE; z++) {
+          if (chunk.getBlock(x, y, z) !== BLOCK_ID.STONE) continue;
+          const wy = cy * CHUNK_SIZE + y;
+          const wx2 = cx * CHUNK_SIZE + x;
+          const wz2 = cz * CHUNK_SIZE + z;
+          const surface = terrainGen.getSurfaceHeight(wx2, wz2);
+          if (wy > surface - CRYSTAL_MIN_DEPTH) continue;
+          candidates.push({ lx: x, ly: y, lz: z });
+        }
+      }
+    }
+
+    const count = Math.min(crystalCount, candidates.length);
+    for (let i = 0; i < count; i++) {
+      const r = Math.abs(mixHash(cx * 1000 + i, cz * 2000 + this.seedHash)) % (candidates.length - i);
+      const j = i + r;
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      chunk.setBlock(candidates[i].lx, candidates[i].ly, candidates[i].lz, BLOCK_ID.CRYSTAL);
     }
   }
 }

@@ -6,10 +6,12 @@ interface SettingsState {
   musicVolume: number;
   musicEnabled: boolean;
   renderDistance: number;
+  simulationDistance: number;
   fov: number;
   setMusicVolume: (v: number) => void;
   setMusicEnabled: (e: boolean) => void;
   setRenderDistance: (d: number) => void;
+  setSimulationDistance: (d: number) => void;
   setFov: (f: number) => void;
 }
 
@@ -30,6 +32,7 @@ function persistSettings(state: SettingsState) {
         musicVolume: state.musicVolume,
         musicEnabled: state.musicEnabled,
         renderDistance: state.renderDistance,
+        simulationDistance: state.simulationDistance,
         fov: state.fov,
       })
     );
@@ -40,6 +43,7 @@ const defaults = {
   musicVolume: 50,
   musicEnabled: true,
   renderDistance: 4,
+  simulationDistance: 4,
   fov: 75,
 };
 
@@ -49,6 +53,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
     musicVolume: saved.musicVolume ?? defaults.musicVolume,
     musicEnabled: saved.musicEnabled ?? defaults.musicEnabled,
     renderDistance: saved.renderDistance ?? defaults.renderDistance,
+    simulationDistance: saved.simulationDistance ?? defaults.simulationDistance,
     fov: saved.fov ?? defaults.fov,
     setMusicVolume: (v: number) => {
       set({ musicVolume: Math.max(0, Math.min(100, v)) });
@@ -59,7 +64,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       persistSettings(get());
     },
     setRenderDistance: (d: number) => {
-      set({ renderDistance: Math.max(2, Math.min(8, d)) });
+      set({ renderDistance: Math.max(2, Math.min(16, d)) });
+      persistSettings(get());
+    },
+    setSimulationDistance: (d: number) => {
+      set({ simulationDistance: Math.max(2, Math.min(8, d)) });
       persistSettings(get());
     },
     setFov: (f: number) => {

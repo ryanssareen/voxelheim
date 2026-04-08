@@ -72,7 +72,7 @@ function SliderOption({
 }
 
 function OptionsModal({ onClose }: { onClose: () => void }) {
-  const { musicEnabled, musicVolume, renderDistance, fov, setMusicEnabled, setMusicVolume, setRenderDistance, setFov } =
+  const { musicEnabled, musicVolume, renderDistance, simulationDistance, fov, setMusicEnabled, setMusicVolume, setRenderDistance, setSimulationDistance, setFov } =
     useSettingsStore();
 
   return (
@@ -105,9 +105,17 @@ function OptionsModal({ onClose }: { onClose: () => void }) {
             label="Render Distance"
             value={renderDistance}
             min={2}
-            max={8}
+            max={16}
             displayValue={`${renderDistance} chunks`}
             onChange={setRenderDistance}
+          />
+          <SliderOption
+            label="Simulation Distance"
+            value={simulationDistance}
+            min={2}
+            max={8}
+            displayValue={`${simulationDistance} chunks`}
+            onChange={setSimulationDistance}
           />
           <SliderOption
             label="FOV"

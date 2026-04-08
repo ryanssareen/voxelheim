@@ -13,6 +13,7 @@ interface ItemDrop {
   age: number;
   bobOffset: number;
   settled: boolean;
+  pickupDelay: number;
 }
 
 const PICKUP_DISTANCE = 1.5;
@@ -43,8 +44,8 @@ export class ItemDropManager {
     this.getBlock = fn;
   }
 
-  /** Spawn a floating item at a block position. */
-  spawnDrop(blockId: number, x: number, y: number, z: number): void {
+  /** Spawn a floating item at a block position. pickupDelay controls how long before it can be collected. */
+  spawnDrop(blockId: number, x: number, y: number, z: number, pickupDelay = 1.5): void {
     const color = DROP_COLORS[blockId] ?? 0xffffff;
 
     const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
@@ -75,6 +76,7 @@ export class ItemDropManager {
       age: 0,
       bobOffset: Math.random() * Math.PI * 2,
       settled: false,
+      pickupDelay,
     });
   }
 
@@ -144,7 +146,7 @@ export class ItemDropManager {
       const dz = playerPos.z - drop.position.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      if (drop.age > 0.3) {
+      if (drop.age > drop.pickupDelay) {
         // Magnet: pull drops toward player when close
         if (dist < MAGNET_DISTANCE && dist > PICKUP_DISTANCE) {
           const pull = MAGNET_SPEED * dt / dist;

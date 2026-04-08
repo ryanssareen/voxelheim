@@ -31,6 +31,7 @@ import { getToolDef } from "@data/items";
 
 const MOUSE_SENSITIVITY = 0.002;
 const SPAWN = { x: 32, y: 50, z: 32 };
+const INFINITE_SPAWN = { x: 0, y: 50, z: 0 };
 const VOID_Y = -10;
 const AUTOSAVE_INTERVAL = 15_000; // Save every 15 seconds
 
@@ -70,6 +71,7 @@ export class Engine {
   private fallStartY = 0;
   private wasFalling = false;
   private frameCount = 0;
+  private worldType: WorldType = "island";
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -108,15 +110,23 @@ export class Engine {
       }
     }
 
+    this.worldType = worldType;
+
     // Adjust spawn based on world type
     if (worldType === "infinite") {
-      SPAWN.x = 64; SPAWN.y = 50; SPAWN.z = 64;
+      SPAWN.x = INFINITE_SPAWN.x; SPAWN.y = INFINITE_SPAWN.y; SPAWN.z = INFINITE_SPAWN.z;
     } else if (worldType === "flat") {
       SPAWN.x = 32; SPAWN.y = 35; SPAWN.z = 32;
     }
 
     this.chunkManager = new ChunkManager(this.renderer, this.seed, worldType);
-    this.chunkManager.update(0, 0, 0);
+
+    if (worldType === "infinite") {
+      // Synchronously generate spawn area before player physics
+      this.chunkManager.generateSpawnArea(SPAWN.x, SPAWN.z);
+    } else {
+      this.chunkManager.update(0, 0, 0);
+    }
 
     // Load saved chunk modifications
     if (worldId) {
@@ -205,6 +215,12 @@ export class Engine {
 
     this.renderer.resize(this.canvas.clientWidth, this.canvas.clientHeight);
 
+    // Distance fog for infinite worlds
+    if (worldType === "infinite") {
+      const settings = useSettingsStore.getState();
+      this.renderer.setupFog(settings.renderDistance);
+    }
+
     // Ambient music
     this.music = new MusicManager();
     this.music.init();
@@ -237,6 +253,7 @@ export class Engine {
       hotbarSlots: useHotbarStore.getState().slots,
       health: useGameStore.getState().health,
       hunger: useGameStore.getState().hunger,
+      worldType: this.worldType,
     };
 
     await saveWorld(meta, this.chunkManager.getModifiedChunks());
@@ -245,13 +262,13 @@ export class Engine {
   /** Find the highest solid block at (x, z) and return spawn Y above it. */
   private findSafeSpawnY(x: number, z: number): number {
     if (!this.chunkManager) return SPAWN.y;
-    // Scan from top of world downward to find first solid block
-    for (let y = 63; y >= 0; y--) {
+    const maxY = this.worldType === "infinite" ? 127 : 63;
+    for (let y = maxY; y >= 0; y--) {
       if (this.registry.isSolid(this.chunkManager.getBlock(Math.floor(x), y, Math.floor(z)))) {
-        return y + 1; // Spawn on top of this block
+        return y + 1;
       }
     }
-    return SPAWN.y; // Fallback if no solid found
+    return SPAWN.y;
   }
 
   /** Respawn after death. Clears inventory. Finds safe spawn if original is void. */
@@ -314,14 +331,26 @@ export class Engine {
     if (dt === 0) return;
 
     this.frameCount++;
-    if (this.frameCount % 60 === 0 && this.music) {
+    if (this.frameCount % 60 === 0) {
       const settings = useSettingsStore.getState();
-      this.music.setEnabled(settings.musicEnabled);
-      this.music.setVolume(settings.musicVolume);
+      if (this.music) {
+        this.music.setEnabled(settings.musicEnabled);
+        this.music.setVolume(settings.musicVolume);
+      }
+      if (this.worldType === "infinite" && this.renderer) {
+        this.renderer.updateFogDistance(settings.renderDistance);
+      }
     }
 
     const state = useGameStore.getState();
     if (state.isPaused || state.isDead) return;
+
+    // Infinite world: stream chunks around player each frame
+    if (this.worldType === "infinite" && this.player && this.chunkManager) {
+      this.chunkManager.update(this.player.position.x, this.player.position.y, this.player.position.z);
+      this.chunkManager.processGenerationQueue();
+      this.chunkManager.processMeshQueue();
+    }
 
     // E key: toggle inventory / close crafting table (single press)
     const eDown = this.input.isKeyDown("KeyE");
@@ -503,6 +532,9 @@ export class Engine {
     this.dayNight!.update(dt);
     const scene = this.renderer!.getScene();
     (scene.background as THREE.Color).copy(this.dayNight!.getSkyColor());
+    if (scene.fog) {
+      (scene.fog as THREE.Fog).color.copy(this.dayNight!.getSkyColor());
+    }
     if (this.ambientLight) this.ambientLight.intensity = this.dayNight!.getAmbientIntensity();
     if (this.directionalLight) {
       this.directionalLight.intensity = this.dayNight!.getDirectionalIntensity();

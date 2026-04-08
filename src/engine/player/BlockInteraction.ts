@@ -133,7 +133,7 @@ export class BlockInteraction {
           const needsTool = blockDef.requiresTool;
           const hasRightTool = !needsTool || (toolDef && toolDef.toolType === needsTool);
           if (hasRightTool) {
-            this.itemDrops.spawnDrop(blockDef.dropId, bp.x, bp.y, bp.z);
+            this.itemDrops.spawnDrop(blockDef.dropId, bp.x, bp.y, bp.z, 0.5);
 
             if (target.blockId === BLOCK_ID.CRYSTAL) {
               useGameStore.getState().collectShard();

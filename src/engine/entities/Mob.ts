@@ -48,6 +48,7 @@ export class Mob {
   private originalColors: Map<THREE.Mesh, number> = new Map();
   public attackCooldown = 0;
   public deathTimer = -1;
+  public worldBounds: { min: number; max: number; center: number } | null = null;
   private healthBarSprite: THREE.Sprite | null = null;
   private healthBarCanvas: HTMLCanvasElement | null = null;
   private healthBarVisible = false;
@@ -263,11 +264,14 @@ export class Mob {
       this.velocity.x = -Math.sin(this.yaw) * this.config.speed;
       this.velocity.z = -Math.cos(this.yaw) * this.config.speed;
 
-      // Stay within island bounds — turn toward center
-      if (this.position.x < 4 || this.position.x > 60 ||
-          this.position.z < 4 || this.position.z > 60) {
-        this.aiTargetYaw = Math.atan2(32 - this.position.x, 32 - this.position.z);
-        this.aiTimer = 1 + Math.random() * 2;
+      // Stay within world bounds — turn toward center
+      if (this.worldBounds) {
+        const b = this.worldBounds;
+        if (this.position.x < b.min || this.position.x > b.max ||
+            this.position.z < b.min || this.position.z > b.max) {
+          this.aiTargetYaw = Math.atan2(b.center - this.position.x, b.center - this.position.z);
+          this.aiTimer = 1 + Math.random() * 2;
+        }
       }
     } else {
       this.velocity.x = 0;
@@ -340,11 +344,14 @@ export class Mob {
         this.velocity.x = -Math.sin(this.yaw) * this.config.speed * 0.5;
         this.velocity.z = -Math.cos(this.yaw) * this.config.speed * 0.5;
 
-        // Stay within island bounds
-        if (this.position.x < 4 || this.position.x > 60 ||
-            this.position.z < 4 || this.position.z > 60) {
-          this.aiTargetYaw = Math.atan2(32 - this.position.x, 32 - this.position.z);
-          this.aiTimer = 1 + Math.random() * 2;
+        // Stay within world bounds
+        if (this.worldBounds) {
+          const b = this.worldBounds;
+          if (this.position.x < b.min || this.position.x > b.max ||
+              this.position.z < b.min || this.position.z > b.max) {
+            this.aiTargetYaw = Math.atan2(b.center - this.position.x, b.center - this.position.z);
+            this.aiTimer = 1 + Math.random() * 2;
+          }
         }
       } else {
         this.velocity.x = 0;

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { TextureAtlas } from "@engine/renderer/TextureAtlas";
+import { CHUNK_SIZE } from "@engine/world/constants";
 import type { ChunkMeshData } from "@engine/renderer/ChunkMeshBuilder";
 
 /**
@@ -19,9 +20,8 @@ export class Renderer {
     this.scene.background = new THREE.Color(0x87ceeb);
 
     this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 300);
-    this.scene.add(this.camera); // Must be in scene for camera children (hand) to render
+    this.scene.add(this.camera);
 
-    // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambient);
 
@@ -55,6 +55,27 @@ export class Renderer {
   /** Returns the scene for adding custom objects. */
   getScene(): THREE.Scene {
     return this.scene;
+  }
+
+  /** Enables distance fog for infinite worlds and updates the camera far plane. */
+  setupFog(renderDistance: number): void {
+    const farDist = renderDistance * CHUNK_SIZE;
+    const nearDist = farDist * 0.65;
+    const bgColor = this.scene.background as THREE.Color;
+    this.scene.fog = new THREE.Fog(bgColor.clone(), nearDist, farDist);
+    this.camera.far = farDist + 32;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /** Updates fog distances when render distance changes. */
+  updateFogDistance(renderDistance: number): void {
+    if (!this.scene.fog) return;
+    const farDist = renderDistance * CHUNK_SIZE;
+    const nearDist = farDist * 0.65;
+    (this.scene.fog as THREE.Fog).near = nearDist;
+    (this.scene.fog as THREE.Fog).far = farDist;
+    this.camera.far = farDist + 32;
+    this.camera.updateProjectionMatrix();
   }
 
   /** Creates a Three.js Mesh from raw mesh data and adds it to the scene. */

@@ -38,6 +38,30 @@ export class TerrainGenerator {
     this.noise = new SeededNoise(hashString(seed));
   }
 
+  /** Compute the surface Y height for a single world column. Pure function of coords + noise. */
+  getSurfaceHeight(wx: number, wz: number): number {
+    if (this.worldType === "flat") return 30;
+
+    if (this.worldType === "infinite") {
+      const baseHeight = 30;
+      const noiseValue = this.noise.octaveNoise2D(wx, wz, 5, 0.5, 2.0, 40);
+      return Math.floor(baseHeight + noiseValue * 14);
+    }
+
+    // island
+    const baseHeight = 30;
+    const noiseValue = this.noise.octaveNoise2D(wx, wz, 4, 0.5, 2.0, 50);
+    let surfaceY = Math.floor(baseHeight + noiseValue * 14);
+    const dx = wx - 32;
+    const dz = wz - 32;
+    const distFromCenter = Math.sqrt(dx * dx + dz * dz);
+    const normalizedDist = clamp(distFromCenter / 38, 0, 1);
+    const falloff = 1 - normalizedDist * normalizedDist * normalizedDist;
+    surfaceY = Math.floor(surfaceY * falloff);
+    if (surfaceY < 1) surfaceY = 0;
+    return surfaceY;
+  }
+
   /**
    * Generates a single chunk and populates it with terrain blocks.
    * Also records surface heights into the provided surfaceMap.
