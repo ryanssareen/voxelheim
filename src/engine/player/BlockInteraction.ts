@@ -2,6 +2,7 @@ import { ChunkManager } from "@engine/world/ChunkManager";
 import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
+import { getToolDef } from "@data/items";
 import { useGameStore } from "@store/useGameStore";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useInventoryStore } from "@store/useInventoryStore";
@@ -101,6 +102,15 @@ export class BlockInteraction {
       const blockDef = this.registry.getBlock(target.blockId!);
 
       if (blockDef && blockDef.breakable && blockDef.breakTime > 0) {
+        // Tool speed multiplier
+        const hotbar = useHotbarStore.getState();
+        const heldId = hotbar.getSelectedBlockId();
+        const toolDef = getToolDef(heldId);
+        let speedMul = 1;
+        if (toolDef && toolDef.effectiveAgainst.includes(target.blockId!)) {
+          speedMul = toolDef.miningSpeedMultiplier;
+        }
+
         // Check if still targeting the same block
         if (
           this.breakingPos &&
@@ -108,25 +118,25 @@ export class BlockInteraction {
           this.breakingPos.y === bp.y &&
           this.breakingPos.z === bp.z
         ) {
-          // Continue breaking
-          this.breakProgress += dt / blockDef.breakTime;
+          this.breakProgress += (dt * speedMul) / blockDef.breakTime;
         } else {
-          // New block — start fresh
           this.breakingPos = { x: bp.x, y: bp.y, z: bp.z };
-          this.breakProgress = dt / blockDef.breakTime;
+          this.breakProgress = (dt * speedMul) / blockDef.breakTime;
           this.breakBlockId = target.blockId!;
         }
 
         // Block broken!
         if (this.breakProgress >= 1.0) {
           this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
-
-          // Spawn floating item drop
           this.itemDrops.spawnDrop(blockDef.dropId, bp.x, bp.y, bp.z);
 
-          // Crystal shard collection
           if (target.blockId === BLOCK_ID.CRYSTAL) {
             useGameStore.getState().collectShard();
+          }
+
+          // Damage the held tool
+          if (toolDef) {
+            hotbar.damageSelectedTool();
           }
 
           this.breakingPos = null;

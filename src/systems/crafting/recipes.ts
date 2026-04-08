@@ -57,12 +57,12 @@ export const RECIPES: CraftingRecipe[] = [
     count: 1,
     name: "Crafting Table",
   },
-  // 2 planks → 4 sticks (placeholder — gives leaves for now)
+  // 2 planks → 4 sticks
   {
     grid: [BLOCK_ID.PLANKS, 0, BLOCK_ID.PLANKS, 0],
-    result: BLOCK_ID.LEAVES,
+    result: BLOCK_ID.STICK,
     count: 4,
-    name: "Leaves",
+    name: "Sticks",
   },
   // 2 sand + 2 stone → 2 crystal (rare synthesis)
   {
@@ -131,6 +131,7 @@ const G = BLOCK_ID.GRASS;
 const C = BLOCK_ID.CRYSTAL;
 const SN = BLOCK_ID.SAND;
 const LV = BLOCK_ID.LEAVES;
+const ST = BLOCK_ID.STICK;
 
 /** All 3x3 crafting table recipes. */
 export const RECIPES_3x3: CraftingRecipe3x3[] = [
@@ -203,6 +204,62 @@ export const RECIPES_3x3: CraftingRecipe3x3[] = [
     result: BLOCK_ID.PLANKS,
     count: 12,
     name: "Planks (Column Mill)",
+  },
+  // Wooden Pickaxe
+  {
+    grid: [P, P, P, _, ST, _, _, ST, _],
+    result: BLOCK_ID.WOODEN_PICKAXE,
+    count: 1,
+    name: "Wooden Pickaxe",
+  },
+  // Wooden Axe
+  {
+    grid: [P, P, _, P, ST, _, _, ST, _],
+    result: BLOCK_ID.WOODEN_AXE,
+    count: 1,
+    name: "Wooden Axe",
+  },
+  // Wooden Shovel
+  {
+    grid: [_, P, _, _, ST, _, _, ST, _],
+    result: BLOCK_ID.WOODEN_SHOVEL,
+    count: 1,
+    name: "Wooden Shovel",
+  },
+  // Wooden Sword
+  {
+    grid: [_, P, _, _, P, _, _, ST, _],
+    result: BLOCK_ID.WOODEN_SWORD,
+    count: 1,
+    name: "Wooden Sword",
+  },
+  // Stone Pickaxe
+  {
+    grid: [S, S, S, _, ST, _, _, ST, _],
+    result: BLOCK_ID.STONE_PICKAXE,
+    count: 1,
+    name: "Stone Pickaxe",
+  },
+  // Stone Axe
+  {
+    grid: [S, S, _, S, ST, _, _, ST, _],
+    result: BLOCK_ID.STONE_AXE,
+    count: 1,
+    name: "Stone Axe",
+  },
+  // Stone Shovel
+  {
+    grid: [_, S, _, _, ST, _, _, ST, _],
+    result: BLOCK_ID.STONE_SHOVEL,
+    count: 1,
+    name: "Stone Shovel",
+  },
+  // Stone Sword
+  {
+    grid: [_, S, _, _, S, _, _, ST, _],
+    result: BLOCK_ID.STONE_SWORD,
+    count: 1,
+    name: "Stone Sword",
   },
 ];
 

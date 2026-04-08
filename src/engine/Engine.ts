@@ -27,6 +27,7 @@ import {
 } from "@systems/persistence/WorldStorage";
 import type { WorldType } from "@engine/world/constants";
 import { BLOCK_DEFINITIONS } from "@data/blocks";
+import { getToolDef } from "@data/items";
 
 const MOUSE_SENSITIVITY = 0.002;
 const SPAWN = { x: 32, y: 50, z: 32 };
@@ -460,8 +461,13 @@ export class Engine {
     }
 
     if (hitMob && isLeftHeld && this.playerAttackCooldown <= 0) {
-      hitMob.takeDamage(1, { x: this.player!.position.x, z: this.player!.position.z });
+      const toolDef = getToolDef(selectedBlockId);
+      const damage = toolDef ? toolDef.attackDamage : 1;
+      hitMob.takeDamage(damage, { x: this.player!.position.x, z: this.player!.position.z });
       this.playerAttackCooldown = 0.4;
+      if (toolDef) {
+        useHotbarStore.getState().damageSelectedTool();
+      }
     }
 
     // Only break blocks if we didn't hit a mob

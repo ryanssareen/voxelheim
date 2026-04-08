@@ -17,6 +17,15 @@ const DROP_COLORS: Record<number, number> = {
   [BLOCK_ID.RAW_MUTTON]: 0xd4836a,
   [BLOCK_ID.PLANKS]: 0xc8a55a,
   [BLOCK_ID.CRAFTING_TABLE]: 0x9b7653,
+  [BLOCK_ID.STICK]: 0xb8945a,
+  [BLOCK_ID.WOODEN_PICKAXE]: 0xa0783c,
+  [BLOCK_ID.WOODEN_AXE]: 0xa0783c,
+  [BLOCK_ID.WOODEN_SHOVEL]: 0xa0783c,
+  [BLOCK_ID.WOODEN_SWORD]: 0xa0783c,
+  [BLOCK_ID.STONE_PICKAXE]: 0xaaaaaa,
+  [BLOCK_ID.STONE_AXE]: 0xaaaaaa,
+  [BLOCK_ID.STONE_SHOVEL]: 0xaaaaaa,
+  [BLOCK_ID.STONE_SWORD]: 0xaaaaaa,
 };
 
 interface ItemDrop {

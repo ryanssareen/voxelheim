@@ -10,37 +10,9 @@ import {
   type ItemStack,
 } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
+import { getToolDef } from "@data/items";
 import { findRecipe } from "@systems/crafting/recipes";
-
-const BLOCK_COLORS: Record<number, string> = {
-  [BLOCK_ID.GRASS]: "#5cb85c",
-  [BLOCK_ID.DIRT]: "#9b7653",
-  [BLOCK_ID.STONE]: "#aaaaaa",
-  [BLOCK_ID.SAND]: "#ffe082",
-  [BLOCK_ID.LOG]: "#5D4037",
-  [BLOCK_ID.LEAVES]: "#2E7D32",
-  [BLOCK_ID.CRYSTAL]: "#00e5ff",
-  [BLOCK_ID.RAW_PORK]: "#f0a0a0",
-  [BLOCK_ID.RAW_BEEF]: "#c45050",
-  [BLOCK_ID.RAW_MUTTON]: "#d4836a",
-  [BLOCK_ID.PLANKS]: "#c8a55a",
-  [BLOCK_ID.CRAFTING_TABLE]: "#9b7653",
-};
-
-const BLOCK_NAMES: Record<number, string> = {
-  [BLOCK_ID.GRASS]: "Grass",
-  [BLOCK_ID.DIRT]: "Dirt",
-  [BLOCK_ID.STONE]: "Stone",
-  [BLOCK_ID.SAND]: "Sand",
-  [BLOCK_ID.LOG]: "Log",
-  [BLOCK_ID.LEAVES]: "Leaves",
-  [BLOCK_ID.CRYSTAL]: "Crystal",
-  [BLOCK_ID.RAW_PORK]: "Raw Pork",
-  [BLOCK_ID.RAW_BEEF]: "Raw Beef",
-  [BLOCK_ID.RAW_MUTTON]: "Raw Mutton",
-  [BLOCK_ID.PLANKS]: "Planks",
-  [BLOCK_ID.CRAFTING_TABLE]: "Crafting Table",
-};
+import { ItemIcon, DurabilityBar, ITEM_COLORS } from "@ui/ItemIcon";
 
 const ARMOR_LABELS = ["Helmet", "Chest", "Legs", "Boots"];
 
@@ -51,13 +23,14 @@ function ItemSlot({
   highlight = false,
   label,
 }: {
-  item: { blockId: number; count: number };
+  item: { blockId: number; count: number; durability?: number };
   onClick?: () => void;
   size?: number;
   highlight?: boolean;
   label?: string;
 }) {
   const hasItem = item.count > 0 && item.blockId !== BLOCK_ID.AIR;
+  const toolDef = hasItem ? getToolDef(item.blockId) : null;
   return (
     <div
       onClick={onClick}
@@ -72,17 +45,7 @@ function ItemSlot({
           : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
       }}
     >
-      {hasItem && (
-        <div
-          style={{
-            width: size * 0.55,
-            height: size * 0.55,
-            backgroundColor: BLOCK_COLORS[item.blockId] ?? "#888",
-            boxShadow:
-              "inset -2px -2px 0 rgba(0,0,0,0.3), inset 2px 2px 0 rgba(255,255,255,0.15)",
-          }}
-        />
-      )}
+      {hasItem && <ItemIcon blockId={item.blockId} size={size} />}
       {hasItem && item.count > 1 && (
         <span
           className="absolute bottom-0 right-0.5 text-[12px] font-mono font-bold text-white"
@@ -90,6 +53,9 @@ function ItemSlot({
         >
           {item.count}
         </span>
+      )}
+      {hasItem && toolDef && item.durability !== undefined && (
+        <DurabilityBar durability={item.durability} maxDurability={toolDef.durability} width={size} />
       )}
       {label && !hasItem && (
         <span className="text-[10px] text-[#666] font-mono">{label}</span>
@@ -231,9 +197,10 @@ export function InventoryUI() {
     });
 
     const cursor = invStore.cursorItem;
+    const isTool = !!getToolDef(recipe.result);
     if (cursor.count === 0) {
       invStore.setCursorItem(recipe.result, recipe.count);
-    } else if (cursor.blockId === recipe.result && cursor.count + recipe.count <= 64) {
+    } else if (!isTool && cursor.blockId === recipe.result && cursor.count + recipe.count <= 64) {
       invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
     } else {
       useHotbarStore.getState().addItem(recipe.result);
@@ -369,14 +336,7 @@ export function InventoryUI() {
             height: 40,
           }}
         >
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              backgroundColor: BLOCK_COLORS[cursorItem.blockId] ?? "#888",
-              boxShadow: "inset -2px -2px 0 rgba(0,0,0,0.3), inset 2px 2px 0 rgba(255,255,255,0.15), 0 2px 8px rgba(0,0,0,0.5)",
-            }}
-          />
+          <ItemIcon blockId={cursorItem.blockId} size={40} />
           {cursorItem.count > 1 && (
             <span
               className="absolute bottom-0 right-0 text-[11px] font-mono font-bold text-white"

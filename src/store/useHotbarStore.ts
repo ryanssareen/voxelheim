@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { BLOCK_ID } from "@data/blocks";
+import { isToolItem, getToolDef } from "@data/items";
 
 const MAX_STACK = 99;
 const HOTBAR_SLOTS = 9;
@@ -10,6 +11,7 @@ const ARMOR_SLOTS = 4;
 export interface ItemStack {
   blockId: number;
   count: number;
+  durability?: number;
 }
 
 interface HotbarState {
@@ -24,9 +26,11 @@ interface HotbarState {
   scrollUp: () => void;
   scrollDown: () => void;
   getSelectedBlockId: () => number;
+  getSelectedSlot: () => ItemStack;
   getOffhandBlockId: () => number;
   addItem: (blockId: number) => boolean;
   removeSelectedItem: () => number;
+  damageSelectedTool: () => void;
   resetSlots: () => void;
 }
 
@@ -69,6 +73,11 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
     return slot.count > 0 ? slot.blockId : BLOCK_ID.AIR;
   },
 
+  getSelectedSlot: () => {
+    const { slots, selectedIndex } = get();
+    return slots[selectedIndex];
+  },
+
   getOffhandBlockId: () => {
     const { offhand } = get();
     return offhand.count > 0 ? offhand.blockId : BLOCK_ID.AIR;
@@ -76,20 +85,24 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
 
   addItem: (blockId: number) => {
     const { slots } = get();
-    // First: stack in existing matching slot (hotbar first, then inventory)
-    for (let i = 0; i < TOTAL_SLOTS; i++) {
-      if (slots[i].blockId === blockId && slots[i].count < MAX_STACK) {
-        const newSlots = [...slots];
-        newSlots[i] = { blockId, count: slots[i].count + 1 };
-        set({ slots: newSlots });
-        return true;
+    const tool = isToolItem(blockId);
+    // Tools don't stack — always go to empty slot
+    if (!tool) {
+      for (let i = 0; i < TOTAL_SLOTS; i++) {
+        if (slots[i].blockId === blockId && slots[i].count < MAX_STACK) {
+          const newSlots = [...slots];
+          newSlots[i] = { blockId, count: slots[i].count + 1 };
+          set({ slots: newSlots });
+          return true;
+        }
       }
     }
-    // Second: find first empty slot (hotbar first, then inventory)
+    // Find first empty slot
     for (let i = 0; i < TOTAL_SLOTS; i++) {
       if (slots[i].count === 0) {
         const newSlots = [...slots];
-        newSlots[i] = { blockId, count: 1 };
+        const def = getToolDef(blockId);
+        newSlots[i] = { blockId, count: 1, durability: def?.durability };
         set({ slots: newSlots });
         return true;
       }
@@ -110,6 +123,20 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
     }
     set({ slots: newSlots });
     return blockId;
+  },
+
+  damageSelectedTool: () => {
+    const { slots, selectedIndex } = get();
+    const slot = slots[selectedIndex];
+    if (slot.count <= 0 || slot.durability === undefined) return;
+    const newSlots = [...slots];
+    const newDur = slot.durability - 1;
+    if (newDur <= 0) {
+      newSlots[selectedIndex] = { blockId: BLOCK_ID.AIR, count: 0 };
+    } else {
+      newSlots[selectedIndex] = { ...slot, durability: newDur };
+    }
+    set({ slots: newSlots });
   },
 
   resetSlots: () =>

@@ -20,7 +20,7 @@ export interface BlockDefinition {
   /** Texture paths for each face. */
   textures: BlockTextures;
   /** Special behavior tag for gameplay systems. */
-  special: "none" | "crystal_shard" | "food";
+  special: "none" | "crystal_shard" | "food" | "tool";
   /** Seconds to break this block. 0 = instant / unbreakable. */
   breakTime: number;
   /** Block ID dropped when broken. */
@@ -44,6 +44,15 @@ export const BLOCK_ID = {
   RAW_MUTTON: 10,
   PLANKS: 11,
   CRAFTING_TABLE: 12,
+  STICK: 13,
+  WOODEN_PICKAXE: 14,
+  WOODEN_AXE: 15,
+  WOODEN_SHOVEL: 16,
+  WOODEN_SWORD: 17,
+  STONE_PICKAXE: 18,
+  STONE_AXE: 19,
+  STONE_SHOVEL: 20,
+  STONE_SWORD: 21,
 } as const;
 
 /** All block definitions indexed by their ID. */
@@ -141,5 +150,68 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: true, transparent: false, breakable: true,
     textures: { top: "crafting_table_top", bottom: "planks", side: "crafting_table_side" },
     special: "none", breakTime: 1.2, dropId: BLOCK_ID.CRAFTING_TABLE,
+  },
+  {
+    id: BLOCK_ID.STICK,
+    name: "Stick",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.STICK,
+  },
+  {
+    id: BLOCK_ID.WOODEN_PICKAXE,
+    name: "Wooden Pickaxe",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.WOODEN_PICKAXE,
+  },
+  {
+    id: BLOCK_ID.WOODEN_AXE,
+    name: "Wooden Axe",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.WOODEN_AXE,
+  },
+  {
+    id: BLOCK_ID.WOODEN_SHOVEL,
+    name: "Wooden Shovel",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.WOODEN_SHOVEL,
+  },
+  {
+    id: BLOCK_ID.WOODEN_SWORD,
+    name: "Wooden Sword",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.WOODEN_SWORD,
+  },
+  {
+    id: BLOCK_ID.STONE_PICKAXE,
+    name: "Stone Pickaxe",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.STONE_PICKAXE,
+  },
+  {
+    id: BLOCK_ID.STONE_AXE,
+    name: "Stone Axe",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.STONE_AXE,
+  },
+  {
+    id: BLOCK_ID.STONE_SHOVEL,
+    name: "Stone Shovel",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.STONE_SHOVEL,
+  },
+  {
+    id: BLOCK_ID.STONE_SWORD,
+    name: "Stone Sword",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "tool", breakTime: 0, dropId: BLOCK_ID.STONE_SWORD,
   },
 ];
