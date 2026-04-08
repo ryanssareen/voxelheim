@@ -360,6 +360,8 @@ export class ChunkManager {
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
     if (!chunk) {
       if (this.worldType === "infinite") {
+        // Bedrock floor — never fall below y=0
+        if (wy <= 0) return 3;
         // Unloaded chunks: use noise-estimated surface to prevent falling through
         const surfaceY = this.terrainGen.getSurfaceHeight(wx, wz);
         return wy <= surfaceY ? 3 : 0; // STONE below surface, AIR above

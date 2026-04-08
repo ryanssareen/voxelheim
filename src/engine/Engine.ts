@@ -31,7 +31,7 @@ import { getToolDef } from "@data/items";
 
 const MOUSE_SENSITIVITY = 0.002;
 const SPAWN = { x: 32, y: 50, z: 32 };
-const INFINITE_SPAWN = { x: 0, y: 50, z: 0 };
+const INFINITE_SPAWN = { x: 8, y: 80, z: 8 };
 const VOID_Y = -10;
 const AUTOSAVE_INTERVAL = 15_000; // Save every 15 seconds
 
@@ -262,7 +262,15 @@ export class Engine {
   /** Find the highest solid block at (x, z) and return spawn Y above it. */
   private findSafeSpawnY(x: number, z: number): number {
     if (!this.chunkManager) return SPAWN.y;
-    const maxY = this.worldType === "infinite" ? 127 : 63;
+
+    // Infinite worlds: use terrain generator directly — faster and works before chunks load
+    if (this.worldType === "infinite") {
+      const terrainGen = this.chunkManager.getTerrainGenerator();
+      const surfaceY = terrainGen.getSurfaceHeight(Math.floor(x), Math.floor(z));
+      return surfaceY + 2; // +2 to be safely above surface
+    }
+
+    const maxY = 63;
     for (let y = maxY; y >= 0; y--) {
       if (this.registry.isSolid(this.chunkManager.getBlock(Math.floor(x), y, Math.floor(z)))) {
         return y + 1;

@@ -116,7 +116,9 @@ export class TerrainGenerator {
           const wy = cy * CHUNK_SIZE + y;
 
           if (this.worldType === "flat") {
-            if (wy > surfaceY) {
+            if (wy === 0) {
+              chunk.setBlock(x, y, z, BLOCK_ID.STONE); // bedrock
+            } else if (wy > surfaceY) {
               // AIR
             } else if (wy === surfaceY) {
               chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
@@ -126,7 +128,9 @@ export class TerrainGenerator {
               chunk.setBlock(x, y, z, BLOCK_ID.STONE);
             }
           } else {
-            if (wy > surfaceY) {
+            if (wy === 0) {
+              chunk.setBlock(x, y, z, BLOCK_ID.STONE); // bedrock
+            } else if (wy > surfaceY) {
               // AIR — already default
             } else if (wy === surfaceY && surfaceY > SEA_LEVEL) {
               chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
