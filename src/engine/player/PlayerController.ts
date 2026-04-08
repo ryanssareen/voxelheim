@@ -130,10 +130,9 @@ export class PlayerController {
     const pz = Math.floor(this.position.z);
     if (registry.isSolid(getBlock(px, feetY + 2, pz))) return false;
 
-    // Step up instantly (no velocity — prevents chain-bouncing on slopes)
-    this.position.y = by + 1;
-    this.onGround = true;
-    this.velocity.y = 0;
+    // Apply a real jump — gives a natural arc instead of teleporting
+    this.velocity.y = JUMP_VELOCITY;
+    this.onGround = false;
     this.autoJumpTimer = AUTO_JUMP_COOLDOWN;
     return true;
   }
@@ -180,23 +179,24 @@ export class PlayerController {
             }
             return;
           } else if (axis === "x") {
-            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
-              return;
-            }
+            // Revert horizontal position first — don't stay inside the block
             if (delta > 0) {
               this.position.x = Math.min(this.position.x, bx - HALF_WIDTH);
             } else {
               this.position.x = Math.max(this.position.x, bx + 1 + HALF_WIDTH);
             }
-            collided = true;
-          } else {
             if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
               return;
             }
+            collided = true;
+          } else {
             if (delta > 0) {
               this.position.z = Math.min(this.position.z, bz - HALF_WIDTH);
             } else {
               this.position.z = Math.max(this.position.z, bz + 1 + HALF_WIDTH);
+            }
+            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
+              return;
             }
             collided = true;
           }
