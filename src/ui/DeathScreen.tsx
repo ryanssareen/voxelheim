@@ -12,6 +12,7 @@ export function DeathScreen({
   onRespawn: () => void;
 }) {
   const isDead = useGameStore((s) => s.isDead);
+  const deathMessage = useGameStore((s) => s.deathMessage);
   const router = useRouter();
 
   if (!isDead) return null;
@@ -19,11 +20,20 @@ export function DeathScreen({
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center z-30 bg-red-900/60">
       <h1
-        className="text-6xl font-mono font-bold text-red-200 mb-12"
+        className="text-6xl font-mono font-bold text-red-200 mb-4"
         style={{ textShadow: "3px 3px 0 #4a0000, 0 0 20px rgba(255,0,0,0.4)" }}
       >
         YOU DIED!
       </h1>
+
+      {deathMessage && (
+        <p
+          className="text-lg font-mono text-red-100/80 mb-10"
+          style={{ textShadow: "1px 1px 0 #2a0000" }}
+        >
+          {deathMessage}
+        </p>
+      )}
 
       <div className="flex flex-col gap-3 w-64">
         <button

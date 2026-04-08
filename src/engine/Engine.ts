@@ -414,15 +414,14 @@ export class Engine {
       const fallDistance = this.fallStartY - this.player!.position.y;
       if (fallDistance > 3) {
         const damage = Math.floor(fallDistance - 3);
-        useGameStore.getState().damagePlayer(damage);
+        useGameStore.getState().damagePlayer(damage, "fall");
       }
     }
     this.wasFalling = isFalling;
 
     // Void death
     if (this.player!.position.y < VOID_Y) {
-      useGameStore.getState().setHealth(0);
-      useGameStore.getState().setDead(true);
+      useGameStore.getState().killPlayer("void");
       if (document.pointerLockElement) {
         document.exitPointerLock();
       }
@@ -518,8 +517,9 @@ export class Engine {
       this.chunkManager!,
       this.player!.position,
       this.dayNight!.timeOfDay,
-      (amount, fromX, fromZ) => {
-        useGameStore.getState().damagePlayer(amount);
+      (amount, fromX, fromZ, mobType) => {
+        const cause = (mobType === "zombie" || mobType === "skeleton" || mobType === "creeper") ? mobType : undefined;
+        useGameStore.getState().damagePlayer(amount, cause);
         this.player!.applyKnockback(fromX, fromZ, 6);
         // Exhaustion from taking damage
         this.hungerExhaustion += 2;
@@ -575,7 +575,7 @@ export class Engine {
       this.starvationTimer += dt;
       if (this.starvationTimer >= 4) {
         this.starvationTimer -= 4;
-        useGameStore.getState().damagePlayer(1);
+        useGameStore.getState().damagePlayer(1, "starvation");
       }
     } else {
       this.starvationTimer = 0;

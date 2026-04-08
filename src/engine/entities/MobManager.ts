@@ -38,7 +38,7 @@ export class MobManager {
     chunkManager: ChunkManager,
     playerPos: { x: number; y: number; z: number },
     timeOfDay: number,
-    onDamagePlayer?: (amount: number, fromX: number, fromZ: number) => void
+    onDamagePlayer?: (amount: number, fromX: number, fromZ: number, mobType?: string) => void
   ): void {
     const getBlock = (x: number, y: number, z: number) => chunkManager.getBlock(x, y, z);
     const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
@@ -75,10 +75,10 @@ export class MobManager {
       // Mob attacks
       if (!mob.dead && mob.attackCooldown <= 0 && onDamagePlayer) {
         if (mob.type === "zombie" && mob.distanceTo(playerPos) < 1.5) {
-          onDamagePlayer(3, mob.position.x, mob.position.z);
+          onDamagePlayer(3, mob.position.x, mob.position.z, "zombie");
           mob.attackCooldown = 1;
         } else if (mob.type === "skeleton" && mob.distanceTo(playerPos) < 10 && mob.distanceTo(playerPos) > 2) {
-          onDamagePlayer(2, mob.position.x, mob.position.z);
+          onDamagePlayer(2, mob.position.x, mob.position.z, "skeleton");
           mob.attackCooldown = 2;
         }
       }
@@ -92,7 +92,7 @@ export class MobManager {
           const dist = mob.distanceTo(playerPos);
           if (dist < 4) {
             const dmg = Math.round(8 * (1 - dist / 4));
-            if (dmg > 0) onDamagePlayer(dmg, mob.position.x, mob.position.z);
+            if (dmg > 0) onDamagePlayer(dmg, mob.position.x, mob.position.z, "creeper");
           }
         }
       }

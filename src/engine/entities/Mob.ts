@@ -95,14 +95,21 @@ export class Mob {
 
     // AI
     if (this.config.hostile) {
-      this.updateHostileAI(dt, playerPos);
+      this.updateHostileAI(dt, playerPos, getBlock, registry);
     } else {
       this.updatePassiveAI(dt, playerPos, getBlock, registry);
     }
 
-    // Gravity
+    // Gravity (capped to prevent ground clipping)
     if (!this.onGround) {
       this.velocity.y -= GRAVITY * dt;
+      if (this.velocity.y < -15) this.velocity.y = -15;
+    }
+
+    // Void kill — fell below the world
+    if (this.position.y < 0) {
+      this.dead = true;
+      return;
     }
 
     // Apply movement
@@ -268,7 +275,12 @@ export class Mob {
     }
   }
 
-  private updateHostileAI(dt: number, playerPos: { x: number; y: number; z: number }): void {
+  private updateHostileAI(
+    dt: number,
+    playerPos: { x: number; y: number; z: number },
+    getBlock: (x: number, y: number, z: number) => number,
+    registry: BlockRegistry
+  ): void {
     const dx = playerPos.x - this.position.x;
     const dz = playerPos.z - this.position.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -277,28 +289,34 @@ export class Mob {
       // Face player
       this.yaw = Math.atan2(-dx, -dz);
 
+      // Don't chase off a cliff
+      const wouldFall = !this.hasGroundAhead(getBlock, registry);
+
       if (this.type === "skeleton" && dist < this.config.attackRange && dist > 6) {
-        // Skeleton stops at range
         this.velocity.x = 0;
         this.velocity.z = 0;
         this.isMoving = false;
       } else if (dist > this.config.attackRange) {
-        // Chase
-        this.velocity.x = (dx / dist) * this.config.speed;
-        this.velocity.z = (dz / dist) * this.config.speed;
-        this.isMoving = true;
+        if (wouldFall) {
+          this.velocity.x = 0;
+          this.velocity.z = 0;
+          this.isMoving = false;
+        } else {
+          this.velocity.x = (dx / dist) * this.config.speed;
+          this.velocity.z = (dz / dist) * this.config.speed;
+          this.isMoving = true;
+        }
       } else {
-        // In attack range
         if (this.type === "creeper" && !this.exploding) {
           this.exploding = true;
-          this.explodeTimer = 1.5; // 1.5 second fuse
+          this.explodeTimer = 1.5;
         }
         this.velocity.x = 0;
         this.velocity.z = 0;
         this.isMoving = false;
       }
     } else {
-      // Wander
+      // Wander with cliff/wall detection (same as passive mobs)
       this.aiTimer -= dt;
       if (this.aiTimer <= 0) {
         this.aiTargetYaw = Math.random() * Math.PI * 2;
@@ -310,8 +328,24 @@ export class Mob {
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
         this.yaw += diff * dt * 2;
+
+        if (!this.hasGroundAhead(getBlock, registry) || this.isBlockedAhead(getBlock, registry)) {
+          this.aiTargetYaw = this.yaw + Math.PI * (0.5 + Math.random());
+          this.aiTimer = 0.5 + Math.random();
+          this.velocity.x = 0;
+          this.velocity.z = 0;
+          return;
+        }
+
         this.velocity.x = -Math.sin(this.yaw) * this.config.speed * 0.5;
         this.velocity.z = -Math.cos(this.yaw) * this.config.speed * 0.5;
+
+        // Stay within island bounds
+        if (this.position.x < 4 || this.position.x > 60 ||
+            this.position.z < 4 || this.position.z > 60) {
+          this.aiTargetYaw = Math.atan2(32 - this.position.x, 32 - this.position.z);
+          this.aiTimer = 1 + Math.random() * 2;
+        }
       } else {
         this.velocity.x = 0;
         this.velocity.z = 0;
