@@ -3,7 +3,7 @@ const LOCAL_PREFIX = "L-";
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export function normalizeSessionCode(raw: string): string {
-  return raw.trim().toUpperCase();
+  return raw.replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
 }
 
 export function isLocalSessionCode(code: string): boolean {
