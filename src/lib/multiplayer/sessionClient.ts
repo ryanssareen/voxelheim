@@ -582,6 +582,15 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Firestore timeout")), ms)
+    ),
+  ]);
+}
+
 async function createCloudSession(
   input: CreateSessionInput
 ): Promise<MultiplayerSessionMeta | null> {
@@ -598,7 +607,10 @@ async function createCloudSession(
     transport: "cloud",
   };
 
-  await setDoc(doc(database, "multiplayerSessions", session.code), session);
+  await withTimeout(
+    setDoc(doc(database, "multiplayerSessions", session.code), session),
+    5000
+  );
   return session;
 }
 
@@ -645,7 +657,10 @@ export async function readMultiplayerSession(
   const database = firestore();
   if (!database) return null;
 
-  const snapshot = await getDoc(doc(database, "multiplayerSessions", code));
+  const snapshot = await withTimeout(
+    getDoc(doc(database, "multiplayerSessions", code)),
+    5000
+  );
   if (!snapshot.exists()) return null;
 
   return snapshot.data() as MultiplayerSessionMeta;

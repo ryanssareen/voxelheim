@@ -30,7 +30,7 @@ export default function ForgotPasswordPage() {
     <AuthLayout title="Reset Password">
       {sent ? (
         <div className="flex flex-col items-center gap-4">
-          <p className="text-[#8a8a8a] font-mono text-sm text-center">
+          <p className="text-white/40 font-mono text-sm text-center">
             Password reset link sent to <span className="text-white">{email}</span>. Check your inbox.
           </p>
           <Link
@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
         </div>
       ) : (
         <>
-          <p className="text-[#8a8a8a] font-mono text-xs text-center mb-4">
+          <p className="text-white/30 font-mono text-xs text-center mb-4">
             Enter your email and we&apos;ll send you a reset link
           </p>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-[#555]"
+              className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-white/15 rounded-sm focus:border-white/20 transition-colors"
               style={INPUT_STYLE}
             />
 
@@ -76,7 +76,7 @@ export default function ForgotPasswordPage() {
           <div className="flex flex-col items-center mt-5">
             <Link
               href="/login"
-              className="text-[12px] font-mono text-[#8a8a8a] hover:text-white transition-colors"
+              className="text-[12px] font-mono text-white/30 hover:text-white/70 transition-colors"
             >
               Back to Sign In
             </Link>

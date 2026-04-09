@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { WorldMeta } from "@systems/persistence/WorldStorage";
 import { useAuthStore } from "@store/useAuthStore";
 
@@ -15,6 +16,28 @@ const MC_BTN_STYLE: React.CSSProperties = {
     "inset 0 2px 0 rgba(255,255,255,0.15), inset 0 -2px 0 rgba(0,0,0,0.3), 0 3px 6px rgba(0,0,0,0.4)",
   textShadow: "2px 2px 0 #2a2a2a",
 };
+
+const WORLD_TYPE_COLORS: Record<string, string> = {
+  island: "#4a8a3a",
+  flat: "#8a7a3a",
+  infinite: "#3a6a8a",
+};
+
+const WORLD_TYPE_ICONS: Record<string, string> = {
+  island: "\u{1F3DD}\uFE0F",
+  flat: "\u{1F33E}",
+  infinite: "\u{1F30D}",
+};
+
+function formatDate(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  if (diff < 60_000) return "Just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}d ago`;
+  return new Date(timestamp).toLocaleDateString();
+}
 
 export default function WorldsPage() {
   const router = useRouter();
@@ -114,10 +137,13 @@ export default function WorldsPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-start overflow-hidden select-none bg-[#2a2a2a] pt-12">
-      {/* Dirt bg */}
+    <main className="relative flex min-h-screen flex-col items-center overflow-hidden select-none bg-[#1a1a1a]">
+      {/* Background gradient */}
+      <div className="absolute inset-0" style={{
+        background: "linear-gradient(180deg, #0b0e2a 0%, #1a1a2e 30%, #1a1a1a 60%)",
+      }} />
       <div
-        className="absolute inset-0 opacity-20"
+        className="absolute inset-0 opacity-10"
         style={{
           background:
             "repeating-linear-gradient(90deg, #6b4226 0px, #7a4f2d 4px, #5c3a1e 8px, #6b4226 12px), repeating-linear-gradient(0deg, #6b4226 0px, #7a4f2d 4px, #5c3a1e 8px, #6b4226 12px)",
@@ -126,111 +152,154 @@ export default function WorldsPage() {
         }}
       />
 
-      <div className="relative z-10 w-full max-w-[600px] px-4">
-        <h1
-          className="text-3xl font-mono font-bold text-white mb-8 text-center"
-          style={{ textShadow: "2px 2px 0 #2a2a2a" }}
-        >
-          Select World
-        </h1>
+      <div className="relative z-10 w-full max-w-[640px] px-4 pt-10 pb-8 animate-fadeIn">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <Link
+            href="/"
+            className="text-white/40 hover:text-white/70 font-mono text-sm transition-colors"
+            style={{ textShadow: "1px 1px 0 #000" }}
+          >
+            &larr; Back
+          </Link>
+          <h1
+            className="text-2xl font-mono font-bold text-white"
+            style={{ textShadow: "2px 2px 0 #000" }}
+          >
+            Your Worlds
+          </h1>
+          <div className="w-12" />
+        </div>
 
+        {/* World list */}
         {loading ? (
-          <p className="text-white/50 font-mono text-center animate-pulse">
-            Loading worlds...
-          </p>
+          <div className="flex flex-col items-center py-16 gap-3">
+            <div className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+            <p className="text-white/40 font-mono text-sm">Loading worlds...</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-2 mb-6">
             {worlds.length === 0 && (
-              <p
-                className="text-white/40 font-mono text-center py-8"
-                style={{ textShadow: "1px 1px 0 #000" }}
-              >
-                No saved worlds yet
-              </p>
+              <div className="flex flex-col items-center py-12 gap-4">
+                <div className="text-4xl opacity-40">
+                  {"\u{26CF}\uFE0F"}
+                </div>
+                <p
+                  className="text-white/30 font-mono text-sm"
+                  style={{ textShadow: "1px 1px 0 #000" }}
+                >
+                  No worlds yet &mdash; create one below
+                </p>
+              </div>
             )}
 
-            {worlds.map((world) => (
-              <div
-                key={world.id}
-                className="flex items-center gap-3 p-3 hover:brightness-110 transition-all cursor-pointer"
-                style={{
-                  background:
-                    "linear-gradient(to bottom, #4a4a4a 0%, #3a3a3a 100%)",
-                  border: "2px solid #2a2a2a",
-                  boxShadow:
-                    "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.2)",
-                }}
-                onClick={() =>
-                  router.push(`/game?worldId=${world.id}`)
-                }
-              >
-                {/* World icon */}
-                <div className="w-10 h-10 bg-[#4a7a3a] rounded flex items-center justify-center flex-shrink-0">
-                  <span className="text-xl">🌍</span>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p
-                    className="text-white font-mono text-sm font-bold truncate"
-                    style={{ textShadow: "1px 1px 0 #000" }}
+            {worlds.map((world, i) => {
+              const wt = world.worldType ?? "island";
+              return (
+                <div
+                  key={world.id}
+                  className="group flex items-center gap-3 p-3 hover:brightness-125 transition-all cursor-pointer rounded-sm"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
+                    border: "2px solid rgba(255,255,255,0.06)",
+                    animationDelay: `${i * 50}ms`,
+                  }}
+                  onClick={() =>
+                    router.push(`/game?worldId=${world.id}`)
+                  }
+                >
+                  {/* World type icon */}
+                  <div
+                    className="w-12 h-12 rounded flex items-center justify-center flex-shrink-0"
+                    style={{ background: WORLD_TYPE_COLORS[wt] ?? "#4a4a4a" }}
                   >
-                    {world.name}
-                  </p>
-                  <p className="text-white/40 font-mono text-xs">
-                    Seed: {world.seed} &middot; Last played:{" "}
-                    {new Date(world.lastPlayedAt).toLocaleDateString()}
-                  </p>
+                    <span className="text-2xl">{WORLD_TYPE_ICONS[wt] ?? "\u{1F30D}"}</span>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-white font-mono text-sm font-bold truncate"
+                      style={{ textShadow: "1px 1px 0 #000" }}
+                    >
+                      {world.name}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span
+                        className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-sm"
+                        style={{
+                          background: WORLD_TYPE_COLORS[wt] ?? "#4a4a4a",
+                          color: "rgba(255,255,255,0.8)",
+                        }}
+                      >
+                        {wt}
+                      </span>
+                      <span className="text-white/30 font-mono text-xs">
+                        {formatDate(world.lastPlayedAt)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleHost(world);
+                      }}
+                      className="text-cyan-300 hover:text-cyan-100 font-mono text-xs px-2.5 py-1.5 rounded-sm transition-colors"
+                      style={{
+                        background: "rgba(0,200,255,0.08)",
+                        border: "1px solid rgba(0,200,255,0.15)",
+                      }}
+                    >
+                      {busyWorldId === world.id ? "..." : "Host"}
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(world.id);
+                      }}
+                      className="text-red-400/60 hover:text-red-400 font-mono text-xs px-2 py-1.5 transition-colors"
+                    >
+                      {"\u00D7"}
+                    </button>
+                  </div>
                 </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleHost(world);
-                  }}
-                  className="text-cyan-300/80 hover:text-cyan-200 font-mono text-xs px-2 py-1"
-                >
-                  {busyWorldId === world.id ? "Hosting..." : "Host"}
-                </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(world.id);
-                  }}
-                  className="text-red-400/60 hover:text-red-400 font-mono text-xs px-2 py-1"
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
+        {/* Join multiplayer */}
         <div
-          className="mb-6 p-3"
+          className="mb-6 p-4 rounded-sm"
           style={{
-            background:
-              "linear-gradient(to bottom, #3d3d3d 0%, #2d2d2d 100%)",
-            border: "2px solid #1f1f1f",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.25)",
+            background: "rgba(0,200,255,0.03)",
+            border: "2px solid rgba(0,200,255,0.08)",
           }}
         >
-          <p
-            className="mb-2 text-center text-xs font-mono text-white/70"
-            style={{ textShadow: "1px 1px 0 #000" }}
-          >
-            Join a multiplayer session
-          </p>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 rounded-full bg-cyan-400/60" />
+            <p
+              className="text-xs font-mono text-cyan-200/70 uppercase tracking-wider"
+              style={{ textShadow: "1px 1px 0 #000" }}
+            >
+              Join Multiplayer
+            </p>
+          </div>
           <div className="flex gap-2">
             <input
               value={joinCode}
               onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-              placeholder="Enter code..."
-              className="flex-1 bg-black/60 border-2 border-[#1a1a1a] px-3 py-2 text-sm text-white font-mono uppercase focus:outline-none focus:border-white/30"
+              placeholder="Session code..."
+              className="flex-1 bg-black/40 border-2 border-white/8 px-3 py-2 text-sm text-white font-mono uppercase focus:outline-none focus:border-cyan-400/30 transition-colors rounded-sm"
               style={{
-                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)",
+                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.3)",
                 textShadow: "1px 1px 0 #000",
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleJoin();
               }}
             />
             <button
@@ -238,7 +307,7 @@ export default function WorldsPage() {
               className={MC_BTN + " min-w-24 text-sm"}
               style={MC_BTN_STYLE}
             >
-              {joining ? "Joining..." : "Join"}
+              {joining ? "..." : "Join"}
             </button>
           </div>
           {joinError && (
@@ -248,17 +317,22 @@ export default function WorldsPage() {
           )}
         </div>
 
+        {/* Action buttons */}
         <div className="flex gap-2.5">
           <button
             onClick={() => router.push("/game/create")}
             className={MC_BTN + " flex-1 text-base"}
-            style={MC_BTN_STYLE}
+            style={{
+              ...MC_BTN_STYLE,
+              background:
+                "linear-gradient(to bottom, #5a9a4a 0%, #3a7a2a 40%, #2a6a1a 60%, #1a5a0a 100%)",
+            }}
           >
-            Create New World
+            + Create New World
           </button>
           <button
             onClick={() => router.push("/")}
-            className={MC_BTN + " flex-1 text-sm"}
+            className={MC_BTN + " w-28 text-sm"}
             style={MC_BTN_STYLE}
           >
             Cancel

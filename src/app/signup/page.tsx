@@ -48,7 +48,7 @@ export default function SignUpPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-[#555]"
+          className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-white/15 rounded-sm focus:border-white/20 transition-colors"
           style={INPUT_STYLE}
         />
         <input
@@ -57,7 +57,7 @@ export default function SignUpPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-[#555]"
+          className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-white/15 rounded-sm focus:border-white/20 transition-colors"
           style={INPUT_STYLE}
         />
         <input
@@ -66,7 +66,7 @@ export default function SignUpPage() {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
-          className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-[#555]"
+          className="w-full px-3 py-2.5 font-mono text-sm outline-none placeholder:text-white/15 rounded-sm focus:border-white/20 transition-colors"
           style={INPUT_STYLE}
         />
 
@@ -85,9 +85,9 @@ export default function SignUpPage() {
       </form>
 
       <div className="flex items-center gap-3 my-4">
-        <div className="flex-1 h-px bg-[#555]" />
-        <span className="text-[#777] font-mono text-xs">or</span>
-        <div className="flex-1 h-px bg-[#555]" />
+        <div className="flex-1 h-px bg-white/10" />
+        <span className="text-white/25 font-mono text-xs">or</span>
+        <div className="flex-1 h-px bg-white/10" />
       </div>
 
       <button
@@ -104,11 +104,11 @@ export default function SignUpPage() {
           }
         }}
         disabled={loading}
-        className={MC_BTN + " w-full text-sm flex items-center justify-center gap-2"}
+        className={MC_BTN + " w-full text-sm flex items-center justify-center gap-2 rounded-sm"}
         style={{
           ...BTN_STYLE,
-          background:
-            "linear-gradient(to bottom, #4a4a4a 0%, #3a3a3a 40%, #2e2e2e 60%, #222 100%)",
+          background: "rgba(255,255,255,0.04)",
+          border: "2px solid rgba(255,255,255,0.08)",
         }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24">
@@ -123,7 +123,7 @@ export default function SignUpPage() {
       <div className="flex flex-col items-center gap-2 mt-5">
         <Link
           href="/login"
-          className="text-[12px] font-mono text-[#8a8a8a] hover:text-white transition-colors"
+          className="text-[12px] font-mono text-white/30 hover:text-white/70 transition-colors"
         >
           Already have an account? Sign in
         </Link>

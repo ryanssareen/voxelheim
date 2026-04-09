@@ -14,9 +14,9 @@ const BTN_STYLE: React.CSSProperties = {
 };
 
 const INPUT_STYLE: React.CSSProperties = {
-  background: "#000",
-  border: "3px solid #1a1a1a",
-  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)",
+  background: "rgba(0,0,0,0.4)",
+  border: "2px solid rgba(255,255,255,0.06)",
+  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.3)",
   color: "#e0e0e0",
 };
 
@@ -30,9 +30,12 @@ export function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden select-none bg-[#2a2a2a]">
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden select-none bg-[#1a1a1a]">
+      <div className="absolute inset-0" style={{
+        background: "linear-gradient(180deg, #0b0e2a 0%, #1a1a2e 30%, #1a1a1a 60%)",
+      }} />
       <div
-        className="absolute inset-0 opacity-20"
+        className="absolute inset-0 opacity-10"
         style={{
           background:
             "repeating-linear-gradient(90deg, #6b4226 0px, #7a4f2d 4px, #5c3a1e 8px, #6b4226 12px), repeating-linear-gradient(0deg, #6b4226 0px, #7a4f2d 4px, #5c3a1e 8px, #6b4226 12px)",
@@ -41,7 +44,7 @@ export function AuthLayout({
         }}
       />
 
-      <div className="relative z-10 w-full max-w-[420px] px-4">
+      <div className="relative z-10 w-full max-w-[420px] px-4 animate-fadeIn">
         <Link
           href="/"
           className="block text-center mb-6"
@@ -59,16 +62,16 @@ export function AuthLayout({
         </Link>
 
         <div
-          className="p-6 rounded"
+          className="p-6 rounded-sm"
           style={{
-            background: "rgba(0,0,0,0.5)",
-            border: "3px solid #1a1a1a",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            background: "rgba(0,0,0,0.4)",
+            border: "2px solid rgba(255,255,255,0.06)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
           }}
         >
           <h2
-            className="text-xl font-mono font-bold text-white mb-5 text-center"
-            style={{ textShadow: "2px 2px 0 #2a2a2a" }}
+            className="text-lg font-mono font-bold text-white mb-5 text-center"
+            style={{ textShadow: "2px 2px 0 #000" }}
           >
             {title}
           </h2>

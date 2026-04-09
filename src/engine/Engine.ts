@@ -31,7 +31,8 @@ import { BLOCK_DEFINITIONS } from "@data/blocks";
 import { getToolDef } from "@data/items";
 
 const MOUSE_SENSITIVITY = 0.002;
-const SPAWN = { x: 32, y: 50, z: 32 };
+const DEFAULT_SPAWN = { x: 32, y: 50, z: 32 };
+const FLAT_SPAWN = { x: 32, y: 35, z: 32 };
 const INFINITE_SPAWN = { x: 8, y: 80, z: 8 };
 const VOID_Y = -10;
 const AUTOSAVE_INTERVAL = 15_000; // Save every 15 seconds
@@ -74,6 +75,7 @@ export class Engine {
   private wasFalling = false;
   private frameCount = 0;
   private worldType: WorldType = "island";
+  private spawn = { ...DEFAULT_SPAWN };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -114,18 +116,18 @@ export class Engine {
 
     this.worldType = worldType;
 
-    // Adjust spawn based on world type
-    if (worldType === "infinite") {
-      SPAWN.x = INFINITE_SPAWN.x; SPAWN.y = INFINITE_SPAWN.y; SPAWN.z = INFINITE_SPAWN.z;
-    } else if (worldType === "flat") {
-      SPAWN.x = 32; SPAWN.y = 35; SPAWN.z = 32;
-    }
+    // Set spawn based on world type (fresh copy each init — never mutate module-level defaults)
+    const spawn = worldType === "infinite"
+      ? { ...INFINITE_SPAWN }
+      : worldType === "flat"
+        ? { ...FLAT_SPAWN }
+        : { ...DEFAULT_SPAWN };
+    this.spawn = spawn;
 
     this.chunkManager = new ChunkManager(this.renderer, this.seed, worldType);
 
     if (worldType === "infinite") {
-      // Synchronously generate spawn area before player physics
-      this.chunkManager.generateSpawnArea(SPAWN.x, SPAWN.z);
+      this.chunkManager.generateSpawnArea(spawn.x, spawn.z);
     } else {
       this.chunkManager.update(0, 0, 0);
     }
@@ -139,7 +141,7 @@ export class Engine {
     }
 
     // Find safe spawn Y on solid ground (not mid-air)
-    SPAWN.y = this.findSafeSpawnY(SPAWN.x, SPAWN.z);
+    spawn.y = this.findSafeSpawnY(spawn.x, spawn.z);
 
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
@@ -151,7 +153,7 @@ export class Engine {
     };
 
     // Player — use saved position if returning to a world, otherwise safe spawn
-    const spawnPos = savedMeta?.playerPos ?? SPAWN;
+    const spawnPos = savedMeta?.playerPos ?? spawn;
     // For new worlds, override saved Y with safe ground level
     if (savedMeta && savedMeta.playerPos) {
       const safeY = this.findSafeSpawnY(savedMeta.playerPos.x, savedMeta.playerPos.z);
@@ -305,7 +307,7 @@ export class Engine {
 
   /** Find the highest solid block at (x, z) and return spawn Y above it. */
   private findSafeSpawnY(x: number, z: number): number {
-    if (!this.chunkManager) return SPAWN.y;
+    if (!this.chunkManager) return this.spawn.y;
 
     // Infinite worlds: use terrain generator directly — faster and works before chunks load
     if (this.worldType === "infinite") {
@@ -320,7 +322,7 @@ export class Engine {
         return y + 1;
       }
     }
-    return SPAWN.y;
+    return this.spawn.y;
   }
 
   /** Respawn after death. Clears inventory. Finds safe spawn if original is void. */
@@ -329,20 +331,20 @@ export class Engine {
 
     // Infinite: ensure spawn chunks are loaded before respawning
     if (this.worldType === "infinite" && this.chunkManager) {
-      this.chunkManager.generateSpawnArea(SPAWN.x, SPAWN.z);
+      this.chunkManager.generateSpawnArea(this.spawn.x, this.spawn.z);
     }
 
     // Check if default spawn is safe (has solid ground below)
-    const spawnY = this.findSafeSpawnY(SPAWN.x, SPAWN.z);
+    const spawnY = this.findSafeSpawnY(this.spawn.x, this.spawn.z);
 
     // If default spawn column is completely dug out, search nearby
     if (spawnY <= 0) {
       const searchRadius = 5;
       for (let r = 1; r <= searchRadius; r++) {
         for (const [dx, dz] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]) {
-          const sy = this.findSafeSpawnY(SPAWN.x + dx, SPAWN.z + dz);
+          const sy = this.findSafeSpawnY(this.spawn.x + dx, this.spawn.z + dz);
           if (sy > 0) {
-            this.player.position = { x: SPAWN.x + dx, y: sy, z: SPAWN.z + dz };
+            this.player.position = { x: this.spawn.x + dx, y: sy, z: this.spawn.z + dz };
             this.player.velocity = { x: 0, y: 0, z: 0 };
             this.player.onGround = false;
             useHotbarStore.getState().resetSlots();
@@ -359,7 +361,7 @@ export class Engine {
       }
     }
 
-    this.player.position = { x: SPAWN.x, y: spawnY, z: SPAWN.z };
+    this.player.position = { x: this.spawn.x, y: spawnY, z: this.spawn.z };
     this.player.velocity = { x: 0, y: 0, z: 0 };
     this.player.onGround = false;
     useHotbarStore.getState().resetSlots();

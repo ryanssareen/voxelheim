@@ -35,3 +35,30 @@ body {
 .animate-shake {
   animation: shake 0.3s ease-in-out;
 }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInSlow {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out both;
+}
+
+.animate-fadeInSlow {
+  animation: fadeInSlow 0.5s ease-out both;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.4s ease-out both;
+}

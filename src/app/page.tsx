@@ -220,7 +220,7 @@ export default function Home() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(0,0,0,0.3)_100%)]" />
 
       {/* === CONTENT === */}
-      <div className="relative flex flex-col items-center z-10 -mt-8">
+      <div className="relative flex flex-col items-center z-10 -mt-8 animate-fadeInSlow">
         <h1
           className="text-[72px] sm:text-[100px] md:text-[130px] font-black leading-none"
           style={{
@@ -234,18 +234,22 @@ export default function Home() {
         >
           VOXELHEIM
         </h1>
-        <p className="text-base sm:text-lg font-mono text-yellow-400 -mt-1 tracking-[0.2em]" style={{ textShadow: "2px 2px 0 #2a1a00" }}>
+        <p className="text-base sm:text-lg font-mono text-yellow-400/90 -mt-1 tracking-[0.2em]" style={{ textShadow: "2px 2px 0 #2a1a00" }}>
           Island Edition
         </p>
 
-        <div className="flex flex-col items-center gap-2.5 mt-10 w-[300px] sm:w-[380px]">
+        <div className="flex flex-col items-center gap-2.5 mt-10 w-[300px] sm:w-[380px] animate-slideUp" style={{ animationDelay: "0.15s" }}>
           {authLoading ? (
-            <div className={MC_BTN + " w-full text-lg"} style={DISABLED_STYLE}>
-              Loading...
+            <div className="flex items-center gap-3 py-3">
+              <div className="w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+              <span className="text-white/40 font-mono text-sm">Loading...</span>
             </div>
           ) : user ? (
             <>
-              <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
+              <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={{
+                ...BTN_STYLE,
+                background: "linear-gradient(to bottom, #5a9a4a 0%, #3a7a2a 40%, #2a6a1a 60%, #1a5a0a 100%)",
+              }}>
                 Play Game
               </Link>
               <div className="flex gap-2.5 w-full">
@@ -263,7 +267,10 @@ export default function Home() {
             </>
           ) : (
             <>
-              <Link href="/login" className={MC_BTN + " w-full text-lg"} style={BTN_STYLE}>
+              <Link href="/login" className={MC_BTN + " w-full text-lg"} style={{
+                ...BTN_STYLE,
+                background: "linear-gradient(to bottom, #5a9a4a 0%, #3a7a2a 40%, #2a6a1a 60%, #1a5a0a 100%)",
+              }}>
                 Sign In
               </Link>
               <Link href="/signup" className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
@@ -282,8 +289,8 @@ export default function Home() {
           </p>
         )}
 
-        <p className="mt-4 text-[11px] text-white/40 font-mono" style={{ textShadow: "1px 1px 0 #000" }}>
-          Voxelheim Island Edition (v0.1.0)
+        <p className="mt-6 text-[11px] text-white/25 font-mono" style={{ textShadow: "1px 1px 0 #000" }}>
+          Voxelheim v0.1.0
         </p>
       </div>
 
