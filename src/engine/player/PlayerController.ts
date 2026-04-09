@@ -10,11 +10,10 @@ const JUMP_VELOCITY = 8;
 const HALF_WIDTH = 0.3;
 const STAND_HEIGHT = 1.8;
 const CROUCH_HEIGHT = 1.4;
-const AUTO_JUMP_COOLDOWN = 0.3;
 
 /**
  * First-person player controller with WASD movement, sprint (Shift),
- * crouch (Ctrl/CapsLock), gravity, jumping, auto-jump, and AABB collision.
+ * crouch (Ctrl/CapsLock), gravity, jumping, and AABB collision.
  */
 export class PlayerController {
   public position: { x: number; y: number; z: number };
@@ -22,7 +21,6 @@ export class PlayerController {
   public onGround = false;
   public isCrouching = false;
   public isSprinting = false;
-  private autoJumpTimer = 0;
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
     this.position = { x: spawnX, y: spawnY, z: spawnZ };
@@ -51,18 +49,15 @@ export class PlayerController {
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry
   ): void {
-    // Crouch
     this.isCrouching =
       input.isKeyDown("ControlLeft") ||
       input.isKeyDown("ControlRight") ||
       input.isKeyDown("CapsLock");
 
-    // Sprint
     this.isSprinting =
       !this.isCrouching &&
       (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight"));
 
-    // Movement input
     const forward = camera.getForward();
     const right = camera.getRight();
 
@@ -84,20 +79,14 @@ export class PlayerController {
     this.velocity.x = moveX;
     this.velocity.z = moveZ;
 
-    // Gravity
     if (!this.onGround) {
       this.velocity.y -= GRAVITY * dt;
+      if (this.velocity.y < -15) this.velocity.y = -15; // cap fall speed
     }
 
-    // Jump
     if (input.isKeyDown("Space") && this.onGround && !this.isCrouching) {
       this.velocity.y = JUMP_VELOCITY;
       this.onGround = false;
-    }
-
-    // Auto-jump cooldown
-    if (this.autoJumpTimer > 0) {
-      this.autoJumpTimer -= dt;
     }
 
     // Move and collide axis-by-axis: Y first, then X, then Z
@@ -106,43 +95,14 @@ export class PlayerController {
     this.moveAxis("z", this.velocity.z * dt, getBlock, registry);
   }
 
-  private tryAutoJump(
-    bx: number,
-    by: number,
-    bz: number,
-    getBlock: (wx: number, wy: number, wz: number) => number,
-    registry: BlockRegistry
-  ): boolean {
-    if (!this.onGround || this.isCrouching || this.autoJumpTimer > 0) return false;
-
-    // Only auto-jump over blocks at feet level
-    const feetY = Math.floor(this.position.y);
-    if (by !== feetY) return false;
-
-    // Block above obstacle must be air (it's a 1-block step, not a wall)
-    if (registry.isSolid(getBlock(bx, by + 1, bz))) return false;
-
-    // Need 2 blocks of air above for player to fit
-    if (registry.isSolid(getBlock(bx, by + 2, bz))) return false;
-
-    // Player's own column needs headroom
-    const px = Math.floor(this.position.x);
-    const pz = Math.floor(this.position.z);
-    if (registry.isSolid(getBlock(px, feetY + 2, pz))) return false;
-
-    // Apply a real jump — gives a natural arc instead of teleporting
-    this.velocity.y = JUMP_VELOCITY;
-    this.onGround = false;
-    this.autoJumpTimer = AUTO_JUMP_COOLDOWN;
-    return true;
-  }
-
   private moveAxis(
     axis: "x" | "y" | "z",
     delta: number,
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry
   ): void {
+    if (delta === 0) return;
+
     this.position[axis] += delta;
 
     const h = this.height;
@@ -160,14 +120,13 @@ export class PlayerController {
     const bMinZ = Math.floor(minZ);
     const bMaxZ = Math.floor(maxZ);
 
-    let collided = false;
-
     for (let bx = bMinX; bx <= bMaxX; bx++) {
       for (let by = bMinY; by <= bMaxY; by++) {
         for (let bz = bMinZ; bz <= bMaxZ; bz++) {
           const blockId = getBlock(bx, by, bz);
           if (!registry.isSolid(blockId)) continue;
 
+          // Simple collision: resolve and return immediately
           if (axis === "y") {
             if (delta < 0) {
               this.position.y = by + 1;
@@ -179,34 +138,24 @@ export class PlayerController {
             }
             return;
           } else if (axis === "x") {
-            // Revert horizontal position first — don't stay inside the block
-            if (delta > 0) {
-              this.position.x = Math.min(this.position.x, bx - HALF_WIDTH);
+            if (delta < 0) {
+              this.position.x = bx + 1 + HALF_WIDTH;
             } else {
-              this.position.x = Math.max(this.position.x, bx + 1 + HALF_WIDTH);
+              this.position.x = bx - HALF_WIDTH;
             }
-            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
-              return;
-            }
-            collided = true;
+            this.velocity.x = 0;
+            return;
           } else {
-            if (delta > 0) {
-              this.position.z = Math.min(this.position.z, bz - HALF_WIDTH);
+            if (delta < 0) {
+              this.position.z = bz + 1 + HALF_WIDTH;
             } else {
-              this.position.z = Math.max(this.position.z, bz + 1 + HALF_WIDTH);
+              this.position.z = bz - HALF_WIDTH;
             }
-            if (this.tryAutoJump(bx, by, bz, getBlock, registry)) {
-              return;
-            }
-            collided = true;
+            this.velocity.z = 0;
+            return;
           }
         }
       }
-    }
-
-    if (collided) {
-      if (axis === "x") this.velocity.x = 0;
-      else if (axis === "z") this.velocity.z = 0;
     }
 
     if (axis === "y" && delta <= 0) {
