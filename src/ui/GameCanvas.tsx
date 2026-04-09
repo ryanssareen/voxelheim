@@ -10,7 +10,13 @@ import { LoadingScreen } from "@ui/LoadingScreen";
 import { InventoryUI } from "@ui/InventoryUI";
 import { CraftingTableUI } from "@ui/CraftingTableUI";
 
-export function GameCanvas({ worldId }: { worldId?: string }) {
+export function GameCanvas({
+  worldId,
+  sessionId,
+}: {
+  worldId?: string;
+  sessionId?: string;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { isLoading, isReady, error, start, engineRef } = useEngine(canvasRef);
   const startedRef = useRef(false);
@@ -18,9 +24,9 @@ export function GameCanvas({ worldId }: { worldId?: string }) {
   useEffect(() => {
     if (!startedRef.current) {
       startedRef.current = true;
-      start(worldId);
+      start({ worldId, sessionId });
     }
-  }, [start, worldId]);
+  }, [start, worldId, sessionId]);
 
   const handleCanvasClick = useCallback(() => {
     canvasRef.current?.requestPointerLock();

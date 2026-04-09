@@ -6,6 +6,7 @@ import { PlayerController } from "@engine/player/PlayerController";
 import { PlayerModel } from "@engine/player/PlayerModel";
 import { HandRenderer } from "@engine/player/HandRenderer";
 import { OffhandRenderer } from "@engine/player/OffhandRenderer";
+import { MultiplayerManager } from "@engine/multiplayer/MultiplayerManager";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
@@ -53,8 +54,9 @@ export class Engine {
   private dayNight: DayNightCycle | null = null;
   private mobManager: MobManager | null = null;
   private music: MusicManager | null = null;
-  private ambientLight: any = null;
-  private directionalLight: any = null;
+  private multiplayer: MultiplayerManager | null = null;
+  private ambientLight: THREE.AmbientLight | null = null;
+  private directionalLight: THREE.DirectionalLight | null = null;
   private animationFrameId = 0;
   private running = false;
   private pWasDown = false;
@@ -77,7 +79,7 @@ export class Engine {
     this.canvas = canvas;
   }
 
-  async init(worldId?: string): Promise<void> {
+  async init(worldId?: string, sessionId?: string): Promise<void> {
     this.renderer = new Renderer(this.canvas);
     await this.renderer.init();
 
@@ -182,14 +184,34 @@ export class Engine {
     // Day/night cycle
     this.dayNight = new DayNightCycle();
 
+    if (sessionId) {
+      this.multiplayer = new MultiplayerManager(
+        this.renderer.getScene(),
+        this.chunkManager
+      );
+      const session = await this.multiplayer.connect(sessionId);
+      this.dayNight.timeOfDay =
+        ((Date.now() - session.createdAt) / 600_000) % 1;
+    }
+
+    this.chunkManager.setBlockChangeListener((change) => {
+      if (change.source !== "local") return;
+      this.multiplayer?.broadcastBlockChange(
+        change.x,
+        change.y,
+        change.z,
+        change.blockId
+      );
+    });
+
     // Mob manager
     this.mobManager = new MobManager(this.renderer.getScene());
     this.mobManager.setItemDrops(this.itemDrops);
 
     // Get light references from scene for day/night updates
-    this.renderer.getScene().traverse((obj: any) => {
-      if (obj.isAmbientLight) this.ambientLight = obj;
-      if (obj.isDirectionalLight) this.directionalLight = obj;
+    this.renderer.getScene().traverse((obj) => {
+      if (obj instanceof THREE.AmbientLight) this.ambientLight = obj;
+      if (obj instanceof THREE.DirectionalLight) this.directionalLight = obj;
     });
 
     // Restore state
@@ -289,7 +311,7 @@ export class Engine {
     }
 
     // Check if default spawn is safe (has solid ground below)
-    let spawnY = this.findSafeSpawnY(SPAWN.x, SPAWN.z);
+    const spawnY = this.findSafeSpawnY(SPAWN.x, SPAWN.z);
 
     // If default spawn column is completely dug out, search nearby
     if (spawnY <= 0) {
@@ -677,6 +699,15 @@ export class Engine {
     );
     this.playerModel!.setVisible(this.camera.mode !== "first-person");
 
+    this.multiplayer?.update(dt, {
+      x: this.player!.position.x,
+      y: this.player!.position.y,
+      z: this.player!.position.z,
+      yaw: this.camera.yaw,
+      pitch: this.camera.pitch,
+      isCrouching: this.player!.isCrouching,
+    });
+
     // Camera
     const eyeH = this.player!.isCrouching ? 1.2 : 1.6;
     this.camera.applyToThreeCamera(
@@ -693,6 +724,9 @@ export class Engine {
     cancelAnimationFrame(this.animationFrameId);
     if (this.autoSaveTimer) clearInterval(this.autoSaveTimer);
     await this.save();
+    this.chunkManager?.setBlockChangeListener(null);
+    await this.multiplayer?.disconnect();
+    this.multiplayer = null;
     this.music?.dispose();
     this.input.dispose();
     this.handRenderer?.dispose();

@@ -19,10 +19,11 @@ const GameCanvas = dynamic(
 function GamePageInner() {
   const params = useSearchParams();
   const worldId = params.get("worldId") ?? undefined;
+  const sessionId = params.get("session") ?? undefined;
 
   return (
     <main className="w-screen h-screen overflow-hidden bg-black">
-      <GameCanvas worldId={worldId} />
+      <GameCanvas worldId={worldId} sessionId={sessionId} />
     </main>
   );
 }

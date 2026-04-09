@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useGameStore } from "@store/useGameStore";
-import { useHotbarStore } from "@store/useHotbarStore";
-import { BLOCK_ID } from "@data/blocks";
+import { useMultiplayerStore } from "@store/useMultiplayerStore";
 
 const HEART_PATH = "M6.5 11.5L1.5 6.5C0.2 5.2 0.2 3.1 1.5 1.8C2.8 0.5 4.9 0.5 6.2 1.8L6.5 2.1L6.8 1.8C8.1 0.5 10.2 0.5 11.5 1.8C12.8 3.1 12.8 5.2 11.5 6.5L6.5 11.5Z";
 
@@ -86,22 +85,12 @@ function SunMoonIcon({ timeOfDay }: { timeOfDay: number }) {
 
 function HealthBar({ health, maxHealth }: { health: number; maxHealth: number }) {
   const lastDamageTime = useGameStore((s) => s.lastDamageTime);
-  const [shaking, setShaking] = useState(false);
-  const prevHealthRef = useRef(health);
-
-  useEffect(() => {
-    if (health < prevHealthRef.current) {
-      setShaking(true);
-      const timer = setTimeout(() => setShaking(false), 300);
-      prevHealthRef.current = health;
-      return () => clearTimeout(timer);
-    }
-    prevHealthRef.current = health;
-  }, [health, lastDamageTime]);
-
   const hearts = maxHealth / 2;
   return (
-    <div className={`flex gap-[2px] ${shaking ? "animate-shake" : ""}`}>
+    <div
+      key={lastDamageTime}
+      className={`flex gap-[2px] ${lastDamageTime > 0 ? "animate-shake" : ""}`}
+    >
       {Array.from({ length: hearts }, (_, i) => {
         const hp = health - i * 2;
         const fill = hp >= 2 ? "full" : hp >= 1 ? "half" : "empty";
@@ -112,19 +101,13 @@ function HealthBar({ health, maxHealth }: { health: number; maxHealth: number })
 }
 
 function HungerBar({ hunger, maxHunger }: { hunger: number; maxHunger: number }) {
-  const [shaking, setShaking] = useState(false);
-
-  useEffect(() => {
-    if (hunger <= 6) {
-      setShaking(true);
-    } else {
-      setShaking(false);
-    }
-  }, [hunger]);
-
   const icons = maxHunger / 2;
   return (
-    <div className={`flex flex-row-reverse gap-[2px] ${shaking ? "animate-shake" : ""}`}>
+    <div
+      className={`flex flex-row-reverse gap-[2px] ${
+        hunger <= 6 ? "animate-shake" : ""
+      }`}
+    >
       {Array.from({ length: icons }, (_, i) => {
         const h = hunger - i * 2;
         const fill = h >= 2 ? "full" : h >= 1 ? "half" : "empty";
@@ -147,18 +130,19 @@ export function HUD() {
   const maxHealth = useGameStore((s) => s.maxHealth);
   const hunger = useGameStore((s) => s.hunger);
   const maxHunger = useGameStore((s) => s.maxHunger);
+  const multiplayerSession = useMultiplayerStore((s) => s.session);
+  const multiplayerPlayers = useMultiplayerStore((s) => s.players);
+  const multiplayerStatus = useMultiplayerStore((s) => s.status);
   const [showContinue, setShowContinue] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
 
-  const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
-
   useEffect(() => {
-    if (!isComplete) {
-      setShowContinue(false);
-      return;
-    }
+    if (!isComplete) return;
     const timer = setTimeout(() => setShowContinue(true), 4000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      setShowContinue(false);
+    };
   }, [isComplete]);
 
   useEffect(() => {
@@ -210,6 +194,32 @@ export function HUD() {
           <span className="text-white/40 font-normal">/{shardsTotal}</span>
         </span>
       </div>
+
+      {(multiplayerSession || multiplayerStatus === "connecting") && (
+        <div
+          className="absolute top-3 right-3 px-3 py-2 bg-black/50 border border-white/10 rounded"
+          style={{ textShadow: "1px 1px 0 #000" }}
+        >
+          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-300/90">
+            {multiplayerStatus === "connecting"
+              ? "Linking"
+              : multiplayerSession?.transport === "local"
+                ? "Local Co-op"
+                : "Multiplayer"}
+          </p>
+          {multiplayerSession && (
+            <>
+              <p className="font-mono text-sm font-bold text-white">
+                {multiplayerSession.code}
+              </p>
+              <p className="font-mono text-[11px] text-white/55">
+                {multiplayerPlayers.length} player
+                {multiplayerPlayers.length === 1 ? "" : "s"} online
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* F3 Debug */}
       {showDebug && (
