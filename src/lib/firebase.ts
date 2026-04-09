@@ -1,4 +1,5 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import { getFirestore, type Firestore } from "firebase/firestore";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -30,6 +31,7 @@ const isConfigured = !!firebaseConfig.apiKey;
 
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
+let _firestore: Firestore | null = null;
 let _microsoftProvider: OAuthProvider | null = null;
 let _googleProvider: GoogleAuthProvider | null = null;
 
@@ -46,6 +48,14 @@ function getFirebaseAuth(): Auth | null {
     _auth = getAuth(getApp());
   }
   return _auth;
+}
+
+function getFirestoreDb(): Firestore | null {
+  if (!isConfigured) return null;
+  if (!_firestore) {
+    _firestore = getFirestore(getApp());
+  }
+  return _firestore;
 }
 
 function getMicrosoftProvider(): OAuthProvider | null {
@@ -68,6 +78,7 @@ function getGoogleProvider(): GoogleAuthProvider | null {
 export {
   isConfigured as firebaseConfigured,
   getFirebaseAuth as auth,
+  getFirestoreDb as firestore,
   getMicrosoftProvider as microsoftProvider,
   getGoogleProvider as googleProvider,
   signInWithPopup,

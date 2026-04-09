@@ -17,6 +17,8 @@ import {
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
 import { useSettingsStore } from "@store/useSettingsStore";
 
+export type BlockChangeSource = "local" | "remote";
+
 /**
  * Manages chunk storage, generation, and rendering.
  * For island/flat worlds: generates all chunks synchronously on first update.
@@ -42,6 +44,9 @@ export class ChunkManager {
   private lastPlayerCX = -99999;
   private lastPlayerCZ = -99999;
   private readonly savedModifications = new Map<string, Uint8Array>();
+  private blockChangeListener:
+    | ((change: { x: number; y: number; z: number; blockId: number; source: BlockChangeSource }) => void)
+    | null = null;
 
   private readonly getUV: GetUV = (textureName: string) => {
     const uv = ATLAS_UVS[textureName];
@@ -355,6 +360,14 @@ export class ChunkManager {
   //  Block access
   // ──────────────────────────────────────────────
 
+  setBlockChangeListener(
+    listener:
+      | ((change: { x: number; y: number; z: number; blockId: number; source: BlockChangeSource }) => void)
+      | null
+  ): void {
+    this.blockChangeListener = listener;
+  }
+
   getBlock(wx: number, wy: number, wz: number): number {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
@@ -380,7 +393,13 @@ export class ChunkManager {
     return chunk.getBlock(lx, ly, lz);
   }
 
-  setBlock(wx: number, wy: number, wz: number, blockId: number): void {
+  setBlock(
+    wx: number,
+    wy: number,
+    wz: number,
+    blockId: number,
+    source: BlockChangeSource = "local"
+  ): void {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
     const key = chunkKey(cx, cy, cz);
     const chunk = this.chunks.get(key);
@@ -408,6 +427,14 @@ export class ChunkManager {
     if (ly === CHUNK_SIZE - 1) this.remeshIfLoaded(cx, cy + 1, cz);
     if (lz === 0) this.remeshIfLoaded(cx, cy, cz - 1);
     if (lz === CHUNK_SIZE - 1) this.remeshIfLoaded(cx, cy, cz + 1);
+
+    this.blockChangeListener?.({
+      x: wx,
+      y: wy,
+      z: wz,
+      blockId,
+      source,
+    });
   }
 
   private remeshIfLoaded(cx: number, cy: number, cz: number): void {

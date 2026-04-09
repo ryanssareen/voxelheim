@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@store/useAuthStore";
 
 const MC_BUTTON =
   "block w-full text-center py-2.5 text-white font-mono tracking-wide hover:brightness-125 active:brightness-90 transition-all select-none";
@@ -32,10 +33,15 @@ export default function CreateWorldPage() {
   const [seed, setSeed] = useState("");
   const [gameMode, setGameMode] = useState(0);
   const [worldType, setWorldType] = useState(0);
+  const [startMultiplayer, setStartMultiplayer] = useState(false);
+  const user = useAuthStore((state) => state.user);
 
   const handleCreate = async () => {
     const actualSeed = seed || Math.random().toString(36).slice(2, 10);
-    const actualWorldType = WORLD_TYPES[worldType].toLowerCase();
+    const actualWorldType = WORLD_TYPES[worldType].toLowerCase() as
+      | "island"
+      | "flat"
+      | "infinite";
 
     // Save initial world metadata to IndexedDB
     const { generateWorldId, saveWorld } = await import(
@@ -70,6 +76,21 @@ export default function CreateWorldPage() {
       "voxelheim-world-config",
       JSON.stringify({ seed: actualSeed, worldType: actualWorldType })
     );
+
+    if (startMultiplayer) {
+      const { createMultiplayerSession } = await import(
+        "@lib/multiplayer/sessionClient"
+      );
+      const session = await createMultiplayerSession({
+        seed: actualSeed,
+        worldType: actualWorldType,
+        worldName,
+        hostName: user?.email?.split("@")[0] ?? "Host",
+      });
+      router.push(`/game?worldId=${id}&session=${session.code}`);
+      return;
+    }
+
     router.push(`/game?worldId=${id}`);
   };
 
@@ -152,6 +173,22 @@ export default function CreateWorldPage() {
         >
           World Type: {WORLD_TYPES[worldType]}
         </button>
+
+        <button
+          onClick={() => setStartMultiplayer((value) => !value)}
+          className="w-full py-2.5 text-white font-mono text-sm tracking-wide mb-2 hover:brightness-125 active:brightness-90 transition-all"
+          style={startMultiplayer ? MC_BUTTON_STYLE : MC_DISABLED_STYLE}
+        >
+          Multiplayer Session: {startMultiplayer ? "ON" : "OFF"}
+        </button>
+        <p
+          className="w-full mb-6 text-center text-[11px] font-mono text-white/40"
+          style={{ textShadow: "1px 1px 0 #000" }}
+        >
+          {startMultiplayer
+            ? "Friends can join from the session code shown in-game."
+            : "Create a solo world, then host it later from the worlds list."}
+        </p>
 
         {/* Action buttons */}
         <div className="flex gap-2.5 w-full">

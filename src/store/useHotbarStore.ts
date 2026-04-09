@@ -28,6 +28,7 @@ interface HotbarState {
   getSelectedBlockId: () => number;
   getSelectedSlot: () => ItemStack;
   getOffhandBlockId: () => number;
+  canAddItem: (blockId: number) => boolean;
   addItem: (blockId: number) => boolean;
   removeSelectedItem: () => number;
   damageSelectedTool: () => void;
@@ -81,6 +82,33 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
   getOffhandBlockId: () => {
     const { offhand } = get();
     return offhand.count > 0 ? offhand.blockId : BLOCK_ID.AIR;
+  },
+
+  canAddItem: (blockId: number) => {
+    let { slots } = get();
+    if (slots.length < TOTAL_SLOTS) {
+      slots = Array.from({ length: TOTAL_SLOTS }, (_, i) =>
+        slots[i] ?? { blockId: BLOCK_ID.AIR, count: 0 }
+      );
+      set({ slots });
+    }
+
+    const tool = isToolItem(blockId);
+    if (!tool) {
+      for (let i = 0; i < TOTAL_SLOTS; i++) {
+        if (slots[i].blockId === blockId && slots[i].count < MAX_STACK) {
+          return true;
+        }
+      }
+    }
+
+    for (let i = 0; i < TOTAL_SLOTS; i++) {
+      if (slots[i].count === 0) {
+        return true;
+      }
+    }
+
+    return false;
   },
 
   addItem: (blockId: number) => {

@@ -11,12 +11,22 @@ const ARMOR_COLORS: Record<number, number> = {
   [BLOCK_ID.LEAVES]: 0x2e7d32,
 };
 
+interface PlayerModelOptions {
+  syncArmor?: boolean;
+  shirtColor?: number;
+  pantsColor?: number;
+  skinColor?: number;
+  hairColor?: number;
+  shoeColor?: number;
+}
+
 /**
  * Simple blocky player model (Steve-style) made from box geometries.
  * Visible in 3rd person camera modes, hidden in 1st person.
  */
 export class PlayerModel {
   public readonly group: THREE.Group;
+  private readonly syncArmor: boolean;
 
   private head: THREE.Mesh;
   private body: THREE.Mesh;
@@ -35,14 +45,15 @@ export class PlayerModel {
   private walkTime = 0;
   private lastArmorHash = "";
 
-  constructor() {
+  constructor(options: PlayerModelOptions = {}) {
     this.group = new THREE.Group();
+    this.syncArmor = options.syncArmor ?? true;
 
-    const skin = new THREE.MeshLambertMaterial({ color: 0xc8a882 }); // skin tone
-    const shirt = new THREE.MeshLambertMaterial({ color: 0x4a90d9 }); // blue shirt
-    const pants = new THREE.MeshLambertMaterial({ color: 0x3b3b6e }); // dark blue pants
-    const hair = new THREE.MeshLambertMaterial({ color: 0x3a2a1a }); // brown hair
-    const shoes = new THREE.MeshLambertMaterial({ color: 0x4a4a4a }); // dark shoes
+    const skin = new THREE.MeshLambertMaterial({ color: options.skinColor ?? 0xc8a882 });
+    const shirt = new THREE.MeshLambertMaterial({ color: options.shirtColor ?? 0x4a90d9 });
+    const pants = new THREE.MeshLambertMaterial({ color: options.pantsColor ?? 0x3b3b6e });
+    const hair = new THREE.MeshLambertMaterial({ color: options.hairColor ?? 0x3a2a1a });
+    const shoes = new THREE.MeshLambertMaterial({ color: options.shoeColor ?? 0x4a4a4a });
 
     // Head (8x8x8 pixels → 0.5x0.5x0.5 blocks)
     this.head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skin);
@@ -157,11 +168,13 @@ export class PlayerModel {
     }
 
     // Sync armor visuals from store
-    const armorSlots = useHotbarStore.getState().armor;
-    const armorHash = armorSlots.map(s => `${s.blockId}:${s.count}`).join(",");
-    if (armorHash !== this.lastArmorHash) {
-      this.lastArmorHash = armorHash;
-      this.updateArmor(armorSlots);
+    if (this.syncArmor) {
+      const armorSlots = useHotbarStore.getState().armor;
+      const armorHash = armorSlots.map(s => `${s.blockId}:${s.count}`).join(",");
+      if (armorHash !== this.lastArmorHash) {
+        this.lastArmorHash = armorHash;
+        this.updateArmor(armorSlots);
+      }
     }
 
     // Armor follows body positions

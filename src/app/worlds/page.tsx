@@ -20,6 +20,10 @@ export default function WorldsPage() {
   const router = useRouter();
   const [worlds, setWorlds] = useState<WorldMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [busyWorldId, setBusyWorldId] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
   const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
@@ -42,6 +46,71 @@ export default function WorldsPage() {
     const mod = await import("@systems/persistence/WorldStorage");
     await mod.deleteWorld(worldId);
     setWorlds((w) => w.filter((x) => x.id !== worldId));
+  };
+
+  const handleHost = async (world: WorldMeta) => {
+    setBusyWorldId(world.id);
+    setJoinError("");
+
+    try {
+      const { createMultiplayerSession } = await import(
+        "@lib/multiplayer/sessionClient"
+      );
+      const session = await createMultiplayerSession({
+        seed: world.seed,
+        worldType:
+          world.worldType === "flat" || world.worldType === "infinite"
+            ? world.worldType
+            : "island",
+        worldName: world.name,
+        hostName: user?.email?.split("@")[0] ?? "Host",
+      });
+      router.push(`/game?worldId=${world.id}&session=${session.code}`);
+    } catch (error) {
+      setJoinError(
+        error instanceof Error ? error.message : "Failed to host session"
+      );
+    } finally {
+      setBusyWorldId(null);
+    }
+  };
+
+  const handleJoin = async () => {
+    const code = joinCode.trim().toUpperCase();
+    if (!code) {
+      setJoinError("Enter a session code first.");
+      return;
+    }
+
+    setJoining(true);
+    setJoinError("");
+
+    try {
+      const { readMultiplayerSession } = await import(
+        "@lib/multiplayer/sessionClient"
+      );
+      const session = await readMultiplayerSession(code);
+      if (!session) {
+        setJoinError("Session not found. Double-check the code.");
+        return;
+      }
+
+      sessionStorage.setItem(
+        "voxelheim-world-config",
+        JSON.stringify({
+          seed: session.seed,
+          worldType: session.worldType,
+        })
+      );
+
+      router.push(`/game?session=${session.code}`);
+    } catch (error) {
+      setJoinError(
+        error instanceof Error ? error.message : "Failed to join session"
+      );
+    } finally {
+      setJoining(false);
+    }
   };
 
   return (
@@ -116,6 +185,16 @@ export default function WorldsPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    void handleHost(world);
+                  }}
+                  className="text-cyan-300/80 hover:text-cyan-200 font-mono text-xs px-2 py-1"
+                >
+                  {busyWorldId === world.id ? "Hosting..." : "Host"}
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
                     handleDelete(world.id);
                   }}
                   className="text-red-400/60 hover:text-red-400 font-mono text-xs px-2 py-1"
@@ -126,6 +205,48 @@ export default function WorldsPage() {
             ))}
           </div>
         )}
+
+        <div
+          className="mb-6 p-3"
+          style={{
+            background:
+              "linear-gradient(to bottom, #3d3d3d 0%, #2d2d2d 100%)",
+            border: "2px solid #1f1f1f",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.25)",
+          }}
+        >
+          <p
+            className="mb-2 text-center text-xs font-mono text-white/70"
+            style={{ textShadow: "1px 1px 0 #000" }}
+          >
+            Join a multiplayer session
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={joinCode}
+              onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+              placeholder="Enter code..."
+              className="flex-1 bg-black/60 border-2 border-[#1a1a1a] px-3 py-2 text-sm text-white font-mono uppercase focus:outline-none focus:border-white/30"
+              style={{
+                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)",
+                textShadow: "1px 1px 0 #000",
+              }}
+            />
+            <button
+              onClick={() => void handleJoin()}
+              className={MC_BTN + " min-w-24 text-sm"}
+              style={MC_BTN_STYLE}
+            >
+              {joining ? "Joining..." : "Join"}
+            </button>
+          </div>
+          {joinError && (
+            <p className="mt-2 text-center text-[11px] font-mono text-red-300">
+              {joinError}
+            </p>
+          )}
+        </div>
 
         <div className="flex gap-2.5">
           <button

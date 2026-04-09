@@ -21,10 +21,7 @@ export function LoadingScreen({ visible }: { visible: boolean }) {
 
   // Cycle through loading stages
   useEffect(() => {
-    if (!visible) {
-      setStageIndex(0);
-      return;
-    }
+    if (!visible) return;
 
     const interval = setInterval(() => {
       setStageIndex((i) => {
@@ -33,7 +30,10 @@ export function LoadingScreen({ visible }: { visible: boolean }) {
       });
     }, 400);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      setStageIndex(0);
+    };
   }, [visible]);
 
   // Animate dots

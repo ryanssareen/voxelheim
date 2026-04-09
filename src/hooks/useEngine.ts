@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { Engine } from "@engine/Engine";
 
 interface EngineState {
   isLoading: boolean;
   isReady: boolean;
   error: string | null;
+}
+
+interface StartOptions {
+  worldId?: string;
+  sessionId?: string;
 }
 
 export function useEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) {
@@ -14,10 +20,10 @@ export function useEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) 
     isReady: false,
     error: null,
   });
-  const engineRef = useRef<any>(null);
+  const engineRef = useRef<Engine | null>(null);
   const initCalled = useRef(false);
 
-  const start = (worldId?: string) => {
+  const start = ({ worldId, sessionId }: StartOptions = {}) => {
     if (initCalled.current) return;
     initCalled.current = true;
     setState({ isLoading: true, isReady: false, error: null });
@@ -32,7 +38,7 @@ export function useEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) 
       .then(async ({ Engine }) => {
         const engine = new Engine(canvas);
         engineRef.current = engine;
-        await engine.init(worldId);
+        await engine.init(worldId, sessionId);
         setState({ isLoading: false, isReady: true, error: null });
       })
       .catch((err) => {
