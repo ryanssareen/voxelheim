@@ -85,13 +85,12 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
   },
 
   canAddItem: (blockId: number) => {
-    let { slots } = get();
-    if (slots.length < TOTAL_SLOTS) {
-      slots = Array.from({ length: TOTAL_SLOTS }, (_, i) =>
-        slots[i] ?? { blockId: BLOCK_ID.AIR, count: 0 }
-      );
-      set({ slots });
-    }
+    const raw = get().slots;
+    const slots = raw.length < TOTAL_SLOTS
+      ? Array.from({ length: TOTAL_SLOTS }, (_, i) =>
+          raw[i] ?? { blockId: BLOCK_ID.AIR, count: 0 }
+        )
+      : raw;
 
     const tool = isToolItem(blockId);
     if (!tool) {

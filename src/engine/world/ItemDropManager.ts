@@ -271,7 +271,7 @@ export class ItemDropManager {
     if (!current) return;
 
     if (!claimed) {
-      this.removeDrop(dropId);
+      current.pendingClaim = false;
       return;
     }
 
