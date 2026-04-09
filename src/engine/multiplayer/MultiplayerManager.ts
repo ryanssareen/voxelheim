@@ -1,8 +1,14 @@
 import * as THREE from "three";
 import { ChunkManager } from "@engine/world/ChunkManager";
+import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { RemotePlayerAvatar } from "@engine/multiplayer/RemotePlayerAvatar";
 import { connectMultiplayerSession } from "@lib/multiplayer/sessionClient";
-import type { MultiplayerConnection, MultiplayerPlayerState, MultiplayerSessionMeta } from "@lib/multiplayer/types";
+import type {
+  MultiplayerConnection,
+  MultiplayerDropState,
+  MultiplayerPlayerState,
+  MultiplayerSessionMeta,
+} from "@lib/multiplayer/types";
 import { useAuthStore } from "@store/useAuthStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 
@@ -45,16 +51,23 @@ function getPlayerName(): string {
 export class MultiplayerManager {
   private readonly scene: THREE.Scene;
   private readonly chunkManager: ChunkManager;
+  private readonly itemDrops: ItemDropManager;
   private readonly playerId = getStablePlayerId();
   private readonly playerName = getPlayerName();
   private readonly avatars = new Map<string, RemotePlayerAvatar>();
   private readonly appliedBlockTimestamps = new Map<string, number>();
+  private readonly cleanup: Array<() => void> = [];
   private connection: MultiplayerConnection | null = null;
   private sendTimer = PLAYER_SEND_INTERVAL_MS;
 
-  constructor(scene: THREE.Scene, chunkManager: ChunkManager) {
+  constructor(
+    scene: THREE.Scene,
+    chunkManager: ChunkManager,
+    itemDrops: ItemDropManager
+  ) {
     this.scene = scene;
     this.chunkManager = chunkManager;
+    this.itemDrops = itemDrops;
   }
 
   async connect(sessionCode: string): Promise<MultiplayerSessionMeta> {
@@ -73,26 +86,47 @@ export class MultiplayerManager {
     }
 
     this.connection = connection;
+    this.sendTimer = PLAYER_SEND_INTERVAL_MS;
     useMultiplayerStore.getState().setConnected(connection.session);
 
-    connection.subscribePlayers((players) => {
-      const now = Date.now();
-      const activePlayers = players.filter(
-        (player) => now - player.updatedAt <= PLAYER_STALE_AFTER_MS
-      );
-      useMultiplayerStore.getState().setPlayers(activePlayers);
-      this.syncRemotePlayers(activePlayers);
-    });
+    this.cleanup.push(
+      connection.subscribePlayers((players) => {
+        const now = Date.now();
+        const activePlayers = players.filter(
+          (player) => now - player.updatedAt <= PLAYER_STALE_AFTER_MS
+        );
+        useMultiplayerStore.getState().setPlayers(activePlayers);
+        this.syncRemotePlayers(activePlayers);
+      })
+    );
 
-    connection.subscribeBlockChanges((change) => {
-      if (change.updatedBy === this.playerId) return;
-      const key = `${change.x},${change.y},${change.z}`;
-      const previous = this.appliedBlockTimestamps.get(key) ?? 0;
-      if (change.updatedAt <= previous) return;
+    this.cleanup.push(
+      connection.subscribeBlockChanges((change) => {
+        if (change.updatedBy === this.playerId) return;
+        const key = `${change.x},${change.y},${change.z}`;
+        const previous = this.appliedBlockTimestamps.get(key) ?? 0;
+        if (change.updatedAt <= previous) return;
 
-      this.appliedBlockTimestamps.set(key, change.updatedAt);
-      this.chunkManager.setBlock(change.x, change.y, change.z, change.blockId, "remote");
-    });
+        this.appliedBlockTimestamps.set(key, change.updatedAt);
+        this.chunkManager.setBlock(
+          change.x,
+          change.y,
+          change.z,
+          change.blockId,
+          "remote"
+        );
+      })
+    );
+
+    this.cleanup.push(
+      connection.subscribeDropEvents((event) => {
+        if (event.type === "upsert") {
+          this.itemDrops.upsertRemoteDrop(event.drop);
+          return;
+        }
+        this.itemDrops.removeRemoteDrop(event.dropId);
+      })
+    );
 
     return connection.session;
   }
@@ -132,10 +166,38 @@ export class MultiplayerManager {
     });
   }
 
+  broadcastDrop(drop: MultiplayerDropState): void {
+    if (!this.connection) return;
+    void this.connection.upsertDrop(drop);
+  }
+
+  claimDrop(dropId: string): Promise<boolean> {
+    if (!this.connection) {
+      return Promise.resolve(true);
+    }
+    return this.connection.removeDrop(dropId);
+  }
+
+  loadWorldState(): Promise<Map<string, Uint8Array>> {
+    if (!this.connection) {
+      return Promise.resolve(new Map());
+    }
+    return this.connection.loadWorldState();
+  }
+
+  async saveWorldState(chunks: Map<string, Uint8Array>): Promise<void> {
+    if (!this.connection || chunks.size === 0) return;
+    await this.connection.saveWorldState(chunks);
+  }
+
   async disconnect(): Promise<void> {
     const connection = this.connection;
     this.connection = null;
-    this.sendTimer = 0;
+    this.sendTimer = PLAYER_SEND_INTERVAL_MS;
+
+    for (const dispose of this.cleanup.splice(0)) {
+      dispose();
+    }
 
     if (connection) {
       await connection.close();

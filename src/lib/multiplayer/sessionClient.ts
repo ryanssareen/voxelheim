@@ -3,16 +3,25 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
+  runTransaction,
   setDoc,
+  writeBatch,
   type Firestore,
 } from "firebase/firestore";
 import { firestore, firebaseConfigured } from "@lib/firebase";
-import { createSessionCode, isLocalSessionCode, normalizeSessionCode } from "@lib/multiplayer/sessionCode";
+import {
+  createSessionCode,
+  isLocalSessionCode,
+  normalizeSessionCode,
+} from "@lib/multiplayer/sessionCode";
 import type {
   CreateSessionInput,
   MultiplayerBlockState,
   MultiplayerConnection,
+  MultiplayerDropEvent,
+  MultiplayerDropState,
   MultiplayerIdentity,
   MultiplayerPlayerState,
   MultiplayerSessionMeta,
@@ -20,15 +29,21 @@ import type {
 
 const LOCAL_SESSION_PREFIX = "voxelheim-mp-session:";
 const LOCAL_BLOCK_PREFIX = "voxelheim-mp-blocks:";
+const LOCAL_WORLD_PREFIX = "voxelheim-mp-world:";
+const LOCAL_DROP_PREFIX = "voxelheim-mp-drops:";
 const CHANNEL_PREFIX = "voxelheim-mp:";
 
 type LocalBlockMap = Record<string, MultiplayerBlockState>;
+type LocalWorldMap = Record<string, string>;
+type LocalDropMap = Record<string, MultiplayerDropState>;
 
 type LocalMessage =
   | { type: "hello-request"; playerId: string }
   | { type: "player-state"; payload: MultiplayerPlayerState }
   | { type: "player-leave"; playerId: string }
-  | { type: "block-state"; payload: MultiplayerBlockState };
+  | { type: "block-state"; payload: MultiplayerBlockState }
+  | { type: "drop-upsert"; payload: MultiplayerDropState }
+  | { type: "drop-remove"; dropId: string };
 
 function sessionStorageKey(code: string): string {
   return `${LOCAL_SESSION_PREFIX}${code}`;
@@ -38,43 +53,105 @@ function blockStorageKey(code: string): string {
   return `${LOCAL_BLOCK_PREFIX}${code}`;
 }
 
+function worldStorageKey(code: string): string {
+  return `${LOCAL_WORLD_PREFIX}${code}`;
+}
+
+function dropStorageKey(code: string): string {
+  return `${LOCAL_DROP_PREFIX}${code}`;
+}
+
 function blockRecordKey(x: number, y: number, z: number): string {
   return `${x},${y},${z}`;
 }
 
-function readLocalSession(code: string): MultiplayerSessionMeta | null {
-  if (typeof window === "undefined") return null;
+function encodeBytes(data: Uint8Array): string {
+  let binary = "";
+  for (const byte of data) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function decodeBytes(encoded: string): Uint8Array {
+  const binary = atob(encoded);
+  const data = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    data[index] = binary.charCodeAt(index);
+  }
+  return data;
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
 
   try {
-    const raw = window.localStorage.getItem(sessionStorageKey(code));
-    return raw ? (JSON.parse(raw) as MultiplayerSessionMeta) : null;
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
-    return null;
+    return fallback;
   }
+}
+
+function writeJson(key: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function readLocalSession(code: string): MultiplayerSessionMeta | null {
+  return readJson<MultiplayerSessionMeta | null>(sessionStorageKey(code), null);
 }
 
 function writeLocalSession(session: MultiplayerSessionMeta): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(sessionStorageKey(session.code), JSON.stringify(session));
+  writeJson(sessionStorageKey(session.code), session);
 }
 
 function readLocalBlocks(code: string): LocalBlockMap {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = window.localStorage.getItem(blockStorageKey(code));
-    return raw ? (JSON.parse(raw) as LocalBlockMap) : {};
-  } catch {
-    return {};
-  }
+  return readJson<LocalBlockMap>(blockStorageKey(code), {});
 }
 
 function writeLocalBlock(code: string, change: MultiplayerBlockState): void {
-  if (typeof window === "undefined") return;
-
   const existing = readLocalBlocks(code);
   existing[blockRecordKey(change.x, change.y, change.z)] = change;
-  window.localStorage.setItem(blockStorageKey(code), JSON.stringify(existing));
+  writeJson(blockStorageKey(code), existing);
+}
+
+function readLocalDrops(code: string): LocalDropMap {
+  return readJson<LocalDropMap>(dropStorageKey(code), {});
+}
+
+function writeLocalDrop(code: string, drop: MultiplayerDropState): void {
+  const existing = readLocalDrops(code);
+  existing[drop.dropId] = drop;
+  writeJson(dropStorageKey(code), existing);
+}
+
+function deleteLocalDrop(code: string, dropId: string): boolean {
+  const existing = readLocalDrops(code);
+  if (!existing[dropId]) return false;
+  delete existing[dropId];
+  writeJson(dropStorageKey(code), existing);
+  return true;
+}
+
+function readLocalWorldState(code: string): Map<string, Uint8Array> {
+  const existing = readJson<LocalWorldMap>(worldStorageKey(code), {});
+  const chunks = new Map<string, Uint8Array>();
+  for (const [chunkKey, encoded] of Object.entries(existing)) {
+    chunks.set(chunkKey, decodeBytes(encoded));
+  }
+  return chunks;
+}
+
+function writeLocalWorldState(
+  code: string,
+  chunks: Map<string, Uint8Array>
+): void {
+  const payload: LocalWorldMap = {};
+  for (const [chunkKey, data] of chunks) {
+    payload[chunkKey] = encodeBytes(data);
+  }
+  writeJson(worldStorageKey(code), payload);
 }
 
 class LocalMultiplayerConnection implements MultiplayerConnection {
@@ -87,6 +164,9 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
   >();
   private readonly blockListeners = new Set<
     (change: MultiplayerBlockState) => void
+  >();
+  private readonly dropListeners = new Set<
+    (event: MultiplayerDropEvent) => void
   >();
   private readonly playerStates = new Map<string, MultiplayerPlayerState>();
   private latestLocalState: MultiplayerPlayerState | null = null;
@@ -134,6 +214,23 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
     };
   }
 
+  subscribeDropEvents(
+    callback: (event: MultiplayerDropEvent) => void
+  ): () => void {
+    this.dropListeners.add(callback);
+
+    const existingDrops = Object.values(readLocalDrops(this.session.code)).sort(
+      (left, right) => left.createdAt - right.createdAt
+    );
+    for (const drop of existingDrops) {
+      callback({ type: "upsert", drop });
+    }
+
+    return () => {
+      this.dropListeners.delete(callback);
+    };
+  }
+
   async setPlayerState(
     state: Omit<MultiplayerPlayerState, "updatedAt">
   ): Promise<void> {
@@ -145,7 +242,10 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
     this.latestLocalState = next;
     this.playerStates.set(next.playerId, next);
     this.emitPlayers();
-    this.channel.postMessage({ type: "player-state", payload: next } satisfies LocalMessage);
+    this.channel.postMessage({
+      type: "player-state",
+      payload: next,
+    } satisfies LocalMessage);
   }
 
   async setBlockState(
@@ -158,7 +258,39 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
 
     writeLocalBlock(this.session.code, next);
     this.emitBlock(next);
-    this.channel.postMessage({ type: "block-state", payload: next } satisfies LocalMessage);
+    this.channel.postMessage({
+      type: "block-state",
+      payload: next,
+    } satisfies LocalMessage);
+  }
+
+  async upsertDrop(drop: MultiplayerDropState): Promise<void> {
+    writeLocalDrop(this.session.code, drop);
+    this.emitDrop({ type: "upsert", drop });
+    this.channel.postMessage({
+      type: "drop-upsert",
+      payload: drop,
+    } satisfies LocalMessage);
+  }
+
+  async removeDrop(dropId: string): Promise<boolean> {
+    const removed = deleteLocalDrop(this.session.code, dropId);
+    if (!removed) return false;
+
+    this.emitDrop({ type: "remove", dropId });
+    this.channel.postMessage({
+      type: "drop-remove",
+      dropId,
+    } satisfies LocalMessage);
+    return true;
+  }
+
+  async loadWorldState(): Promise<Map<string, Uint8Array>> {
+    return readLocalWorldState(this.session.code);
+  }
+
+  async saveWorldState(chunks: Map<string, Uint8Array>): Promise<void> {
+    writeLocalWorldState(this.session.code, chunks);
   }
 
   async close(): Promise<void> {
@@ -199,6 +331,18 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
     if (message.type === "block-state") {
       writeLocalBlock(this.session.code, message.payload);
       this.emitBlock(message.payload);
+      return;
+    }
+
+    if (message.type === "drop-upsert") {
+      writeLocalDrop(this.session.code, message.payload);
+      this.emitDrop({ type: "upsert", drop: message.payload });
+      return;
+    }
+
+    if (message.type === "drop-remove") {
+      deleteLocalDrop(this.session.code, message.dropId);
+      this.emitDrop({ type: "remove", dropId: message.dropId });
     }
   };
 
@@ -212,6 +356,12 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
   private emitBlock(change: MultiplayerBlockState): void {
     for (const listener of this.blockListeners) {
       listener(change);
+    }
+  }
+
+  private emitDrop(event: MultiplayerDropEvent): void {
+    for (const listener of this.dropListeners) {
+      listener(event);
     }
   }
 
@@ -233,16 +383,21 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
   private readonly blockListeners = new Set<
     (change: MultiplayerBlockState) => void
   >();
+  private readonly dropListeners = new Set<
+    (event: MultiplayerDropEvent) => void
+  >();
   private readonly cleanup: Array<() => void> = [];
   private latestPlayers: MultiplayerPlayerState[] = [];
   private readonly playerDocRef;
   private readonly playersColRef;
   private readonly blocksColRef;
+  private readonly dropsColRef;
+  private readonly worldStateColRef;
 
   constructor(
     readonly session: MultiplayerSessionMeta,
     private readonly identity: MultiplayerIdentity,
-    database: Firestore
+    private readonly database: Firestore
   ) {
     this.playerDocRef = doc(
       database,
@@ -262,6 +417,18 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
       "multiplayerSessions",
       session.code,
       "blocks"
+    );
+    this.dropsColRef = collection(
+      database,
+      "multiplayerSessions",
+      session.code,
+      "drops"
+    );
+    this.worldStateColRef = collection(
+      database,
+      "multiplayerSessions",
+      session.code,
+      "worldState"
     );
 
     this.cleanup.push(
@@ -292,6 +459,24 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
         }
       })
     );
+
+    this.cleanup.push(
+      onSnapshot(this.dropsColRef, (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === "removed") {
+            for (const listener of this.dropListeners) {
+              listener({ type: "remove", dropId: change.doc.id });
+            }
+            continue;
+          }
+
+          const drop = change.doc.data() as MultiplayerDropState;
+          for (const listener of this.dropListeners) {
+            listener({ type: "upsert", drop });
+          }
+        }
+      })
+    );
   }
 
   subscribePlayers(
@@ -310,6 +495,15 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
     this.blockListeners.add(callback);
     return () => {
       this.blockListeners.delete(callback);
+    };
+  }
+
+  subscribeDropEvents(
+    callback: (event: MultiplayerDropEvent) => void
+  ): () => void {
+    this.dropListeners.add(callback);
+    return () => {
+      this.dropListeners.delete(callback);
     };
   }
 
@@ -337,6 +531,41 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
       ...change,
       updatedAt: Date.now(),
     } satisfies MultiplayerBlockState);
+  }
+
+  async upsertDrop(drop: MultiplayerDropState): Promise<void> {
+    await setDoc(doc(this.dropsColRef, drop.dropId), drop);
+  }
+
+  async removeDrop(dropId: string): Promise<boolean> {
+    const target = doc(this.dropsColRef, dropId);
+    return runTransaction(this.database, async (transaction) => {
+      const snapshot = await transaction.get(target);
+      if (!snapshot.exists()) return false;
+      transaction.delete(target);
+      return true;
+    });
+  }
+
+  async loadWorldState(): Promise<Map<string, Uint8Array>> {
+    const snapshot = await getDocs(this.worldStateColRef);
+    const chunks = new Map<string, Uint8Array>();
+    for (const entry of snapshot.docs) {
+      const payload = entry.data() as { data: string };
+      chunks.set(entry.id, decodeBytes(payload.data));
+    }
+    return chunks;
+  }
+
+  async saveWorldState(chunks: Map<string, Uint8Array>): Promise<void> {
+    const batch = writeBatch(this.database);
+    for (const [chunkKey, data] of chunks) {
+      batch.set(doc(this.worldStateColRef, chunkKey), {
+        data: encodeBytes(data),
+        updatedAt: Date.now(),
+      });
+    }
+    await batch.commit();
   }
 
   async close(): Promise<void> {

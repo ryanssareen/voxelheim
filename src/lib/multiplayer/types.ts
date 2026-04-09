@@ -33,6 +33,24 @@ export interface MultiplayerBlockState {
   updatedBy: string;
 }
 
+export interface MultiplayerDropState {
+  dropId: string;
+  blockId: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  bobOffset: number;
+  pickupDelay: number;
+  createdAt: number;
+}
+
+export type MultiplayerDropEvent =
+  | { type: "upsert"; drop: MultiplayerDropState }
+  | { type: "remove"; dropId: string };
+
 export interface MultiplayerIdentity {
   playerId: string;
   name: string;
@@ -54,11 +72,18 @@ export interface MultiplayerConnection {
   subscribeBlockChanges: (
     callback: (change: MultiplayerBlockState) => void
   ) => () => void;
+  subscribeDropEvents: (
+    callback: (event: MultiplayerDropEvent) => void
+  ) => () => void;
   setPlayerState: (
     state: Omit<MultiplayerPlayerState, "updatedAt">
   ) => Promise<void>;
   setBlockState: (
     change: Omit<MultiplayerBlockState, "updatedAt">
   ) => Promise<void>;
+  upsertDrop: (drop: MultiplayerDropState) => Promise<void>;
+  removeDrop: (dropId: string) => Promise<boolean>;
+  loadWorldState: () => Promise<Map<string, Uint8Array>>;
+  saveWorldState: (chunks: Map<string, Uint8Array>) => Promise<void>;
   close: () => Promise<void>;
 }

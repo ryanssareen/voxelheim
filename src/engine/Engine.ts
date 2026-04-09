@@ -187,9 +187,28 @@ export class Engine {
     if (sessionId) {
       this.multiplayer = new MultiplayerManager(
         this.renderer.getScene(),
-        this.chunkManager
+        this.chunkManager,
+        this.itemDrops
       );
       const session = await this.multiplayer.connect(sessionId);
+
+      if (worldId) {
+        await this.multiplayer.saveWorldState(this.chunkManager.getModifiedChunks());
+      } else {
+        const sessionChunks = await this.multiplayer.loadWorldState();
+        if (sessionChunks.size > 0) {
+          this.chunkManager.loadModifiedChunks(sessionChunks);
+        }
+      }
+
+      this.itemDrops.setNetworkHandlers({
+        onDropSpawn: (drop) => {
+          this.multiplayer?.broadcastDrop(drop);
+        },
+        claimDrop: (dropId) =>
+          this.multiplayer?.claimDrop(dropId) ?? Promise.resolve(true),
+      });
+
       this.dayNight.timeOfDay =
         ((Date.now() - session.createdAt) / 600_000) % 1;
     }
@@ -262,6 +281,8 @@ export class Engine {
   async save(): Promise<void> {
     if (!this.worldId || !this.chunkManager || !this.player) return;
 
+    const modifiedChunks = this.chunkManager.getModifiedChunks();
+
     const meta: WorldMeta = {
       id: this.worldId,
       name: "World", // TODO: store name
@@ -278,7 +299,8 @@ export class Engine {
       worldType: this.worldType,
     };
 
-    await saveWorld(meta, this.chunkManager.getModifiedChunks());
+    await saveWorld(meta, modifiedChunks);
+    await this.multiplayer?.saveWorldState(modifiedChunks);
   }
 
   /** Find the highest solid block at (x, z) and return spawn Y above it. */
