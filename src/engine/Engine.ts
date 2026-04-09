@@ -124,10 +124,16 @@ export class Engine {
         : { ...DEFAULT_SPAWN };
     this.spawn = spawn;
 
+    // Determine actual player start position BEFORE generating terrain
+    // so we generate chunks around where the player will actually be
+    const startPos = savedMeta?.playerPos
+      ? { x: savedMeta.playerPos.x, y: savedMeta.playerPos.y, z: savedMeta.playerPos.z }
+      : { ...spawn };
+
     this.chunkManager = new ChunkManager(this.renderer, this.seed, worldType);
 
     if (worldType === "infinite") {
-      this.chunkManager.generateSpawnArea(spawn.x, spawn.z);
+      this.chunkManager.generateSpawnArea(startPos.x, startPos.z);
     } else {
       this.chunkManager.update(0, 0, 0);
     }
@@ -140,8 +146,8 @@ export class Engine {
       }
     }
 
-    // Find safe spawn Y on solid ground (not mid-air)
-    spawn.y = this.findSafeSpawnY(spawn.x, spawn.z);
+    // Always find safe Y on solid ground
+    startPos.y = this.findSafeSpawnY(startPos.x, startPos.z);
 
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
@@ -152,16 +158,7 @@ export class Engine {
       }
     };
 
-    // Player — use saved position if returning to a world, otherwise safe spawn
-    const spawnPos = savedMeta?.playerPos ?? spawn;
-    // For new worlds, override saved Y with safe ground level
-    if (savedMeta && savedMeta.playerPos) {
-      const safeY = this.findSafeSpawnY(savedMeta.playerPos.x, savedMeta.playerPos.z);
-      if (savedMeta.playerPos.y > safeY + 3) {
-        spawnPos.y = safeY;
-      }
-    }
-    this.player = new PlayerController(spawnPos.x, spawnPos.y, spawnPos.z);
+    this.player = new PlayerController(startPos.x, startPos.y, startPos.z);
     if (savedMeta) {
       this.camera.yaw = savedMeta.playerYaw;
       this.camera.pitch = savedMeta.playerPitch;

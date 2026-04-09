@@ -51,7 +51,7 @@ export default function CreateWorldPage() {
       );
       const id = generateWorldId();
       const spawnPos = actualWorldType === "infinite"
-        ? { x: 64, y: 50, z: 64 }
+        ? { x: 8, y: 80, z: 8 }
         : actualWorldType === "flat"
           ? { x: 32, y: 35, z: 32 }
           : { x: 32, y: 50, z: 32 };
