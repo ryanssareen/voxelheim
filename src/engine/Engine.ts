@@ -566,8 +566,8 @@ export class Engine {
         const cause = (mobType === "zombie" || mobType === "skeleton" || mobType === "creeper") ? mobType : undefined;
         useGameStore.getState().damagePlayer(amount, cause);
         this.player!.applyKnockback(fromX, fromZ, 6);
-        // Exhaustion from taking damage
-        this.hungerExhaustion += 2;
+        // Exhaustion from taking damage (mild)
+        this.hungerExhaustion += 1;
       }
     );
 
@@ -576,24 +576,24 @@ export class Engine {
     const gs = useGameStore.getState();
     const isPlayerMoving = this.player!.velocity.x !== 0 || this.player!.velocity.z !== 0;
 
-    // Passive exhaustion: very slow background drain
+    // Passive exhaustion: very slow background drain (every 5 minutes)
     this.passiveHungerTimer += dt;
-    if (this.passiveHungerTimer >= 90) {
-      this.passiveHungerTimer -= 90;
+    if (this.passiveHungerTimer >= 300) {
+      this.passiveHungerTimer -= 300;
       this.hungerExhaustion += 1;
     }
-    // Walking exhaustion: ~0.1 per second
+    // Walking exhaustion: very gentle
     if (isPlayerMoving && !this.player!.isSprinting) {
-      this.hungerExhaustion += 0.01 * dt;
+      this.hungerExhaustion += 0.002 * dt;
     }
-    // Sprinting exhaustion: ~0.6 per second
+    // Sprinting exhaustion: moderate
     if (isPlayerMoving && this.player!.isSprinting) {
-      this.hungerExhaustion += 0.1 * dt;
+      this.hungerExhaustion += 0.03 * dt;
     }
-    // Convert exhaustion to hunger drain (4 exhaustion = 1 hunger point)
-    if (this.hungerExhaustion >= 4) {
-      const drain = Math.floor(this.hungerExhaustion / 4);
-      this.hungerExhaustion -= drain * 4;
+    // Convert exhaustion to hunger drain (6 exhaustion = 1 hunger point — more generous)
+    if (this.hungerExhaustion >= 6) {
+      const drain = Math.floor(this.hungerExhaustion / 6);
+      this.hungerExhaustion -= drain * 6;
       useGameStore.getState().setHunger(useGameStore.getState().hunger - drain);
     }
 
@@ -604,22 +604,22 @@ export class Engine {
     if (currentHunger <= 6) {
       this.player!.isSprinting = false;
     }
-    // Regen when hunger > 17 (like MC: 18+), costs exhaustion
-    if (currentHunger > 17 && currentHealth < gs.maxHealth) {
+    // Regen when hunger > 14 (more generous than MC's 18+), costs less exhaustion
+    if (currentHunger > 14 && currentHealth < gs.maxHealth) {
       this.regenTimer += dt;
-      if (this.regenTimer >= 4) {
-        this.regenTimer -= 4;
+      if (this.regenTimer >= 2.5) {
+        this.regenTimer -= 2.5;
         useGameStore.getState().setHealth(useGameStore.getState().health + 1);
-        this.hungerExhaustion += 6; // regen costs hunger
+        this.hungerExhaustion += 3; // regen costs less hunger
       }
     } else {
       this.regenTimer = 0;
     }
-    // Starvation when hunger <= 0
+    // Starvation when hunger <= 0 (slower — every 6 seconds)
     if (currentHunger <= 0) {
       this.starvationTimer += dt;
-      if (this.starvationTimer >= 4) {
-        this.starvationTimer -= 4;
+      if (this.starvationTimer >= 6) {
+        this.starvationTimer -= 6;
         useGameStore.getState().damagePlayer(1, "starvation");
       }
     } else {
