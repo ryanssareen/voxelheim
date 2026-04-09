@@ -11,6 +11,8 @@ const HALF_WIDTH = 0.3;
 const STAND_HEIGHT = 1.8;
 const CROUCH_HEIGHT = 1.4;
 const AUTO_JUMP_COOLDOWN = 0.35;
+const MAX_FALL_SPEED = -10;
+const MAX_STEP_SIZE = 0.45; // Max displacement per sub-step to prevent clipping
 
 export class PlayerController {
   public position: { x: number; y: number; z: number };
@@ -19,7 +21,6 @@ export class PlayerController {
   public isCrouching = false;
   public isSprinting = false;
 
-  // Auto-jump: tracked OUTSIDE the collision loop
   private autoJumpCooldown = 0;
   private collidedBX = 0;
   private collidedBY = 0;
@@ -39,10 +40,12 @@ export class PlayerController {
     const dz = this.position.z - fromZ;
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist > 0.01) {
-      this.velocity.x = (dx / dist) * force;
-      this.velocity.z = (dz / dist) * force;
+      // Cap knockback velocity to prevent clipping
+      const cappedForce = Math.min(force, 5);
+      this.velocity.x = (dx / dist) * cappedForce;
+      this.velocity.z = (dz / dist) * cappedForce;
     }
-    this.velocity.y = force * 0.4;
+    this.velocity.y = Math.min(force * 0.4, 4);
     this.onGround = false;
   }
 
@@ -85,7 +88,7 @@ export class PlayerController {
 
     if (!this.onGround) {
       this.velocity.y -= GRAVITY * dt;
-      if (this.velocity.y < -15) this.velocity.y = -15;
+      if (this.velocity.y < MAX_FALL_SPEED) this.velocity.y = MAX_FALL_SPEED;
     }
 
     if (input.isKeyDown("Space") && this.onGround && !this.isCrouching) {
@@ -98,27 +101,92 @@ export class PlayerController {
     this.hadHorizCollision = false;
 
     // Move and collide: Y first, then X, then Z
-    // Collision loop ONLY resolves position — never modifies velocity.y for auto-jump
-    this.moveAxis("y", this.velocity.y * dt, getBlock, registry);
-    this.moveAxis("x", this.velocity.x * dt, getBlock, registry);
-    this.moveAxis("z", this.velocity.z * dt, getBlock, registry);
+    // Use sub-stepping for large displacements to prevent clipping
+    this.moveAxisSafe("y", this.velocity.y * dt, getBlock, registry);
+    this.moveAxisSafe("x", this.velocity.x * dt, getBlock, registry);
+    this.moveAxisSafe("z", this.velocity.z * dt, getBlock, registry);
 
-    // AUTO-JUMP: runs AFTER all collision is resolved — safe, no mid-loop mutation
-    if (this.onGround && !this.isCrouching && this.autoJumpCooldown <= 0 && this.hadHorizCollision) {
+    // POST-COLLISION SAFETY: if player ended up inside a solid block, push them out
+    this.resolveOverlap(getBlock, registry);
+
+    // AUTO-JUMP: runs AFTER all collision is resolved
+    // Guard: only when on ground, not crouching, cooldown expired,
+    // NOT already moving upward (prevents stacking with manual jump)
+    if (
+      this.onGround &&
+      !this.isCrouching &&
+      this.autoJumpCooldown <= 0 &&
+      this.hadHorizCollision &&
+      this.velocity.y <= 0 // Don't auto-jump if already jumping
+    ) {
       const cbx = this.collidedBX, cby = this.collidedBY, cbz = this.collidedBZ;
       const feetY = Math.floor(this.position.y);
-      // Only step-up blocks at feet level
       if (cby === feetY) {
-        // 2 blocks of air above the obstacle
         if (!registry.isSolid(getBlock(cbx, cby + 1, cbz)) &&
             !registry.isSolid(getBlock(cbx, cby + 2, cbz))) {
-          // Headroom in player's column
           const px = Math.floor(this.position.x);
           const pz = Math.floor(this.position.z);
           if (!registry.isSolid(getBlock(px, feetY + 2, pz))) {
             this.velocity.y = JUMP_VELOCITY;
             this.onGround = false;
             this.autoJumpCooldown = AUTO_JUMP_COOLDOWN;
+          }
+        }
+      }
+    }
+  }
+
+  /** Move with sub-stepping: breaks large displacements into safe-sized steps */
+  private moveAxisSafe(
+    axis: "x" | "y" | "z",
+    totalDelta: number,
+    getBlock: (wx: number, wy: number, wz: number) => number,
+    registry: BlockRegistry
+  ): void {
+    if (totalDelta === 0) return;
+
+    const absDelta = Math.abs(totalDelta);
+    if (absDelta <= MAX_STEP_SIZE) {
+      // Small enough — single step
+      this.moveAxis(axis, totalDelta, getBlock, registry);
+    } else {
+      // Break into sub-steps
+      const sign = totalDelta > 0 ? 1 : -1;
+      let remaining = absDelta;
+      while (remaining > 0.001) {
+        const step = Math.min(remaining, MAX_STEP_SIZE);
+        this.moveAxis(axis, step * sign, getBlock, registry);
+        remaining -= step;
+        // If collision stopped movement, don't continue
+        if (axis === "y" && this.velocity.y === 0) break;
+        if (axis === "x" && this.velocity.x === 0) break;
+        if (axis === "z" && this.velocity.z === 0) break;
+      }
+    }
+  }
+
+  /** Post-collision safety: if player AABB overlaps solid blocks, push up */
+  private resolveOverlap(
+    getBlock: (wx: number, wy: number, wz: number) => number,
+    registry: BlockRegistry
+  ): void {
+    const h = this.height;
+    const bMinX = Math.floor(this.position.x - HALF_WIDTH);
+    const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
+    const bMinY = Math.floor(this.position.y);
+    const bMaxY = Math.floor(this.position.y + h);
+    const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
+    const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+
+    for (let bx = bMinX; bx <= bMaxX; bx++) {
+      for (let by = bMinY; by <= bMaxY; by++) {
+        for (let bz = bMinZ; bz <= bMaxZ; bz++) {
+          if (registry.isSolid(getBlock(bx, by, bz))) {
+            // Player is inside a solid block — push up to the top
+            this.position.y = by + 1;
+            this.velocity.y = 0;
+            this.onGround = true;
+            return;
           }
         }
       }
