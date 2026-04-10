@@ -23,6 +23,7 @@ interface AuthState {
   user: AuthUser | null;
   loading: boolean;
   minecraftProfile: MinecraftProfile | null;
+  hydrate: () => void;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -82,9 +83,14 @@ async function authViaRest(
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: typeof window !== "undefined" ? loadUser() : null,
-  loading: false,
+  user: null,
+  loading: true,
   minecraftProfile: null,
+
+  hydrate: () => {
+    const user = loadUser();
+    set({ user, loading: false });
+  },
 
   signUp: async (email, password) => {
     const user = await authViaRest("signUp", email, password);
