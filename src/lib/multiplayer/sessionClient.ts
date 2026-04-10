@@ -636,47 +636,58 @@ export async function createMultiplayerSession(
     try {
       const cloud = await createCloudSession(input);
       if (cloud) {
-        // Also write locally so same-browser joins always work
+        console.log("[createSession] cloud session created:", cloud.code, "transport:", cloud.transport);
         writeLocalSession(cloud);
         return cloud;
       }
-    } catch {
-      // Fall back to same-browser sessions when cloud setup is unavailable.
+    } catch (err) {
+      console.log("[createSession] cloud failed, falling back to local:", err);
     }
+  } else {
+    console.log("[createSession] firebase not configured, using local");
   }
 
-  return createLocalSession(input);
+  const local = createLocalSession(input);
+  console.log("[createSession] local session created:", local.code, "transport:", local.transport);
+  return local;
 }
 
 export async function readMultiplayerSession(
   rawCode: string
 ): Promise<MultiplayerSessionMeta | null> {
   const code = normalizeSessionCode(rawCode);
-  if (!code) return null;
+  console.log("[readSession] raw:", JSON.stringify(rawCode), "normalized:", JSON.stringify(code));
+  if (!code) { console.log("[readSession] empty after normalize"); return null; }
 
-  // Always check local first — fastest path and works for both local and cloud sessions
+  const localKey = `${LOCAL_SESSION_PREFIX}${code}`;
+  console.log("[readSession] checking localStorage key:", localKey);
   const local = readLocalSession(code);
+  console.log("[readSession] local result:", local);
   if (local) return local;
 
-  if (isLocalSessionCode(code) || !firebaseConfigured) {
+  const isLocal = isLocalSessionCode(code);
+  console.log("[readSession] isLocalCode:", isLocal, "firebaseConfigured:", firebaseConfigured);
+  if (isLocal || !firebaseConfigured) {
     return null;
   }
 
   const database = firestore();
-  if (!database) return null;
+  if (!database) { console.log("[readSession] no firestore db"); return null; }
 
   try {
+    console.log("[readSession] querying firestore for:", code);
     const snapshot = await withTimeout(
       getDoc(doc(database, "multiplayerSessions", code)),
       5000
     );
+    console.log("[readSession] firestore exists:", snapshot.exists());
     if (!snapshot.exists()) return null;
 
     const session = snapshot.data() as MultiplayerSessionMeta;
-    // Cache locally so subsequent reads don't hit Firestore
     writeLocalSession(session);
     return session;
-  } catch {
+  } catch (err) {
+    console.log("[readSession] firestore error:", err);
     return null;
   }
 }
