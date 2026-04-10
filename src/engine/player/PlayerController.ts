@@ -203,13 +203,14 @@ export class PlayerController {
     const minZ = this.position.z - HALF_WIDTH;
     const maxZ = this.position.z + HALF_WIDTH;
 
-    // Use EPS-adjusted ranges to exclude blocks the AABB only point-touches
-    const bMinX = Math.floor(minX + EPS);
-    const bMaxX = Math.floor(maxX - EPS);
-    const bMinY = Math.floor(minY + EPS);
-    const bMaxY = Math.floor(maxY - EPS);
-    const bMinZ = Math.floor(minZ + EPS);
-    const bMaxZ = Math.floor(maxZ - EPS);
+    // Scan all blocks the AABB overlaps — no EPS shrinkage here so we
+    // never miss a block the player is genuinely inside.
+    const bMinX = Math.floor(minX);
+    const bMaxX = Math.floor(maxX);
+    const bMinY = Math.floor(minY);
+    const bMaxY = Math.floor(maxY);
+    const bMinZ = Math.floor(minZ);
+    const bMaxZ = Math.floor(maxZ);
 
     let bestPen = Infinity;
     let bestAxis: "x" | "y" | "z" | null = null;
@@ -230,7 +231,8 @@ export class PlayerController {
             { pen: maxZ - bz, axis: "z", dir: -1, push: bz - HALF_WIDTH - EPS },
           ];
           for (const c of candidates) {
-            if (c.pen > 0 && c.pen < bestPen) {
+            // pen > EPS filters out point-touching (zero-area overlap) at boundaries
+            if (c.pen > EPS && c.pen < bestPen) {
               bestPen = c.pen;
               bestAxis = c.axis;
               bestDir = c.dir;
