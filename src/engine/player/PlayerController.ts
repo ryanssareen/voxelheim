@@ -103,6 +103,30 @@ export class PlayerController {
     // Move and collide: Y first, then X, then Z
     // Use sub-stepping for large displacements to prevent clipping
     this.moveAxisSafe("y", this.velocity.y * dt, getBlock, registry);
+
+    // Ground probe: when standing (velocity.y == 0), moveAxisSafe skips Y
+    // entirely so onGround is never cleared. Check if ground still exists.
+    if (this.onGround && this.velocity.y === 0) {
+      const belowY = Math.floor(this.position.y) - 1;
+      const bMinX = Math.floor(this.position.x - HALF_WIDTH);
+      const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
+      const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
+      const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+
+      let hasGround = false;
+      for (let bx = bMinX; bx <= bMaxX && !hasGround; bx++) {
+        for (let bz = bMinZ; bz <= bMaxZ && !hasGround; bz++) {
+          if (registry.isSolid(getBlock(bx, belowY, bz))) {
+            hasGround = true;
+          }
+        }
+      }
+
+      if (!hasGround) {
+        this.onGround = false;
+      }
+    }
+
     this.moveAxisSafe("x", this.velocity.x * dt, getBlock, registry);
     this.moveAxisSafe("z", this.velocity.z * dt, getBlock, registry);
 
@@ -165,31 +189,67 @@ export class PlayerController {
     }
   }
 
-  /** Post-collision safety: if player AABB overlaps solid blocks, push up */
+  /** Post-collision safety: if player AABB overlaps solid blocks, push along minimum penetration axis */
   private resolveOverlap(
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry
   ): void {
+    const EPS = 0.001;
     const h = this.height;
-    const bMinX = Math.floor(this.position.x - HALF_WIDTH);
-    const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
-    const bMinY = Math.floor(this.position.y);
-    const bMaxY = Math.floor(this.position.y + h);
-    const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
-    const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+    const minX = this.position.x - HALF_WIDTH;
+    const maxX = this.position.x + HALF_WIDTH;
+    const minY = this.position.y;
+    const maxY = this.position.y + h;
+    const minZ = this.position.z - HALF_WIDTH;
+    const maxZ = this.position.z + HALF_WIDTH;
+
+    // Use EPS-adjusted ranges to exclude blocks the AABB only point-touches
+    const bMinX = Math.floor(minX + EPS);
+    const bMaxX = Math.floor(maxX - EPS);
+    const bMinY = Math.floor(minY + EPS);
+    const bMaxY = Math.floor(maxY - EPS);
+    const bMinZ = Math.floor(minZ + EPS);
+    const bMaxZ = Math.floor(maxZ - EPS);
+
+    let bestPen = Infinity;
+    let bestAxis: "x" | "y" | "z" | null = null;
+    let bestDir = 0;
+    let bestPush = 0;
 
     for (let bx = bMinX; bx <= bMaxX; bx++) {
       for (let by = bMinY; by <= bMaxY; by++) {
         for (let bz = bMinZ; bz <= bMaxZ; bz++) {
-          if (registry.isSolid(getBlock(bx, by, bz))) {
-            // Player is inside a solid block — push up to the top
-            this.position.y = by + 1;
-            this.velocity.y = 0;
-            this.onGround = true;
-            return;
+          if (!registry.isSolid(getBlock(bx, by, bz))) continue;
+
+          const candidates: Array<{ pen: number; axis: "x" | "y" | "z"; dir: number; push: number }> = [
+            { pen: (bx + 1) - minX, axis: "x", dir: 1, push: (bx + 1) + HALF_WIDTH + EPS },
+            { pen: maxX - bx, axis: "x", dir: -1, push: bx - HALF_WIDTH - EPS },
+            { pen: (by + 1) - minY, axis: "y", dir: 1, push: by + 1 },
+            { pen: maxY - by, axis: "y", dir: -1, push: by - h },
+            { pen: (bz + 1) - minZ, axis: "z", dir: 1, push: (bz + 1) + HALF_WIDTH + EPS },
+            { pen: maxZ - bz, axis: "z", dir: -1, push: bz - HALF_WIDTH - EPS },
+          ];
+          for (const c of candidates) {
+            if (c.pen > 0 && c.pen < bestPen) {
+              bestPen = c.pen;
+              bestAxis = c.axis;
+              bestDir = c.dir;
+              bestPush = c.push;
+            }
           }
         }
       }
+    }
+
+    if (bestAxis !== null) {
+      this.position[bestAxis] = bestPush;
+      if (bestAxis === "y" && bestDir === 1) {
+        this.velocity.y = 0;
+        this.onGround = true;
+      } else if (bestAxis === "y") {
+        this.velocity.y = 0;
+      }
+      // X/Z pushes: leave onGround unchanged — no free jumps from wall clips
     }
   }
 
