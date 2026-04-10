@@ -362,7 +362,91 @@ Each axis resolution: expand player AABB, find overlapping solid blocks, push pl
 | Zustand store state leaks between game sessions | Engine.dispose must call resetObjective. Document this in Engine's dispose method. |
 | Collision with chunk boundaries if adjacent chunk not loaded | ChunkManager.getBlock returns 0 (AIR) for unloaded chunks — player can fall through. Mitigated by loading all 64 chunks at startup before enabling player movement. |
 
+## Post-Implementation Notes (2026-04-10)
+
+This section documents how the implemented physics behavior differs from the original plan and captures the current state of the system.
+
+### Current Physics Model
+
+The player uses a **ground-based gravity model** where gravity is the constant default force acting on the player. There is no flight mode or togglable gravity -- the player is always subject to standard physics.
+
+#### Gravity and Falling
+
+- Gravity (20 m/s^2) applies every frame the player is not standing on solid ground (`onGround === false`)
+- Terminal velocity is capped at -10 m/s (`MAX_FALL_SPEED`) to prevent ground clipping at high speeds
+- Fall damage triggers when landing after falling more than 3 blocks (damage = fallDistance - 3, Minecraft-style)
+- Void death occurs at Y < -10
+
+#### Jumping
+
+- Standard jump: Space key when `onGround` is true sets `velocity.y = 8`
+- Jump is blocked while crouching
+- After jumping, gravity immediately applies (no hang time or flight)
+- The player arc is parabolic: rise with initial velocity 8, decelerate at -20/s^2, fall back
+
+#### Auto-Jump
+
+- Runs AFTER all collision is resolved (not inside the collision loop)
+- Triggers when: on ground, not crouching, cooldown expired, horizontal collision detected, and NOT already moving upward
+- Only jumps if the collided block at foot level has two empty blocks above it and there is headroom above the player
+- Cooldown of 0.35s between auto-jumps to prevent rapid stacking
+
+#### Movement Speeds
+
+- Walk: 5 blocks/sec (plan value)
+- Sprint: 8 blocks/sec (Shift key; added post-plan)
+- Crouch: 2.5 blocks/sec (Ctrl/CapsLock; added post-plan)
+- Sprint is blocked when hunger <= 6
+
+### Collision System
+
+The collision system matches the plan's axis-by-axis approach with the following additions:
+
+- **Sub-stepping**: Large displacements are broken into steps of MAX_STEP_SIZE (0.45 blocks) to prevent clipping through thin geometry or at high knockback velocities
+- **Post-collision overlap resolution**: After all axis movement, a safety pass checks if the player AABB still overlaps a solid block and pushes the player up if so
+- **Knockback**: `applyKnockback()` applies capped horizontal force (max 5) and a vertical component (force * 0.4, max 4), then sets `onGround = false` so gravity takes over
+
+Player hitbox: 0.6 wide x 1.8 tall (standing), 0.6 wide x 1.4 tall (crouching).
+
+### Multiplayer State Syncing
+
+Player state is synced to other clients at 120ms intervals via `MultiplayerManager.update()`. The synced fields are:
+
+| Field | Source | Notes |
+|-------|--------|-------|
+| x, y, z | `player.position` | Authoritative position after physics |
+| yaw, pitch | `camera.yaw/pitch` | Look direction |
+| isCrouching | `player.isCrouching` | Affects eye height and speed |
+
+Physics runs independently on each client (no server authority). Implications:
+
+- **No velocity sync**: Each client computes its own gravity, jump arcs, and collision. Remote players are rendered via position interpolation (lerp factor 12/s), which smooths over network jitter but means remote jump arcs are approximated, not replicated.
+- **No onGround sync**: The `onGround` state is local only. Remote player avatars do not distinguish grounded vs airborne -- they simply interpolate between received positions.
+- **Block changes are synced**: `ChunkManager.setBlock` changes propagate via Firestore/BroadcastChannel subscriptions, so collision geometry stays consistent across clients (eventual consistency, not frame-perfect).
+- **Item drops synced separately**: Drop state (position, velocity, bobOffset) is synced independently. Pickup uses a claim protocol to prevent double-collection.
+
+### Mob Physics
+
+Mobs use their own gravity (also 20 m/s^2, capped at -15 m/s) and axis-by-axis collision identical in structure to the player. They do not fly. Hostile mobs will not chase players off cliffs. Passive mobs turn away from cliffs and walls.
+
+### Key Deviations from Original Plan
+
+| Plan Item | Actual Implementation |
+|-----------|----------------------|
+| Walk speed only (5 b/s) | Three speeds: walk (5), sprint (8), crouch (2.5) |
+| Simple single-step collision | Sub-stepped collision with MAX_STEP_SIZE = 0.45 |
+| No post-collision safety | Overlap resolution pushes player out of solid blocks |
+| No auto-jump | Auto-jump added (post-collision, with cooldown and headroom checks) |
+| No knockback | Knockback from mob attacks with capped force |
+| No fall damage or void death | Both implemented in Engine game loop |
+| No hunger/health interaction | Sprint blocked at low hunger; health regen tied to hunger |
+| No multiplayer | Multiplayer position sync at 120ms intervals, block change sync via subscriptions |
+
 ## Sources & References
 
 - Related code: `src/engine/renderer/Renderer.ts`, `src/engine/world/ChunkManager.ts`, `src/engine/world/BlockRegistry.ts`, `src/data/blocks.ts`
 - Prior plans: `docs/plans/2026-04-05-004-feat-rendering-pipeline-plan.md`
+- Physics implementation: `src/engine/player/PlayerController.ts`
+- Engine game loop (fall damage, void death, hunger): `src/engine/Engine.ts`
+- Multiplayer sync: `src/engine/multiplayer/MultiplayerManager.ts`
+- Mob physics: `src/engine/entities/Mob.ts`

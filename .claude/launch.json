@@ -4,7 +4,7 @@
     {
       "name": "next-dev",
       "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["-c", "export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH && exec /opt/homebrew/bin/node node_modules/.bin/next dev --webpack"],
+      "runtimeArgs": ["-c", "export PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH && exec node node_modules/.bin/next dev --webpack"],
       "port": 3000
     },
     {

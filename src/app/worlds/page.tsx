@@ -88,6 +88,13 @@ export default function WorldsPage() {
         worldName: world.name,
         hostName: user?.email?.split("@")[0] ?? "Host",
       });
+
+      if (session.transport === "local") {
+        setJoinError(
+          "Cloud unavailable — session is local-only (same browser tabs only)."
+        );
+      }
+
       router.push(`/game?worldId=${world.id}&session=${session.code}`);
     } catch (error) {
       setJoinError(
@@ -112,15 +119,19 @@ export default function WorldsPage() {
       const { readMultiplayerSession } = await import(
         "@lib/multiplayer/sessionClient"
       );
-      console.log("[join] raw input:", JSON.stringify(joinCode));
-      console.log("[join] normalized code:", JSON.stringify(code));
-      console.log("[join] code length:", code.length);
-      console.log("[join] code chars:", [...code].map(c => c.charCodeAt(0)));
+      const { isLocalSessionCode } = await import(
+        "@lib/multiplayer/sessionCode"
+      );
       const session = await readMultiplayerSession(code);
       console.log("[join] session result:", session);
       if (!session) {
-        console.log("[join] localStorage keys:", Object.keys(localStorage).filter(k => k.includes("session")));
-        setJoinError("Session not found. Double-check the code.");
+        if (isLocalSessionCode(code)) {
+          setJoinError(
+            "This is a local session code. It can only be joined from the same browser that created it."
+          );
+        } else {
+          setJoinError("Session not found. Double-check the code.");
+        }
         return;
       }
 

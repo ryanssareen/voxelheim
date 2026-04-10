@@ -635,13 +635,12 @@ export async function createMultiplayerSession(
   if (firebaseConfigured) {
     try {
       const cloud = await createCloudSession(input);
-      if (cloud) {
-        console.log("[createSession] cloud session created:", cloud.code, "transport:", cloud.transport);
-        writeLocalSession(cloud);
-        return cloud;
-      }
-    } catch (err) {
-      console.log("[createSession] cloud failed, falling back to local:", err);
+      if (cloud) return cloud;
+    } catch (error) {
+      console.warn(
+        "[multiplayer] Cloud session creation failed, falling back to local-only session:",
+        error
+      );
     }
   } else {
     console.log("[createSession] firebase not configured, using local");
