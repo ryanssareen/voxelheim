@@ -635,7 +635,11 @@ export async function createMultiplayerSession(
   if (firebaseConfigured) {
     try {
       const cloud = await createCloudSession(input);
-      if (cloud) return cloud;
+      if (cloud) {
+        // Also write locally so same-browser joins always work
+        writeLocalSession(cloud);
+        return cloud;
+      }
     } catch {
       // Fall back to same-browser sessions when cloud setup is unavailable.
     }
@@ -650,20 +654,31 @@ export async function readMultiplayerSession(
   const code = normalizeSessionCode(rawCode);
   if (!code) return null;
 
+  // Always check local first — fastest path and works for both local and cloud sessions
+  const local = readLocalSession(code);
+  if (local) return local;
+
   if (isLocalSessionCode(code) || !firebaseConfigured) {
-    return readLocalSession(code);
+    return null;
   }
 
   const database = firestore();
   if (!database) return null;
 
-  const snapshot = await withTimeout(
-    getDoc(doc(database, "multiplayerSessions", code)),
-    5000
-  );
-  if (!snapshot.exists()) return null;
+  try {
+    const snapshot = await withTimeout(
+      getDoc(doc(database, "multiplayerSessions", code)),
+      5000
+    );
+    if (!snapshot.exists()) return null;
 
-  return snapshot.data() as MultiplayerSessionMeta;
+    const session = snapshot.data() as MultiplayerSessionMeta;
+    // Cache locally so subsequent reads don't hit Firestore
+    writeLocalSession(session);
+    return session;
+  } catch {
+    return null;
+  }
 }
 
 export async function connectMultiplayerSession(
