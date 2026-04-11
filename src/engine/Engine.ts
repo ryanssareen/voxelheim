@@ -77,6 +77,7 @@ export class Engine {
   private wasFalling = false;
   private frameCount = 0;
   private worldType: WorldType = "island";
+  private gameMode: "survival" | "creative" = "survival";
   private spawn = { ...DEFAULT_SPAWN };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -92,6 +93,7 @@ export class Engine {
     let savedMeta: WorldMeta | null = null;
 
     let worldType: WorldType = "island";
+    let gameMode: "survival" | "creative" = "survival";
 
     if (worldId) {
       savedMeta = await loadWorldMeta(worldId);
@@ -99,6 +101,9 @@ export class Engine {
         this.seed = savedMeta.seed;
         if (savedMeta.worldType === "flat" || savedMeta.worldType === "infinite") {
           worldType = savedMeta.worldType;
+        }
+        if (savedMeta.gameMode === "creative") {
+          gameMode = "creative";
         }
       }
     } else {
@@ -111,12 +116,17 @@ export class Engine {
         if (config.worldType === "flat" || config.worldType === "infinite") {
           worldType = config.worldType;
         }
+        if (config.gameMode === "creative") {
+          gameMode = "creative";
+        }
       } catch {
         /* ignore */
       }
     }
 
     this.worldType = worldType;
+    this.gameMode = gameMode;
+    useGameStore.getState().setGameMode(gameMode);
 
     // Set spawn based on world type (fresh copy each init — never mutate module-level defaults)
     const spawn = worldType === "infinite"
@@ -155,7 +165,7 @@ export class Engine {
     this.input.onPointerLockLost = () => {
       // Don't pause if dead or inventory is open
       const invS = useInventoryStore.getState();
-      if (!useGameStore.getState().isDead && !invS.isOpen && !invS.tableOpen && !invS.furnaceOpen) {
+      if (!useGameStore.getState().isDead && !invS.isOpen && !invS.tableOpen && !invS.furnaceOpen && !invS.creativeOpen) {
         useGameStore.getState().setPaused(true);
       }
     };
@@ -298,6 +308,7 @@ export class Engine {
       health: useGameStore.getState().health,
       hunger: useGameStore.getState().hunger,
       worldType: this.worldType,
+      gameMode: this.gameMode,
     };
 
     await saveWorld(meta, modifiedChunks);
@@ -507,11 +518,19 @@ export class Engine {
       } else if (inv.tableOpen) {
         inv.closeTable();
         this.canvas.requestPointerLock();
+      } else if (inv.creativeOpen) {
+        inv.closeCreative();
+        this.canvas.requestPointerLock();
       } else if (inv.isOpen) {
         inv.close();
         this.canvas.requestPointerLock();
       } else {
-        inv.open();
+        // Creative mode: open creative inventory instead of survival inventory
+        if (this.gameMode === "creative") {
+          inv.openCreative();
+        } else {
+          inv.open();
+        }
         if (document.pointerLockElement) {
           document.exitPointerLock();
         }
@@ -521,7 +540,7 @@ export class Engine {
 
     // Skip game input while inventory or crafting table is open
     const invState = useInventoryStore.getState();
-    if (invState.isOpen || invState.tableOpen || invState.furnaceOpen) {
+    if (invState.isOpen || invState.tableOpen || invState.furnaceOpen || invState.creativeOpen) {
       this.input.getMouseDelta(); // consume
       this.input.getMouseButton(); // consume
       this.camera.applyToThreeCamera(
@@ -571,12 +590,14 @@ export class Engine {
     }
 
     // Player physics
+    const creative = this.gameMode === "creative";
     this.player!.update(
       dt,
       this.input,
       this.camera,
       (wx, wy, wz) => this.chunkManager!.getBlock(wx, wy, wz),
-      this.registry
+      this.registry,
+      creative
     );
 
     // Note: stuck-in-terrain recovery was removed. The collision system
@@ -586,23 +607,30 @@ export class Engine {
     // Update item drops (floating pickups) — run early so pickup always works
     this.itemDrops!.update(dt, this.player!.position);
 
-    // Fall damage (Minecraft-style: damage = fallDistance - 3)
+    // Fall damage (Minecraft-style: damage = fallDistance - 3) — skip in creative
     const isFalling = !this.player!.onGround && this.player!.velocity.y < 0;
-    if (isFalling && !this.wasFalling) {
-      this.fallStartY = this.player!.position.y;
-    }
-    if (this.wasFalling && this.player!.onGround) {
-      const fallDistance = this.fallStartY - this.player!.position.y;
-      if (fallDistance > 3) {
-        const damage = Math.floor(fallDistance - 3);
-        useGameStore.getState().damagePlayer(damage, "fall");
+    if (!creative) {
+      if (isFalling && !this.wasFalling) {
+        this.fallStartY = this.player!.position.y;
+      }
+      if (this.wasFalling && this.player!.onGround) {
+        const fallDistance = this.fallStartY - this.player!.position.y;
+        if (fallDistance > 3) {
+          const damage = Math.floor(fallDistance - 3);
+          useGameStore.getState().damagePlayer(damage, "fall");
+        }
+      }
+    } else {
+      // Reset fall tracking when flying to avoid ghost fall damage on landing
+      if (this.player!.isFlying) {
+        this.fallStartY = this.player!.position.y;
       }
     }
     this.wasFalling = isFalling;
 
-    // Void recovery (flat/infinite) or void death (island)
+    // Void recovery (flat/infinite/creative) or void death (island survival)
     if (this.player!.position.y < VOID_Y) {
-      if (this.worldType === "flat" || this.worldType === "infinite") {
+      if (creative || this.worldType === "flat" || this.worldType === "infinite") {
         // Recover: teleport to surface at same X/Z, keep items
         const safeY = this.findSafeSpawnY(this.player!.position.x, this.player!.position.z);
         this.player!.position.y = safeY;
@@ -672,7 +700,8 @@ export class Engine {
       isLeftHeld && !hitMob,
       rightClick,
       selectedBlockId,
-      dt
+      dt,
+      creative
     );
 
     // Eating: right-click with food in hand when not aiming at a block
@@ -717,62 +746,71 @@ export class Engine {
         this.player!.applyKnockback(fromX, fromZ, 6);
         // Exhaustion from taking damage (mild)
         this.hungerExhaustion += 1;
-      }
+      },
+      creative
     );
 
-    // Hunger mechanics (Minecraft-style exhaustion system)
+    // Hunger mechanics — skip entirely in creative (no hunger drain, no starvation)
+    if (creative) {
+      this.hungerExhaustion = 0;
+      this.passiveHungerTimer = 0;
+      this.regenTimer = 0;
+      this.starvationTimer = 0;
+    }
     // Exhaustion accumulates from actions, -1 hunger when exhaustion >= 4
     const gs = useGameStore.getState();
     const isPlayerMoving = this.player!.velocity.x !== 0 || this.player!.velocity.z !== 0;
 
-    // Passive exhaustion: very slow background drain (every 5 minutes)
-    this.passiveHungerTimer += dt;
-    if (this.passiveHungerTimer >= 300) {
-      this.passiveHungerTimer -= 300;
-      this.hungerExhaustion += 1;
-    }
-    // Walking exhaustion: very gentle
-    if (isPlayerMoving && !this.player!.isSprinting) {
-      this.hungerExhaustion += 0.002 * dt;
-    }
-    // Sprinting exhaustion: moderate
-    if (isPlayerMoving && this.player!.isSprinting) {
-      this.hungerExhaustion += 0.03 * dt;
-    }
-    // Convert exhaustion to hunger drain (6 exhaustion = 1 hunger point — more generous)
-    if (this.hungerExhaustion >= 6) {
-      const drain = Math.floor(this.hungerExhaustion / 6);
-      this.hungerExhaustion -= drain * 6;
-      useGameStore.getState().setHunger(useGameStore.getState().hunger - drain);
-    }
+    if (!creative) {
+      // Passive exhaustion: very slow background drain (every 5 minutes)
+      this.passiveHungerTimer += dt;
+      if (this.passiveHungerTimer >= 300) {
+        this.passiveHungerTimer -= 300;
+        this.hungerExhaustion += 1;
+      }
+      // Walking exhaustion: very gentle
+      if (isPlayerMoving && !this.player!.isSprinting) {
+        this.hungerExhaustion += 0.002 * dt;
+      }
+      // Sprinting exhaustion: moderate
+      if (isPlayerMoving && this.player!.isSprinting) {
+        this.hungerExhaustion += 0.03 * dt;
+      }
+      // Convert exhaustion to hunger drain (6 exhaustion = 1 hunger point — more generous)
+      if (this.hungerExhaustion >= 6) {
+        const drain = Math.floor(this.hungerExhaustion / 6);
+        this.hungerExhaustion -= drain * 6;
+        useGameStore.getState().setHunger(useGameStore.getState().hunger - drain);
+      }
 
-    // Hunger effects
-    const currentHunger = useGameStore.getState().hunger;
-    const currentHealth = useGameStore.getState().health;
-    // Sprint block when hunger <= 6
-    if (currentHunger <= 6) {
-      this.player!.isSprinting = false;
-    }
-    // Regen when hunger > 14 (more generous than MC's 18+), costs less exhaustion
-    if (currentHunger > 14 && currentHealth < gs.maxHealth) {
-      this.regenTimer += dt;
-      if (this.regenTimer >= 2.5) {
-        this.regenTimer -= 2.5;
-        useGameStore.getState().setHealth(useGameStore.getState().health + 1);
-        this.hungerExhaustion += 3; // regen costs less hunger
+      // Hunger effects
+      const currentHunger = useGameStore.getState().hunger;
+      const currentHealth = useGameStore.getState().health;
+      // Sprint block when hunger <= 6
+      if (currentHunger <= 6) {
+        this.player!.isSprinting = false;
       }
-    } else {
-      this.regenTimer = 0;
-    }
-    // Starvation when hunger <= 0 (slower — every 6 seconds)
-    if (currentHunger <= 0) {
-      this.starvationTimer += dt;
-      if (this.starvationTimer >= 6) {
-        this.starvationTimer -= 6;
-        useGameStore.getState().damagePlayer(1, "starvation");
+      // Regen when hunger > 14 (more generous than MC's 18+), costs less exhaustion
+      if (currentHunger > 14 && currentHealth < gs.maxHealth) {
+        this.regenTimer += dt;
+        if (this.regenTimer >= 2.5) {
+          this.regenTimer -= 2.5;
+          useGameStore.getState().setHealth(useGameStore.getState().health + 1);
+          this.hungerExhaustion += 3; // regen costs less hunger
+        }
+      } else {
+        this.regenTimer = 0;
       }
-    } else {
-      this.starvationTimer = 0;
+      // Starvation when hunger <= 0 (slower — every 6 seconds)
+      if (currentHunger <= 0) {
+        this.starvationTimer += dt;
+        if (this.starvationTimer >= 6) {
+          this.starvationTimer -= 6;
+          useGameStore.getState().damagePlayer(1, "starvation");
+        }
+      } else {
+        this.starvationTimer = 0;
+      }
     }
 
     // Check for health death — drop items at death position

@@ -126,6 +126,7 @@ export function HUD() {
   const isComplete = useGameStore((s) => s.isComplete);
   const breakProgress = useGameStore((s) => s.breakProgress);
   const timeOfDay = useGameStore((s) => s.timeOfDay);
+  const gameMode = useGameStore((s) => s.gameMode);
   const health = useGameStore((s) => s.health);
   const maxHealth = useGameStore((s) => s.maxHealth);
   const hunger = useGameStore((s) => s.hunger);
@@ -232,18 +233,20 @@ export function HUD() {
         </div>
       )}
 
-      {/* Health & Hunger bars — positioned above hotbar */}
-      <div
-        className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex items-end justify-between"
-        style={{ width: "min(100vw, 560px)" }}
-      >
-        <div className="flex justify-end">
-          <HealthBar health={health} maxHealth={maxHealth} />
+      {/* Health & Hunger bars — positioned above hotbar (hidden in creative) */}
+      {gameMode === "survival" && (
+        <div
+          className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex items-end justify-between"
+          style={{ width: "min(100vw, 560px)" }}
+        >
+          <div className="flex justify-end">
+            <HealthBar health={health} maxHealth={maxHealth} />
+          </div>
+          <div className="flex justify-start">
+            <HungerBar hunger={hunger} maxHunger={maxHunger} />
+          </div>
         </div>
-        <div className="flex justify-start">
-          <HungerBar hunger={hunger} maxHunger={maxHunger} />
-        </div>
-      </div>
+      )}
 
       {/* Completion Overlay */}
       {isComplete && (

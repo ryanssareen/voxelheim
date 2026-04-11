@@ -14,6 +14,7 @@ export interface WorldMeta {
   health?: number;
   hunger?: number;
   worldType?: string;
+  gameMode?: "survival" | "creative";
 }
 
 interface ChunkRecord {

@@ -10,6 +10,7 @@ import { LoadingScreen } from "@ui/LoadingScreen";
 import { InventoryUI } from "@ui/InventoryUI";
 import { CraftingTableUI } from "@ui/CraftingTableUI";
 import { FurnaceUI } from "@ui/FurnaceUI";
+import { CreativeInventoryUI } from "@ui/CreativeInventoryUI";
 
 export function GameCanvas({
   worldId,
@@ -70,6 +71,7 @@ export function GameCanvas({
           <InventoryUI />
           <CraftingTableUI />
           <FurnaceUI />
+          <CreativeInventoryUI />
         </>
       )}
     </div>

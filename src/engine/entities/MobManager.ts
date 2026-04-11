@@ -38,7 +38,8 @@ export class MobManager {
     chunkManager: ChunkManager,
     playerPos: { x: number; y: number; z: number },
     timeOfDay: number,
-    onDamagePlayer?: (amount: number, fromX: number, fromZ: number, mobType?: string) => void
+    onDamagePlayer?: (amount: number, fromX: number, fromZ: number, mobType?: string) => void,
+    creative = false
   ): void {
     const getBlock = (x: number, y: number, z: number) => chunkManager.getBlock(x, y, z);
     const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
@@ -70,10 +71,10 @@ export class MobManager {
         (mob.position.z - playerPos.z) ** 2
       );
       if (mobDist > simRange) continue;
-      mob.update(dt, getBlock, this.registry, playerPos, timeOfDay);
+      mob.update(dt, getBlock, this.registry, playerPos, timeOfDay, creative);
 
-      // Mob attacks
-      if (!mob.dead && mob.attackCooldown <= 0 && onDamagePlayer) {
+      // Mob attacks — skip in creative mode (mobs don't attack)
+      if (!creative && !mob.dead && mob.attackCooldown <= 0 && onDamagePlayer) {
         if (mob.type === "zombie" && mob.distanceTo(playerPos) < 1.5) {
           onDamagePlayer(3, mob.position.x, mob.position.z, "zombie");
           mob.attackCooldown = 1;

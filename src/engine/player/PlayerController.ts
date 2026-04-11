@@ -13,14 +13,20 @@ const CROUCH_HEIGHT = 1.4;
 const MAX_FALL_SPEED = -10;
 const MAX_STEP_SIZE = 0.45; // Max displacement per sub-step to prevent clipping
 
+const FLY_SPEED = WALK_SPEED;
+const DOUBLE_TAP_WINDOW = 300; // ms
+
 export class PlayerController {
   public position: { x: number; y: number; z: number };
   public velocity = { x: 0, y: 0, z: 0 };
   public onGround = false;
   public isCrouching = false;
   public isSprinting = false;
+  public isFlying = false;
 
   private hadHorizCollision = false;
+  private lastSpacePressTime = 0;
+  private spaceWasDown = false;
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
     this.position = { x: spawnX, y: spawnY, z: spawnZ };
@@ -49,14 +55,40 @@ export class PlayerController {
     input: InputManager,
     camera: Camera,
     getBlock: (wx: number, wy: number, wz: number) => number,
-    registry: BlockRegistry
+    registry: BlockRegistry,
+    creative = false
   ): void {
-    this.isCrouching =
-      input.isKeyDown("ControlLeft") ||
-      input.isKeyDown("ControlRight") ||
-      input.isKeyDown("CapsLock");
+    // Double-tap Space detection for flight toggle (creative only)
+    const spaceDown = input.isKeyDown("Space");
+    if (creative && spaceDown && !this.spaceWasDown) {
+      const now = performance.now();
+      if (now - this.lastSpacePressTime < DOUBLE_TAP_WINDOW) {
+        this.isFlying = !this.isFlying;
+        if (this.isFlying) {
+          this.velocity.y = 0;
+        }
+        // Reset so the next press isn't another toggle
+        this.lastSpacePressTime = 0;
+      } else {
+        this.lastSpacePressTime = now;
+      }
+    }
+    this.spaceWasDown = spaceDown;
 
+    // Disable flight in survival
+    if (!creative) {
+      this.isFlying = false;
+    }
+
+    this.isCrouching =
+      !this.isFlying &&
+      (input.isKeyDown("ControlLeft") ||
+      input.isKeyDown("ControlRight") ||
+      input.isKeyDown("CapsLock"));
+
+    // In flight mode, Shift is descend, not sprint
     this.isSprinting =
+      !this.isFlying &&
       !this.isCrouching &&
       (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight"));
 
@@ -71,7 +103,10 @@ export class PlayerController {
     if (input.isKeyDown("KeyA")) { moveX -= right.x; moveZ -= right.z; }
     if (input.isKeyDown("KeyD")) { moveX += right.x; moveZ += right.z; }
 
-    const speed = this.isCrouching ? CROUCH_SPEED : this.isSprinting ? SPRINT_SPEED : WALK_SPEED;
+    const speed = this.isFlying ? FLY_SPEED
+      : this.isCrouching ? CROUCH_SPEED
+      : this.isSprinting ? SPRINT_SPEED
+      : WALK_SPEED;
     const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
     if (len > 0) {
       moveX = (moveX / len) * speed;
@@ -81,14 +116,26 @@ export class PlayerController {
     this.velocity.x = moveX;
     this.velocity.z = moveZ;
 
-    if (!this.onGround) {
-      this.velocity.y -= GRAVITY * dt;
-      if (this.velocity.y < MAX_FALL_SPEED) this.velocity.y = MAX_FALL_SPEED;
-    }
+    if (this.isFlying) {
+      // Flight vertical controls: Space=ascend, Shift=descend, neither=hover
+      if (input.isKeyDown("Space")) {
+        this.velocity.y = FLY_SPEED;
+      } else if (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight")) {
+        this.velocity.y = -FLY_SPEED;
+      } else {
+        this.velocity.y = 0;
+      }
+    } else {
+      // Normal gravity
+      if (!this.onGround) {
+        this.velocity.y -= GRAVITY * dt;
+        if (this.velocity.y < MAX_FALL_SPEED) this.velocity.y = MAX_FALL_SPEED;
+      }
 
-    if (input.isKeyDown("Space") && this.onGround) {
-      this.velocity.y = JUMP_VELOCITY;
-      this.onGround = false;
+      if (input.isKeyDown("Space") && this.onGround) {
+        this.velocity.y = JUMP_VELOCITY;
+        this.onGround = false;
+      }
     }
 
     this.hadHorizCollision = false;
@@ -97,35 +144,35 @@ export class PlayerController {
     // Use sub-stepping for large displacements to prevent clipping
     this.moveAxisSafe("y", this.velocity.y * dt, getBlock, registry);
 
-    // Ground probe: when standing (velocity.y == 0), moveAxisSafe skips Y
-    // entirely so onGround is never cleared. Check if ground still exists.
-    if (this.onGround && this.velocity.y === 0) {
-      const belowY = Math.floor(this.position.y) - 1;
-      const bMinX = Math.floor(this.position.x - HALF_WIDTH);
-      const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
-      const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
-      const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+    if (!this.isFlying) {
+      // Ground probe: when standing (velocity.y == 0), moveAxisSafe skips Y
+      // entirely so onGround is never cleared. Check if ground still exists.
+      if (this.onGround && this.velocity.y === 0) {
+        const belowY = Math.floor(this.position.y) - 1;
+        const bMinX = Math.floor(this.position.x - HALF_WIDTH);
+        const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
+        const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
+        const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
 
-      let hasGround = false;
-      for (let bx = bMinX; bx <= bMaxX && !hasGround; bx++) {
-        for (let bz = bMinZ; bz <= bMaxZ && !hasGround; bz++) {
-          if (registry.isSolid(getBlock(bx, belowY, bz))) {
-            hasGround = true;
+        let hasGround = false;
+        for (let bx = bMinX; bx <= bMaxX && !hasGround; bx++) {
+          for (let bz = bMinZ; bz <= bMaxZ && !hasGround; bz++) {
+            if (registry.isSolid(getBlock(bx, belowY, bz))) {
+              hasGround = true;
+            }
           }
         }
-      }
 
-      if (!hasGround) {
-        this.onGround = false;
+        if (!hasGround) {
+          this.onGround = false;
+        }
       }
     }
 
-    // Crouch edge prevention: save position before each horizontal move.
-    // If crouching on ground and the move would leave no ground under the
-    // player's AABB, revert the position on that axis (Minecraft-style sneak).
+    // Crouch edge prevention (skip while flying)
     const savedX = this.position.x;
     this.moveAxisSafe("x", this.velocity.x * dt, getBlock, registry);
-    if (this.isCrouching && this.onGround) {
+    if (!this.isFlying && this.isCrouching && this.onGround) {
       if (!this.hasGroundSupport(getBlock, registry)) {
         this.position.x = savedX;
         this.velocity.x = 0;
@@ -134,7 +181,7 @@ export class PlayerController {
 
     const savedZ = this.position.z;
     this.moveAxisSafe("z", this.velocity.z * dt, getBlock, registry);
-    if (this.isCrouching && this.onGround) {
+    if (!this.isFlying && this.isCrouching && this.onGround) {
       if (!this.hasGroundSupport(getBlock, registry)) {
         this.position.z = savedZ;
         this.velocity.z = 0;
@@ -143,11 +190,6 @@ export class PlayerController {
 
     // POST-COLLISION SAFETY: if player ended up inside a solid block, push them out
     this.resolveOverlap(getBlock, registry);
-
-    // Auto-jump removed — it caused repeated clipping bugs where the full
-    // JUMP_VELOCITY (8) launched players into blocks above, and the headroom
-    // check only tested the center position, not the full AABB. Players can
-    // press Space to jump manually over 1-block obstacles.
   }
 
   /** Checks if at least one solid block exists directly below the player AABB. */

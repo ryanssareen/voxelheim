@@ -56,6 +56,8 @@ export default function CreateWorldPage() {
           ? { x: 32, y: 35, z: 32 }
           : { x: 32, y: 50, z: 32 };
 
+      const actualGameMode = GAME_MODES[gameMode].toLowerCase() as "survival" | "creative";
+
       await saveWorld(
         {
           id,
@@ -69,13 +71,14 @@ export default function CreateWorldPage() {
           shardsCollected: 0,
           hotbarSlots: Array.from({ length: 8 }, () => ({ blockId: 0, count: 0 })),
           worldType: actualWorldType,
+          gameMode: actualGameMode,
         },
         new Map()
       );
 
       sessionStorage.setItem(
         "voxelheim-world-config",
-        JSON.stringify({ seed: actualSeed, worldType: actualWorldType })
+        JSON.stringify({ seed: actualSeed, worldType: actualWorldType, gameMode: actualGameMode })
       );
 
       if (startMultiplayer) {
@@ -213,10 +216,16 @@ export default function CreateWorldPage() {
         {/* Game Mode */}
         <button
           onClick={() => setGameMode((m) => (m + 1) % GAME_MODES.length)}
-          className="w-full py-2.5 text-white/40 font-mono text-sm tracking-wide mb-4 transition-all cursor-not-allowed"
+          className="w-full py-2.5 font-mono text-sm tracking-wide mb-4 transition-all cursor-pointer hover:brightness-125"
           style={{
-            background: "rgba(255,255,255,0.02)",
-            border: "2px solid rgba(255,255,255,0.04)",
+            background: gameMode === 1
+              ? "linear-gradient(to bottom, rgba(255,200,50,0.15) 0%, rgba(255,200,50,0.05) 100%)"
+              : "rgba(255,255,255,0.02)",
+            border: gameMode === 1
+              ? "2px solid rgba(255,200,50,0.25)"
+              : "2px solid rgba(255,255,255,0.06)",
+            color: gameMode === 1 ? "#ffd54f" : "rgba(255,255,255,0.5)",
+            textShadow: gameMode === 1 ? "1px 1px 0 rgba(0,0,0,0.5)" : "none",
           }}
         >
           Game Mode: {GAME_MODES[gameMode]}

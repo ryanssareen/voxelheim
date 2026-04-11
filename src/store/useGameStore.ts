@@ -9,6 +9,7 @@ export type DeathCause =
   | "starvation";
 
 interface GameState {
+  gameMode: "survival" | "creative";
   shardsCollected: number;
   shardsTotal: number;
   isComplete: boolean;
@@ -23,6 +24,7 @@ interface GameState {
   maxHunger: number;
   lastDamageTime: number;
   lastDamageCause: DeathCause | null;
+  setGameMode: (mode: "survival" | "creative") => void;
   collectShard: () => void;
   resetObjective: () => void;
   setPaused: (paused: boolean) => void;
@@ -95,6 +97,7 @@ function getDeathMessage(cause: DeathCause): string {
 
 /** Global game state: objectives, pause, death, break progress, health, hunger. */
 export const useGameStore = create<GameState>((set, get) => ({
+  gameMode: "survival" as "survival" | "creative",
   shardsCollected: 0,
   shardsTotal: 5,
   isComplete: false,
@@ -109,6 +112,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   maxHunger: 20,
   lastDamageTime: 0,
   lastDamageCause: null,
+
+  setGameMode: (mode: "survival" | "creative") => set({ gameMode: mode }),
 
   collectShard: () => {
     const { shardsCollected, shardsTotal } = get();
@@ -130,6 +135,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setHunger: (h: number) => set({ hunger: Math.max(0, Math.min(h, get().maxHunger)) }),
 
   damagePlayer: (amount: number, cause?: DeathCause) => {
+    if (get().gameMode === "creative") return;
     const { health } = get();
     const newHealth = Math.max(0, health - amount);
     set({ health: newHealth, lastDamageTime: performance.now(), lastDamageCause: cause ?? get().lastDamageCause });
@@ -140,6 +146,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   killPlayer: (cause: DeathCause) => {
+    if (get().gameMode === "creative") return;
     set({ health: 0, isDead: true, deathMessage: getDeathMessage(cause), lastDamageTime: performance.now() });
   },
 

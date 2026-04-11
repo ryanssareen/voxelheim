@@ -113,7 +113,8 @@ export class Mob {
     getBlock: (x: number, y: number, z: number) => number,
     registry: BlockRegistry,
     playerPos: { x: number; y: number; z: number },
-    timeOfDay?: number
+    timeOfDay?: number,
+    creative = false
   ): void {
     this.age += dt;
     if (this.attackCooldown > 0) this.attackCooldown -= dt;
@@ -134,8 +135,8 @@ export class Mob {
       this.updateBurning(dt, getBlock, registry, playerPos, timeOfDay);
     }
 
-    // AI
-    if (this.config.hostile) {
+    // AI — hostile mobs wander (like passive) in creative mode
+    if (this.config.hostile && !creative) {
       this.updateHostileAI(dt, playerPos, getBlock, registry);
     } else {
       this.updatePassiveAI(dt, playerPos, getBlock, registry);

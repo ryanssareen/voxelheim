@@ -92,11 +92,27 @@ export class BlockInteraction {
     isLeftHeld: boolean,
     rightClick: boolean,
     selectedBlockId: number,
-    dt: number
+    dt: number,
+    creative = false
   ): BreakState {
     const target = this.getTargetBlock(playerPos, lookDir);
 
-    // --- Timed breaking ---
+    // --- Creative: instant break, no drops, no tool damage ---
+    if (creative && isLeftHeld && target.hit && target.blockPos) {
+      const bp = target.blockPos;
+      const blockDef = this.registry.getBlock(target.blockId!);
+      if (blockDef && blockDef.breakable) {
+        this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
+        if (target.blockId === BLOCK_ID.CRYSTAL) {
+          useGameStore.getState().collectShard();
+        }
+      }
+      this.breakingPos = null;
+      this.breakProgress = 0;
+      return { isBreaking: false, breakProgress: 0, breakTarget: null };
+    }
+
+    // --- Timed breaking (survival) ---
     if (isLeftHeld && target.hit && target.blockPos) {
       const bp = target.blockPos;
       const blockDef = this.registry.getBlock(target.blockId!);
@@ -212,7 +228,7 @@ export class BlockInteraction {
 
         if (!overlaps) {
           const placed = this.chunkManager.setBlock(px, py, pz, placeId);
-          if (placed) hotbar.removeSelectedItem();
+          if (placed && !creative) hotbar.removeSelectedItem();
         }
       }
     }

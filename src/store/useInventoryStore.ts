@@ -15,6 +15,8 @@ interface InventoryState {
   furnaceOpen: boolean;
   /** Furnace slots: [input, fuel] */
   furnaceSlots: Array<{ blockId: number; count: number }>;
+  /** Whether the creative inventory is open */
+  creativeOpen: boolean;
   open: () => void;
   close: () => void;
   toggle: () => void;
@@ -28,6 +30,8 @@ interface InventoryState {
   openFurnace: () => void;
   closeFurnace: () => void;
   setFurnaceSlot: (index: number, blockId: number, count: number) => void;
+  openCreative: () => void;
+  closeCreative: () => void;
 }
 
 function emptyGrid() {
@@ -71,6 +75,7 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   tableGrid: emptyTableGrid(),
   furnaceOpen: false,
   furnaceSlots: emptyFurnaceSlots(),
+  creativeOpen: false,
 
   open: () => set({ isOpen: true }),
   close: () =>
@@ -128,4 +133,7 @@ export const useInventoryStore = create<InventoryState>((set) => ({
       slots[index] = { blockId, count };
       return { furnaceSlots: slots };
     }),
+
+  openCreative: () => set({ creativeOpen: true }),
+  closeCreative: () => set({ creativeOpen: false }),
 }));
