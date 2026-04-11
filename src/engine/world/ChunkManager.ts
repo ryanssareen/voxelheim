@@ -399,11 +399,11 @@ export class ChunkManager {
     wz: number,
     blockId: number,
     source: BlockChangeSource = "local"
-  ): void {
+  ): boolean {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
     const key = chunkKey(cx, cy, cz);
     const chunk = this.chunks.get(key);
-    if (!chunk) return;
+    if (!chunk) return false;
 
     const { lx, ly, lz } = worldToLocal(wx, wy, wz);
     chunk.setBlock(lx, ly, lz, blockId);
@@ -435,6 +435,7 @@ export class ChunkManager {
       blockId,
       source,
     });
+    return true;
   }
 
   private remeshIfLoaded(cx: number, cy: number, cz: number): void {

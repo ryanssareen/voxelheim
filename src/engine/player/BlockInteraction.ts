@@ -211,8 +211,8 @@ export class BlockInteraction {
           pz < playerMaxZ;
 
         if (!overlaps) {
-          this.chunkManager.setBlock(px, py, pz, placeId);
-          hotbar.removeSelectedItem();
+          const placed = this.chunkManager.setBlock(px, py, pz, placeId);
+          if (placed) hotbar.removeSelectedItem();
         }
       }
     }
