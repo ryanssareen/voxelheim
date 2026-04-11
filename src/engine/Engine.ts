@@ -543,31 +543,9 @@ export class Engine {
       this.registry
     );
 
-    // Stuck-in-terrain recovery: only teleport to surface if the player has
-    // been continuously entombed in solid blocks for 2+ seconds.  Brief
-    // overlaps from collision resolution are normal and should NOT trigger.
-    if (this.worldType === "infinite" && this.chunkManager) {
-      const px = Math.floor(this.player!.position.x);
-      const py = Math.floor(this.player!.position.y);
-      const pz = Math.floor(this.player!.position.z);
-      const feetSolid = this.registry.isSolid(this.chunkManager.getBlock(px, py, pz));
-      const headSolid = this.registry.isSolid(this.chunkManager.getBlock(px, py + 1, pz));
-      if (feetSolid && headSolid) {
-        this.stuckTimer += dt;
-        if (this.stuckTimer > 2) {
-          const surfaceY = this.chunkManager.getTerrainGenerator()
-            .getSurfaceHeight(px, pz);
-          this.player!.position.y = surfaceY + 2;
-          this.player!.velocity.y = 0;
-          this.player!.onGround = false;
-          this.fallStartY = 0;
-          this.wasFalling = false;
-          this.stuckTimer = 0;
-        }
-      } else {
-        this.stuckTimer = 0;
-      }
-    }
+    // Note: stuck-in-terrain recovery was removed. The collision system
+    // (moveAxis + resolveOverlap without upward push) handles all cases.
+    // Void death at Y < -10 catches truly stuck players.
 
     // Update item drops (floating pickups) — run early so pickup always works
     this.itemDrops!.update(dt, this.player!.position);

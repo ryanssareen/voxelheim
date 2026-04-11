@@ -259,10 +259,13 @@ export class PlayerController {
         for (let bz = bMinZ; bz <= bMaxZ; bz++) {
           if (!registry.isSolid(getBlock(bx, by, bz))) continue;
 
+          // Only push horizontally (X/Z) or downward (Y-).
+          // Never push UP — the normal moveAxis Y collision handles ground
+          // landing. Upward pushes cause the "launch to ceiling" bug when
+          // the player is squeezed between blocks horizontally.
           const candidates: Array<{ pen: number; axis: "x" | "y" | "z"; dir: number; push: number }> = [
             { pen: (bx + 1) - minX, axis: "x", dir: 1, push: (bx + 1) + HALF_WIDTH + EPS },
             { pen: maxX - bx, axis: "x", dir: -1, push: bx - HALF_WIDTH - EPS },
-            { pen: (by + 1) - minY, axis: "y", dir: 1, push: by + 1 },
             { pen: maxY - by, axis: "y", dir: -1, push: by - h },
             { pen: (bz + 1) - minZ, axis: "z", dir: 1, push: (bz + 1) + HALF_WIDTH + EPS },
             { pen: maxZ - bz, axis: "z", dir: -1, push: bz - HALF_WIDTH - EPS },
@@ -282,10 +285,7 @@ export class PlayerController {
 
     if (bestAxis !== null) {
       this.position[bestAxis] = bestPush;
-      if (bestAxis === "y" && bestDir === 1) {
-        this.velocity.y = 0;
-        this.onGround = true;
-      } else if (bestAxis === "y") {
+      if (bestAxis === "y") {
         this.velocity.y = 0;
       }
       // X/Z pushes: leave onGround unchanged — no free jumps from wall clips
