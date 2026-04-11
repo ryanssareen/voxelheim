@@ -62,16 +62,7 @@ export class MobManager {
       }
     }
 
-    // Burn hostiles at dawn
-    if (!isNight) {
-      for (const mob of this.mobs) {
-        if (mob.config.hostile && !mob.dead) {
-          mob.dead = true; // Will be cleaned up below
-        }
-      }
-    }
-
-    // Update mobs within simulation distance
+    // Update mobs within simulation distance (burning is handled inside Mob.update)
     const simRange = isInfinite ? simDist * CHUNK_SIZE : 999;
     for (const mob of this.mobs) {
       const mobDist = Math.sqrt(
@@ -79,7 +70,7 @@ export class MobManager {
         (mob.position.z - playerPos.z) ** 2
       );
       if (mobDist > simRange) continue;
-      mob.update(dt, getBlock, this.registry, playerPos);
+      mob.update(dt, getBlock, this.registry, playerPos, timeOfDay);
 
       // Mob attacks
       if (!mob.dead && mob.attackCooldown <= 0 && onDamagePlayer) {
