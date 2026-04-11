@@ -170,6 +170,19 @@ export class BlockInteraction {
           breakTarget: this.breakingPos,
         };
       }
+      // Right-click on furnace opens furnace UI
+      if (target.blockId === BLOCK_ID.FURNACE) {
+        const inv = useInventoryStore.getState();
+        if (!inv.furnaceOpen) {
+          inv.openFurnace();
+          if (document.pointerLockElement) document.exitPointerLock();
+        }
+        return {
+          isBreaking: this.breakingPos !== null,
+          breakProgress: this.breakProgress,
+          breakTarget: this.breakingPos,
+        };
+      }
     }
     if (rightClick && target.hit && target.facePos && target.facePos.x >= 0) {
       // Check we have items to place

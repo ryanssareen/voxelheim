@@ -27,6 +27,8 @@ const TEXTURES: TextureDef[] = [
   { name: "planks", color: "#C8A55A" },
   { name: "crafting_table_top", color: "", custom: craftingTableTop },
   { name: "crafting_table_side", color: "", custom: craftingTableSide },
+  { name: "furnace_top", color: "", custom: furnaceTop },
+  { name: "furnace_side", color: "", custom: furnaceSide },
 ];
 
 function hexToRGB(hex: string): RGB {
@@ -133,6 +135,80 @@ function craftingTableSide(buf: Buffer): void {
   // Head
   fillRect(buf, 9, 3, 5, 3, toolDark);
   fillRect(buf, 10, 4, 3, 1, toolLight);
+}
+
+function furnaceTop(buf: Buffer): void {
+  const stoneLight: RGB = { r: 170, g: 170, b: 170 };
+  const stoneMed: RGB = { r: 145, g: 145, b: 145 };
+  const stoneDark: RGB = { r: 120, g: 120, b: 120 };
+  const border: RGB = { r: 90, g: 90, b: 90 };
+
+  // Fill with medium stone
+  fillRect(buf, 0, 0, 16, 16, stoneMed);
+
+  // Dark border
+  for (let i = 0; i < 16; i++) {
+    setPixel(buf, i, 0, border);
+    setPixel(buf, i, 15, border);
+    setPixel(buf, 0, i, border);
+    setPixel(buf, 15, i, border);
+  }
+
+  // Inner grate pattern (dark cross)
+  for (let i = 2; i < 14; i++) {
+    setPixel(buf, i, 7, stoneDark);
+    setPixel(buf, i, 8, stoneDark);
+    setPixel(buf, 7, i, stoneDark);
+    setPixel(buf, 8, i, stoneDark);
+  }
+
+  // Light highlights on corners
+  fillRect(buf, 2, 2, 4, 4, stoneLight);
+  fillRect(buf, 10, 2, 4, 4, stoneLight);
+  fillRect(buf, 2, 10, 4, 4, stoneLight);
+  fillRect(buf, 10, 10, 4, 4, stoneLight);
+}
+
+function furnaceSide(buf: Buffer): void {
+  const stoneLight: RGB = { r: 170, g: 170, b: 170 };
+  const stoneMed: RGB = { r: 145, g: 145, b: 145 };
+  const stoneDark: RGB = { r: 120, g: 120, b: 120 };
+  const border: RGB = { r: 90, g: 90, b: 90 };
+  const fireDark: RGB = { r: 180, g: 80, b: 20 };
+  const fireLight: RGB = { r: 255, g: 160, b: 40 };
+
+  // Fill with medium stone
+  fillRect(buf, 0, 0, 16, 16, stoneMed);
+
+  // Dark border top and bottom
+  for (let i = 0; i < 16; i++) {
+    setPixel(buf, i, 0, border);
+    setPixel(buf, i, 15, border);
+  }
+
+  // Stone brick pattern (horizontal lines)
+  for (let x = 0; x < 16; x++) {
+    setPixel(buf, x, 4, stoneDark);
+    setPixel(buf, x, 8, stoneDark);
+    setPixel(buf, x, 12, stoneDark);
+  }
+  // Vertical mortar lines (offset per row)
+  for (let y = 0; y < 4; y++) setPixel(buf, 7, y + 1, stoneDark);
+  for (let y = 4; y < 8; y++) setPixel(buf, 3, y + 1, stoneDark);
+  for (let y = 4; y < 8; y++) setPixel(buf, 11, y + 1, stoneDark);
+
+  // Light accents
+  setPixel(buf, 1, 1, stoneLight);
+  setPixel(buf, 9, 1, stoneLight);
+  setPixel(buf, 5, 5, stoneLight);
+  setPixel(buf, 13, 5, stoneLight);
+
+  // Furnace opening (fire glow) in lower center
+  fillRect(buf, 5, 9, 6, 5, stoneDark);
+  fillRect(buf, 6, 10, 4, 4, fireDark);
+  fillRect(buf, 7, 11, 2, 2, fireLight);
+  setPixel(buf, 7, 13, fireDark);
+  setPixel(buf, 8, 12, fireLight);
 }
 
 function solidTile(hex: string): Buffer {

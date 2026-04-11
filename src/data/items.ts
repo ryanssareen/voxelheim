@@ -119,6 +119,10 @@ export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.STONE_AXE]: "Stone Axe",
   [BLOCK_ID.STONE_SHOVEL]: "Stone Shovel",
   [BLOCK_ID.STONE_SWORD]: "Stone Sword",
+  [BLOCK_ID.FURNACE]: "Furnace",
+  [BLOCK_ID.COOKED_PORK]: "Cooked Pork",
+  [BLOCK_ID.COOKED_BEEF]: "Cooked Beef",
+  [BLOCK_ID.COOKED_MUTTON]: "Cooked Mutton",
 };
 
 /** Numeric hex colors for Three.js renderers (hand, offhand, item drops). */
@@ -144,6 +148,10 @@ export const BLOCK_HEX_COLORS: Record<number, number> = {
   [BLOCK_ID.STONE_AXE]: 0xaaaaaa,
   [BLOCK_ID.STONE_SHOVEL]: 0xaaaaaa,
   [BLOCK_ID.STONE_SWORD]: 0xaaaaaa,
+  [BLOCK_ID.FURNACE]: 0x808080,
+  [BLOCK_ID.COOKED_PORK]: 0xc87040,
+  [BLOCK_ID.COOKED_BEEF]: 0x8b4020,
+  [BLOCK_ID.COOKED_MUTTON]: 0xa06040,
 };
 
 export const ITEM_COLORS: Record<number, string> = {
@@ -168,4 +176,8 @@ export const ITEM_COLORS: Record<number, string> = {
   [BLOCK_ID.STONE_AXE]: "#aaaaaa",
   [BLOCK_ID.STONE_SHOVEL]: "#aaaaaa",
   [BLOCK_ID.STONE_SWORD]: "#aaaaaa",
+  [BLOCK_ID.FURNACE]: "#808080",
+  [BLOCK_ID.COOKED_PORK]: "#c87040",
+  [BLOCK_ID.COOKED_BEEF]: "#8b4020",
+  [BLOCK_ID.COOKED_MUTTON]: "#a06040",
 };

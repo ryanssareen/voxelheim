@@ -9,6 +9,7 @@ import { DeathScreen } from "@ui/DeathScreen";
 import { LoadingScreen } from "@ui/LoadingScreen";
 import { InventoryUI } from "@ui/InventoryUI";
 import { CraftingTableUI } from "@ui/CraftingTableUI";
+import { FurnaceUI } from "@ui/FurnaceUI";
 
 export function GameCanvas({
   worldId,
@@ -68,6 +69,7 @@ export function GameCanvas({
           <DeathScreen onRespawn={handleRespawn} />
           <InventoryUI />
           <CraftingTableUI />
+          <FurnaceUI />
         </>
       )}
     </div>

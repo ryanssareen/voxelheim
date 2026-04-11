@@ -55,6 +55,10 @@ export const BLOCK_ID = {
   STONE_AXE: 19,
   STONE_SHOVEL: 20,
   STONE_SWORD: 21,
+  FURNACE: 22,
+  COOKED_PORK: 23,
+  COOKED_BEEF: 24,
+  COOKED_MUTTON: 25,
 } as const;
 
 /** All block definitions indexed by their ID. */
@@ -215,5 +219,36 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: false, transparent: true, breakable: false,
     textures: { top: "", bottom: "", side: "" },
     special: "tool", breakTime: 0, dropId: BLOCK_ID.STONE_SWORD,
+  },
+  {
+    id: BLOCK_ID.FURNACE,
+    name: "Furnace",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "furnace_top", bottom: "stone", side: "furnace_side" },
+    special: "none", breakTime: 1.5, dropId: BLOCK_ID.FURNACE, requiresTool: "pickaxe",
+  },
+  {
+    id: BLOCK_ID.COOKED_PORK,
+    name: "Cooked Pork",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "food", breakTime: 0, dropId: BLOCK_ID.COOKED_PORK,
+    hungerRestore: 8,
+  },
+  {
+    id: BLOCK_ID.COOKED_BEEF,
+    name: "Cooked Beef",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "food", breakTime: 0, dropId: BLOCK_ID.COOKED_BEEF,
+    hungerRestore: 8,
+  },
+  {
+    id: BLOCK_ID.COOKED_MUTTON,
+    name: "Cooked Mutton",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "food", breakTime: 0, dropId: BLOCK_ID.COOKED_MUTTON,
+    hungerRestore: 6,
   },
 ];
