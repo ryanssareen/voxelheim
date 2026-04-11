@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useHotbarStore } from "@store/useHotbarStore";
 
 interface InventoryState {
   isOpen: boolean;
@@ -46,6 +47,22 @@ function emptyFurnaceSlots() {
   return [{ blockId: 0, count: 0 }, { blockId: 0, count: 0 }];
 }
 
+/** Return all non-empty items to the player's hotbar/inventory. */
+function returnItemsToHotbar(
+  slots: Array<{ blockId: number; count: number; durability?: number }>,
+  cursor: { blockId: number; count: number; durability?: number }
+): void {
+  const hotbar = useHotbarStore.getState();
+  for (const slot of slots) {
+    for (let i = 0; i < slot.count; i++) {
+      if (slot.blockId !== 0) hotbar.addItem(slot.blockId);
+    }
+  }
+  for (let i = 0; i < cursor.count; i++) {
+    if (cursor.blockId !== 0) hotbar.addItem(cursor.blockId);
+  }
+}
+
 export const useInventoryStore = create<InventoryState>((set) => ({
   isOpen: false,
   craftingGrid: emptyGrid(),
@@ -56,12 +73,19 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   furnaceSlots: emptyFurnaceSlots(),
 
   open: () => set({ isOpen: true }),
-  close: () => set({ isOpen: false, craftingGrid: emptyGrid(), cursorItem: { blockId: 0, count: 0 } }),
+  close: () =>
+    set((state) => {
+      returnItemsToHotbar(state.craftingGrid, state.cursorItem);
+      return { isOpen: false, craftingGrid: emptyGrid(), cursorItem: { blockId: 0, count: 0 } };
+    }),
   toggle: () =>
-    set((state) => ({
-      isOpen: !state.isOpen,
-      ...(!state.isOpen ? {} : { craftingGrid: emptyGrid(), cursorItem: { blockId: 0, count: 0 } }),
-    })),
+    set((state) => {
+      if (state.isOpen) returnItemsToHotbar(state.craftingGrid, state.cursorItem);
+      return {
+        isOpen: !state.isOpen,
+        ...(!state.isOpen ? {} : { craftingGrid: emptyGrid(), cursorItem: { blockId: 0, count: 0 } }),
+      };
+    }),
 
   setCraftingSlot: (index, blockId, count) =>
     set((state) => {
@@ -78,7 +102,11 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   clearCursor: () => set({ cursorItem: { blockId: 0, count: 0 } }),
 
   openTable: () => set({ tableOpen: true, tableGrid: emptyTableGrid(), cursorItem: { blockId: 0, count: 0 } }),
-  closeTable: () => set({ tableOpen: false, tableGrid: emptyTableGrid(), cursorItem: { blockId: 0, count: 0 } }),
+  closeTable: () =>
+    set((state) => {
+      returnItemsToHotbar(state.tableGrid, state.cursorItem);
+      return { tableOpen: false, tableGrid: emptyTableGrid(), cursorItem: { blockId: 0, count: 0 } };
+    }),
 
   setTableSlot: (index, blockId, count) =>
     set((state) => {
@@ -88,7 +116,11 @@ export const useInventoryStore = create<InventoryState>((set) => ({
     }),
 
   openFurnace: () => set({ furnaceOpen: true, furnaceSlots: emptyFurnaceSlots(), cursorItem: { blockId: 0, count: 0 } }),
-  closeFurnace: () => set({ furnaceOpen: false, furnaceSlots: emptyFurnaceSlots(), cursorItem: { blockId: 0, count: 0 } }),
+  closeFurnace: () =>
+    set((state) => {
+      returnItemsToHotbar(state.furnaceSlots, state.cursorItem);
+      return { furnaceOpen: false, furnaceSlots: emptyFurnaceSlots(), cursorItem: { blockId: 0, count: 0 } };
+    }),
 
   setFurnaceSlot: (index, blockId, count) =>
     set((state) => {
