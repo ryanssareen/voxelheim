@@ -42,8 +42,8 @@ function persistSettings(state: SettingsState) {
 const defaults = {
   musicVolume: 50,
   musicEnabled: true,
-  renderDistance: 4,
-  simulationDistance: 4,
+  renderDistance: 8,
+  simulationDistance: 6,
   fov: 75,
 };
 
@@ -64,11 +64,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       persistSettings(get());
     },
     setRenderDistance: (d: number) => {
-      set({ renderDistance: Math.max(2, Math.min(16, d)) });
+      set({ renderDistance: Math.max(2, Math.min(32, d)) });
       persistSettings(get());
     },
     setSimulationDistance: (d: number) => {
-      set({ simulationDistance: Math.max(2, Math.min(8, d)) });
+      set({ simulationDistance: Math.max(2, Math.min(16, d)) });
       persistSettings(get());
     },
     setFov: (f: number) => {
