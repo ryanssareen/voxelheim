@@ -254,28 +254,33 @@ export class ItemDropManager {
     if (!drop || drop.pendingClaim) return;
     if (!useHotbarStore.getState().canAddItem(drop.blockId)) return;
 
+    // Save blockId BEFORE the async claim — the remote subscription
+    // callback can delete the drop from our map while we await.
+    const blockId = drop.blockId;
     drop.pendingClaim = true;
 
-    // Try to claim via shared state (localStorage / Firestore) so other
-    // players see the drop disappear.  If the claim fails for ANY reason
-    // (storage full, network error, drop missing from shared state) we
-    // still pick up locally.  A possible dupe is far better than items
-    // being permanently uncollectable.
+    // Try to claim via shared state so other players see the drop
+    // disappear.  If the claim fails we still pick up locally.
     try {
       if (this.claimDrop) await this.claimDrop(dropId);
     } catch {
       // Claim failed — continue with local pickup
     }
 
-    const current = this.drops.get(dropId);
-    if (!current) return;
-
-    const added = useHotbarStore.getState().addItem(current.blockId);
+    // The drop may have been removed from our map by a remote
+    // subscription callback during the await — that's fine, we
+    // already have the blockId saved above.
+    const added = useHotbarStore.getState().addItem(blockId);
     if (added) {
+      // Drop might already be gone from the map (remote callback),
+      // but removeDrop handles missing entries gracefully.
       this.removeDrop(dropId);
       return;
     }
 
+    // Inventory full — re-drop the item
+    const current = this.drops.get(dropId);
+    if (!current) return;
     current.pendingClaim = false;
     current.pickupDelay = 0;
     current.age = 0;
