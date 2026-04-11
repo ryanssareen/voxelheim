@@ -256,24 +256,19 @@ export class ItemDropManager {
 
     drop.pendingClaim = true;
 
-    let claimed = true;
+    // Try to claim via shared state (localStorage / Firestore) so other
+    // players see the drop disappear.  If the claim fails for ANY reason
+    // (storage full, network error, drop missing from shared state) we
+    // still pick up locally.  A possible dupe is far better than items
+    // being permanently uncollectable.
     try {
-      claimed = this.claimDrop ? await this.claimDrop(dropId) : true;
+      if (this.claimDrop) await this.claimDrop(dropId);
     } catch {
-      // Network/storage claim failed — pick up locally anyway so the
-      // game doesn't softlock.  The worst case is a dupe in multiplayer
-      // which is far better than items being permanently uncollectable.
-      claimed = true;
+      // Claim failed — continue with local pickup
     }
 
     const current = this.drops.get(dropId);
     if (!current) return;
-
-    if (!claimed) {
-      // Another player claimed it first — let it go
-      current.pendingClaim = false;
-      return;
-    }
 
     const added = useHotbarStore.getState().addItem(current.blockId);
     if (added) {
