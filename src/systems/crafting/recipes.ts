@@ -124,6 +124,7 @@ export const RECIPES: CraftingRecipe[] = [
 
 const _ = 0;
 const P = BLOCK_ID.PLANKS;
+const F = BLOCK_ID.FURNACE;
 const S = BLOCK_ID.STONE;
 const L = BLOCK_ID.LOG;
 const D = BLOCK_ID.DIRT;
@@ -261,6 +262,13 @@ export const RECIPES_3x3: CraftingRecipe3x3[] = [
     count: 1,
     name: "Stone Sword",
   },
+  // Furnace: 8 stone around empty center
+  {
+    grid: [S, S, S, S, _, S, S, S, S],
+    result: BLOCK_ID.FURNACE,
+    count: 1,
+    name: "Furnace",
+  },
 ];
 
 /** Shift non-empty cells to top-left corner so recipes match in any position. */
@@ -301,11 +309,11 @@ export function findRecipe3x3(
     if (match) return recipe;
   }
   // Also check if it fits as a 2x2 recipe placed in any valid 2x2 subgrid
-  const subgrids: [number, number, number, number, number, number, number, number][] = [
-    [0, 1, 3, 4, 2, 5, 6, 7], // top-left 2x2
-    [1, 2, 4, 5, 0, 3, 6, 7], // top-right 2x2
-    [3, 4, 6, 7, 0, 1, 2, 5], // bottom-left 2x2
-    [4, 5, 7, 8, 0, 1, 2, 3], // bottom-right 2x2
+  const subgrids: [number, number, number, number, number, number, number, number, number][] = [
+    [0, 1, 3, 4, 2, 5, 6, 7, 8], // top-left 2x2
+    [1, 2, 4, 5, 0, 3, 6, 7, 8], // top-right 2x2
+    [3, 4, 6, 7, 0, 1, 2, 5, 8], // bottom-left 2x2
+    [4, 5, 7, 8, 0, 1, 2, 3, 6], // bottom-right 2x2
   ];
   for (const [a, b, c, d, ...rest] of subgrids) {
     const allRestEmpty = rest.every((idx) => grid[idx] === 0);

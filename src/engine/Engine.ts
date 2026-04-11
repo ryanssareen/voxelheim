@@ -153,7 +153,7 @@ export class Engine {
     this.input.onPointerLockLost = () => {
       // Don't pause if dead or inventory is open
       const invS = useInventoryStore.getState();
-      if (!useGameStore.getState().isDead && !invS.isOpen && !invS.tableOpen) {
+      if (!useGameStore.getState().isDead && !invS.isOpen && !invS.tableOpen && !invS.furnaceOpen) {
         useGameStore.getState().setPaused(true);
       }
     };
@@ -412,7 +412,10 @@ export class Engine {
     const eDown = this.input.isKeyDown("KeyE");
     if (eDown && !this.eWasDown) {
       const inv = useInventoryStore.getState();
-      if (inv.tableOpen) {
+      if (inv.furnaceOpen) {
+        inv.closeFurnace();
+        this.canvas.requestPointerLock();
+      } else if (inv.tableOpen) {
         inv.closeTable();
         this.canvas.requestPointerLock();
       } else if (inv.isOpen) {
@@ -429,7 +432,7 @@ export class Engine {
 
     // Skip game input while inventory or crafting table is open
     const invState = useInventoryStore.getState();
-    if (invState.isOpen || invState.tableOpen) {
+    if (invState.isOpen || invState.tableOpen || invState.furnaceOpen) {
       this.input.getMouseDelta(); // consume
       this.input.getMouseButton(); // consume
       this.camera.applyToThreeCamera(
@@ -486,6 +489,26 @@ export class Engine {
       (wx, wy, wz) => this.chunkManager!.getBlock(wx, wy, wz),
       this.registry
     );
+
+    // Stuck-in-terrain recovery: if the block at the player's feet AND head are both
+    // solid, they're inside terrain and can't escape via normal physics.  Push them to
+    // the surface so they aren't permanently trapped.
+    if (this.worldType === "infinite" && this.chunkManager) {
+      const px = Math.floor(this.player!.position.x);
+      const py = Math.floor(this.player!.position.y);
+      const pz = Math.floor(this.player!.position.z);
+      const feetSolid = this.registry.isSolid(this.chunkManager.getBlock(px, py, pz));
+      const headSolid = this.registry.isSolid(this.chunkManager.getBlock(px, py + 1, pz));
+      if (feetSolid && headSolid) {
+        const surfaceY = this.chunkManager.getTerrainGenerator()
+          .getSurfaceHeight(px, pz);
+        this.player!.position.y = surfaceY + 2;
+        this.player!.velocity.y = 0;
+        this.player!.onGround = false;
+        this.fallStartY = 0;
+        this.wasFalling = false;
+      }
+    }
 
     // Update item drops (floating pickups) — run early so pickup always works
     this.itemDrops!.update(dt, this.player!.position);

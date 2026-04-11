@@ -91,7 +91,7 @@ export class PlayerController {
       if (this.velocity.y < MAX_FALL_SPEED) this.velocity.y = MAX_FALL_SPEED;
     }
 
-    if (input.isKeyDown("Space") && this.onGround && !this.isCrouching) {
+    if (input.isKeyDown("Space") && this.onGround) {
       this.velocity.y = JUMP_VELOCITY;
       this.onGround = false;
     }
@@ -127,8 +127,26 @@ export class PlayerController {
       }
     }
 
+    // Crouch edge prevention: save position before each horizontal move.
+    // If crouching on ground and the move would leave no ground under the
+    // player's AABB, revert the position on that axis (Minecraft-style sneak).
+    const savedX = this.position.x;
     this.moveAxisSafe("x", this.velocity.x * dt, getBlock, registry);
+    if (this.isCrouching && this.onGround) {
+      if (!this.hasGroundSupport(getBlock, registry)) {
+        this.position.x = savedX;
+        this.velocity.x = 0;
+      }
+    }
+
+    const savedZ = this.position.z;
     this.moveAxisSafe("z", this.velocity.z * dt, getBlock, registry);
+    if (this.isCrouching && this.onGround) {
+      if (!this.hasGroundSupport(getBlock, registry)) {
+        this.position.z = savedZ;
+        this.velocity.z = 0;
+      }
+    }
 
     // POST-COLLISION SAFETY: if player ended up inside a solid block, push them out
     this.resolveOverlap(getBlock, registry);
@@ -158,6 +176,25 @@ export class PlayerController {
         }
       }
     }
+  }
+
+  /** Checks if at least one solid block exists directly below the player AABB. */
+  private hasGroundSupport(
+    getBlock: (wx: number, wy: number, wz: number) => number,
+    registry: BlockRegistry
+  ): boolean {
+    const belowY = Math.floor(this.position.y) - 1;
+    const bMinX = Math.floor(this.position.x - HALF_WIDTH);
+    const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
+    const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
+    const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+
+    for (let bx = bMinX; bx <= bMaxX; bx++) {
+      for (let bz = bMinZ; bz <= bMaxZ; bz++) {
+        if (registry.isSolid(getBlock(bx, belowY, bz))) return true;
+      }
+    }
+    return false;
   }
 
   /** Move with sub-stepping: breaks large displacements into safe-sized steps */

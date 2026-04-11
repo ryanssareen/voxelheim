@@ -10,6 +10,10 @@ interface InventoryState {
   tableOpen: boolean;
   /** 3x3 crafting table grid (9 slots, row-major) */
   tableGrid: Array<{ blockId: number; count: number; durability?: number }>;
+  /** Whether the furnace UI is open */
+  furnaceOpen: boolean;
+  /** Furnace slots: [input, fuel] */
+  furnaceSlots: Array<{ blockId: number; count: number }>;
   open: () => void;
   close: () => void;
   toggle: () => void;
@@ -20,6 +24,9 @@ interface InventoryState {
   openTable: () => void;
   closeTable: () => void;
   setTableSlot: (index: number, blockId: number, count: number) => void;
+  openFurnace: () => void;
+  closeFurnace: () => void;
+  setFurnaceSlot: (index: number, blockId: number, count: number) => void;
 }
 
 function emptyGrid() {
@@ -35,12 +42,18 @@ function emptyTableGrid() {
   return Array.from({ length: 9 }, () => ({ blockId: 0, count: 0 }));
 }
 
+function emptyFurnaceSlots() {
+  return [{ blockId: 0, count: 0 }, { blockId: 0, count: 0 }];
+}
+
 export const useInventoryStore = create<InventoryState>((set) => ({
   isOpen: false,
   craftingGrid: emptyGrid(),
   cursorItem: { blockId: 0, count: 0 },
   tableOpen: false,
   tableGrid: emptyTableGrid(),
+  furnaceOpen: false,
+  furnaceSlots: emptyFurnaceSlots(),
 
   open: () => set({ isOpen: true }),
   close: () => set({ isOpen: false, craftingGrid: emptyGrid(), cursorItem: { blockId: 0, count: 0 } }),
@@ -72,5 +85,15 @@ export const useInventoryStore = create<InventoryState>((set) => ({
       const grid = [...state.tableGrid];
       grid[index] = { blockId, count };
       return { tableGrid: grid };
+    }),
+
+  openFurnace: () => set({ furnaceOpen: true, furnaceSlots: emptyFurnaceSlots(), cursorItem: { blockId: 0, count: 0 } }),
+  closeFurnace: () => set({ furnaceOpen: false, furnaceSlots: emptyFurnaceSlots(), cursorItem: { blockId: 0, count: 0 } }),
+
+  setFurnaceSlot: (index, blockId, count) =>
+    set((state) => {
+      const slots = [...state.furnaceSlots];
+      slots[index] = { blockId, count };
+      return { furnaceSlots: slots };
     }),
 }));
