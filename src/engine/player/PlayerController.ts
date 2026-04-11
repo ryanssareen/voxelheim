@@ -14,6 +14,7 @@ const MAX_FALL_SPEED = -10;
 const MAX_STEP_SIZE = 0.45; // Max displacement per sub-step to prevent clipping
 
 const FLY_SPEED = 20;
+const FLY_SPRINT_SPEED = 40;
 const DOUBLE_TAP_WINDOW = 300; // ms
 
 export class PlayerController {
@@ -86,9 +87,8 @@ export class PlayerController {
       input.isKeyDown("ControlRight") ||
       input.isKeyDown("CapsLock"));
 
-    // In flight mode, Shift is descend, not sprint
+    // Shift = sprint (works both on ground and while flying)
     this.isSprinting =
-      !this.isFlying &&
       !this.isCrouching &&
       (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight"));
 
@@ -103,7 +103,8 @@ export class PlayerController {
     if (input.isKeyDown("KeyA")) { moveX -= right.x; moveZ -= right.z; }
     if (input.isKeyDown("KeyD")) { moveX += right.x; moveZ += right.z; }
 
-    const speed = this.isFlying ? FLY_SPEED
+    const speed = this.isFlying
+      ? (this.isSprinting ? FLY_SPRINT_SPEED : FLY_SPEED)
       : this.isCrouching ? CROUCH_SPEED
       : this.isSprinting ? SPRINT_SPEED
       : WALK_SPEED;
@@ -117,11 +118,12 @@ export class PlayerController {
     this.velocity.z = moveZ;
 
     if (this.isFlying) {
-      // Flight vertical controls: Space=ascend, Shift=descend, neither=hover
+      // Flight vertical controls: Space=ascend, Ctrl=descend, neither=hover
+      const flyVertSpeed = this.isSprinting ? FLY_SPRINT_SPEED : FLY_SPEED;
       if (input.isKeyDown("Space")) {
-        this.velocity.y = FLY_SPEED;
-      } else if (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight")) {
-        this.velocity.y = -FLY_SPEED;
+        this.velocity.y = flyVertSpeed;
+      } else if (input.isKeyDown("ControlLeft") || input.isKeyDown("ControlRight")) {
+        this.velocity.y = -flyVertSpeed;
       } else {
         this.velocity.y = 0;
       }
