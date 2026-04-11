@@ -702,6 +702,13 @@ export async function readMultiplayerSession(
     return session;
   } catch (err) {
     console.log("[readSession] firestore error:", err);
+    // Surface permission errors so the UI can show a helpful message
+    // instead of the misleading "Session not found"
+    if (err instanceof Error && err.message.includes("permissions")) {
+      throw new Error(
+        "Firestore permissions denied. The project owner needs to enable read access in Firebase Console → Firestore → Rules."
+      );
+    }
     return null;
   }
 }
