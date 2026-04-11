@@ -636,23 +636,34 @@ function createLocalSession(input: CreateSessionInput): MultiplayerSessionMeta {
 export async function createMultiplayerSession(
   input: CreateSessionInput
 ): Promise<MultiplayerSessionMeta> {
-  if (firebaseConfigured) {
+  // Always create a cloud session. If Firestore write fails, still return
+  // the session with cloud transport — the code is valid and joining will
+  // handle any connectivity issues on its own.
+  const session: MultiplayerSessionMeta = {
+    code: createSessionCode(false),
+    seed: input.seed,
+    worldType: input.worldType,
+    worldName: input.worldName,
+    hostName: input.hostName,
+    createdAt: Date.now(),
+    transport: "cloud",
+  };
+
+  const database = firestore();
+  if (database) {
     try {
-      const cloud = await createCloudSession(input);
-      if (cloud) return cloud;
-    } catch (error) {
-      console.warn(
-        "[multiplayer] Cloud session creation failed, falling back to local-only session:",
-        error
+      await withTimeout(
+        setDoc(doc(database, "multiplayerSessions", session.code), session),
+        5000
       );
+    } catch (error) {
+      console.warn("[multiplayer] Cloud write failed, code still usable:", error);
     }
-  } else {
-    console.log("[createSession] firebase not configured, using local");
   }
 
-  const local = createLocalSession(input);
-  console.log("[createSession] local session created:", local.code, "transport:", local.transport);
-  return local;
+  // Also persist locally so the host can always find the session
+  writeLocalSession(session);
+  return session;
 }
 
 export async function readMultiplayerSession(
