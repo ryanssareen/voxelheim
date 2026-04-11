@@ -234,7 +234,7 @@ export function HUD() {
       )}
 
       {/* Health & Hunger bars — positioned above hotbar (hidden in creative) */}
-      {gameMode === "survival" && (
+      {gameMode !== "creative" && (
         <div
           className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex items-end justify-between"
           style={{ width: "min(100vw, 560px)" }}

@@ -10,7 +10,7 @@ const JUMP_VELOCITY = 8;
 const HALF_WIDTH = 0.3;
 const STAND_HEIGHT = 1.8;
 const CROUCH_HEIGHT = 1.4;
-const MAX_FALL_SPEED = -10;
+const MAX_FALL_SPEED = -40;
 const MAX_STEP_SIZE = 0.45; // Max displacement per sub-step to prevent clipping
 
 const FLY_SPEED = 20;
