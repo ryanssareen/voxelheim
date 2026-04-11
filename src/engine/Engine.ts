@@ -27,7 +27,7 @@ import {
   type WorldMeta,
 } from "@systems/persistence/WorldStorage";
 import type { WorldType } from "@engine/world/constants";
-import { BLOCK_DEFINITIONS } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import { getToolDef } from "@data/items";
 
 const MOUSE_SENSITIVITY = 0.002;
@@ -72,6 +72,7 @@ export class Engine {
   private regenTimer = 0;
   private starvationTimer = 0;
   private stuckTimer = 0;
+  private lastDeathPos: { x: number; y: number; z: number } | null = null;
   private fallStartY = 0;
   private wasFalling = false;
   private frameCount = 0;
@@ -321,6 +322,25 @@ export class Engine {
       }
     }
     return this.spawn.y;
+  }
+
+  /** Drop all inventory items at the player's current position. */
+  private dropAllItems(): void {
+    if (!this.itemDrops || !this.player) return;
+    const slots = useHotbarStore.getState().slots;
+    const pos = this.lastDeathPos ?? this.player.position;
+    for (const slot of slots) {
+      if (slot.count <= 0 || slot.blockId === BLOCK_ID.AIR) continue;
+      for (let i = 0; i < slot.count; i++) {
+        this.itemDrops.spawnDrop(
+          slot.blockId,
+          Math.floor(pos.x),
+          Math.floor(pos.y),
+          Math.floor(pos.z),
+          0
+        );
+      }
+    }
   }
 
   /** Respawn after death. Clears inventory. Finds safe spawn if original is void. */
@@ -580,13 +600,23 @@ export class Engine {
     }
     this.wasFalling = isFalling;
 
-    // Void death
+    // Void recovery (flat/infinite) or void death (island)
     if (this.player!.position.y < VOID_Y) {
-      useGameStore.getState().killPlayer("void");
-      if (document.pointerLockElement) {
-        document.exitPointerLock();
+      if (this.worldType === "flat" || this.worldType === "infinite") {
+        // Recover: teleport to surface at same X/Z, keep items
+        const safeY = this.findSafeSpawnY(this.player!.position.x, this.player!.position.z);
+        this.player!.position.y = safeY;
+        this.player!.velocity = { x: 0, y: 0, z: 0 };
+        this.player!.onGround = false;
+        this.fallStartY = 0;
+        this.wasFalling = false;
+      } else {
+        useGameStore.getState().killPlayer("void");
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+        return;
       }
-      return;
     }
 
     // Block interaction (timed breaking)
@@ -745,8 +775,10 @@ export class Engine {
       this.starvationTimer = 0;
     }
 
-    // Check for health death
+    // Check for health death — drop items at death position
     if (useGameStore.getState().isDead && !state.isDead) {
+      this.lastDeathPos = { ...this.player!.position };
+      this.dropAllItems();
       if (document.pointerLockElement) {
         document.exitPointerLock();
       }
