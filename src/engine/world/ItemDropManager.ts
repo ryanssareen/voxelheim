@@ -260,17 +260,17 @@ export class ItemDropManager {
     try {
       claimed = this.claimDrop ? await this.claimDrop(dropId) : true;
     } catch {
-      const current = this.drops.get(dropId);
-      if (current) {
-        current.pendingClaim = false;
-      }
-      return;
+      // Network/storage claim failed — pick up locally anyway so the
+      // game doesn't softlock.  The worst case is a dupe in multiplayer
+      // which is far better than items being permanently uncollectable.
+      claimed = true;
     }
 
     const current = this.drops.get(dropId);
     if (!current) return;
 
     if (!claimed) {
+      // Another player claimed it first — let it go
       current.pendingClaim = false;
       return;
     }
