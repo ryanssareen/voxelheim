@@ -399,7 +399,59 @@ export class Engine {
     }
 
     const state = useGameStore.getState();
-    if (state.isPaused || state.isDead) return;
+    if (state.isDead) return;
+
+    // When paused: still run gravity/physics and rendering, but skip all input
+    if (state.isPaused) {
+      // Apply gravity so players don't float when they pause mid-air
+      if (this.player && this.chunkManager) {
+        if (!this.player.onGround) {
+          this.player.velocity.y -= 20 * dt; // GRAVITY
+          if (this.player.velocity.y < -10) this.player.velocity.y = -10;
+        }
+        this.player.velocity.x = 0;
+        this.player.velocity.z = 0;
+        // Y-axis collision only
+        const getBlock = (wx: number, wy: number, wz: number) => this.chunkManager!.getBlock(wx, wy, wz);
+        const dy = this.player.velocity.y * dt;
+        if (dy !== 0) {
+          this.player.position.y += dy;
+          const h = this.player.height;
+          const hw = 0.3;
+          const minX = Math.floor(this.player.position.x - hw);
+          const maxX = Math.floor(this.player.position.x + hw);
+          const minY = Math.floor(this.player.position.y);
+          const maxY = Math.floor(this.player.position.y + h);
+          const minZ = Math.floor(this.player.position.z - hw);
+          const maxZ = Math.floor(this.player.position.z + hw);
+          for (let bx = minX; bx <= maxX; bx++) {
+            for (let by = minY; by <= maxY; by++) {
+              for (let bz = minZ; bz <= maxZ; bz++) {
+                if (!this.registry.isSolid(getBlock(bx, by, bz))) continue;
+                if (dy < 0) {
+                  this.player.position.y = by + 1;
+                  this.player.velocity.y = 0;
+                  this.player.onGround = true;
+                } else {
+                  this.player.position.y = by - h;
+                  this.player.velocity.y = 0;
+                }
+              }
+            }
+          }
+          if (dy < 0 && this.player.velocity.y !== 0) {
+            this.player.onGround = false;
+          }
+        }
+      }
+      this.camera.applyToThreeCamera(
+        this.renderer!.getCamera(),
+        this.player!.position,
+        this.player!.isCrouching ? 1.2 : 1.6
+      );
+      this.renderer!.render();
+      return;
+    }
 
     // Infinite world: stream chunks around player each frame
     if (this.worldType === "infinite" && this.player && this.chunkManager) {
