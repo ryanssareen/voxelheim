@@ -636,32 +636,43 @@ function createLocalSession(input: CreateSessionInput): MultiplayerSessionMeta {
 export async function createMultiplayerSession(
   input: CreateSessionInput
 ): Promise<MultiplayerSessionMeta> {
-  // Always create a cloud session. If Firestore write fails, still return
-  // the session with cloud transport — the code is valid and joining will
-  // handle any connectivity issues on its own.
+  // Try cloud first; fall back to local if Firestore is unavailable or over quota
+  const database = firestore();
+  if (database) {
+    const session: MultiplayerSessionMeta = {
+      code: createSessionCode(false),
+      seed: input.seed,
+      worldType: input.worldType,
+      worldName: input.worldName,
+      hostName: input.hostName,
+      createdAt: Date.now(),
+      transport: "cloud",
+    };
+    try {
+      console.log("[createSession] writing to firestore:", session.code);
+      await withTimeout(
+        setDoc(doc(database, "multiplayerSessions", session.code), session),
+        5000
+      );
+      console.log("[createSession] firestore write succeeded:", session.code);
+      writeLocalSession(session);
+      return session;
+    } catch (error) {
+      console.warn("[createSession] firestore failed, falling back to local:", error);
+    }
+  }
+
+  // Firestore unavailable — create a local session instead
   const session: MultiplayerSessionMeta = {
-    code: createSessionCode(false),
+    code: createSessionCode(true),
     seed: input.seed,
     worldType: input.worldType,
     worldName: input.worldName,
     hostName: input.hostName,
     createdAt: Date.now(),
-    transport: "cloud",
+    transport: "local",
   };
-
-  const database = firestore();
-  if (database) {
-    console.log("[createSession] writing to firestore:", session.code);
-    await withTimeout(
-      setDoc(doc(database, "multiplayerSessions", session.code), session),
-      5000
-    );
-    console.log("[createSession] firestore write succeeded:", session.code);
-  } else {
-    console.warn("[createSession] no firestore database — session will be local-only");
-  }
-
-  // Also persist locally so the host can always find the session
+  console.log("[createSession] local session created:", session.code);
   writeLocalSession(session);
   return session;
 }
@@ -726,10 +737,17 @@ export async function connectMultiplayerSession(
     return new LocalMultiplayerConnection(session, identity);
   }
 
+  // Cloud transport — try Firestore, fall back to local if unavailable
   const database = firestore();
   if (!database) {
-    throw new Error("Cloud multiplayer is not configured");
+    console.warn("[connect] no firestore, falling back to local connection");
+    return new LocalMultiplayerConnection(session, identity);
   }
 
-  return new CloudMultiplayerConnection(session, identity, database);
+  try {
+    return new CloudMultiplayerConnection(session, identity, database);
+  } catch (error) {
+    console.warn("[connect] cloud connection failed, falling back to local:", error);
+    return new LocalMultiplayerConnection(session, identity);
+  }
 }
