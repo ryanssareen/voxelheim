@@ -13,7 +13,7 @@ const CROUCH_HEIGHT = 1.4;
 const MAX_FALL_SPEED = -10;
 const MAX_STEP_SIZE = 0.45; // Max displacement per sub-step to prevent clipping
 
-const FLY_SPEED = WALK_SPEED;
+const FLY_SPEED = 20;
 const DOUBLE_TAP_WINDOW = 300; // ms
 
 export class PlayerController {
