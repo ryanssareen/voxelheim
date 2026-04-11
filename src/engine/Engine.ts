@@ -445,6 +445,22 @@ export class Engine {
           }
         }
       }
+      // Day/night keeps ticking while paused so all players stay in sync
+      if (this.dayNight) {
+        this.dayNight.update(dt);
+        const scene = this.renderer!.getScene();
+        (scene.background as THREE.Color).copy(this.dayNight.getSkyColor());
+        if (scene.fog) {
+          (scene.fog as THREE.Fog).color.copy(this.dayNight.getSkyColor());
+        }
+        if (this.ambientLight) this.ambientLight.intensity = this.dayNight.getAmbientIntensity();
+        if (this.directionalLight) {
+          this.directionalLight.intensity = this.dayNight.getDirectionalIntensity();
+          const sunPos = this.dayNight.getSunPosition();
+          this.directionalLight.position.set(sunPos.x, sunPos.y, sunPos.z);
+        }
+        useGameStore.getState().setTimeOfDay(this.dayNight.timeOfDay);
+      }
       this.camera.applyToThreeCamera(
         this.renderer!.getCamera(),
         this.player!.position,
