@@ -71,6 +71,7 @@ export class Engine {
   private passiveHungerTimer = 0;
   private regenTimer = 0;
   private starvationTimer = 0;
+  private stuckTimer = 0;
   private fallStartY = 0;
   private wasFalling = false;
   private frameCount = 0;
@@ -542,9 +543,9 @@ export class Engine {
       this.registry
     );
 
-    // Stuck-in-terrain recovery: if the block at the player's feet AND head are both
-    // solid, they're inside terrain and can't escape via normal physics.  Push them to
-    // the surface so they aren't permanently trapped.
+    // Stuck-in-terrain recovery: only teleport to surface if the player has
+    // been continuously entombed in solid blocks for 2+ seconds.  Brief
+    // overlaps from collision resolution are normal and should NOT trigger.
     if (this.worldType === "infinite" && this.chunkManager) {
       const px = Math.floor(this.player!.position.x);
       const py = Math.floor(this.player!.position.y);
@@ -552,13 +553,19 @@ export class Engine {
       const feetSolid = this.registry.isSolid(this.chunkManager.getBlock(px, py, pz));
       const headSolid = this.registry.isSolid(this.chunkManager.getBlock(px, py + 1, pz));
       if (feetSolid && headSolid) {
-        const surfaceY = this.chunkManager.getTerrainGenerator()
-          .getSurfaceHeight(px, pz);
-        this.player!.position.y = surfaceY + 2;
-        this.player!.velocity.y = 0;
-        this.player!.onGround = false;
-        this.fallStartY = 0;
-        this.wasFalling = false;
+        this.stuckTimer += dt;
+        if (this.stuckTimer > 2) {
+          const surfaceY = this.chunkManager.getTerrainGenerator()
+            .getSurfaceHeight(px, pz);
+          this.player!.position.y = surfaceY + 2;
+          this.player!.velocity.y = 0;
+          this.player!.onGround = false;
+          this.fallStartY = 0;
+          this.wasFalling = false;
+          this.stuckTimer = 0;
+        }
+      } else {
+        this.stuckTimer = 0;
       }
     }
 
