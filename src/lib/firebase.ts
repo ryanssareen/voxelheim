@@ -30,7 +30,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   databaseURL:
     process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ||
-    (projectId ? `https://${projectId}-default-rtdb.firebaseio.com` : undefined),
+    (projectId ? `https://${projectId}-default-rtdb.asia-southeast1.firebasedatabase.app` : undefined),
 };
 
 const isConfigured = !!firebaseConfig.apiKey;
