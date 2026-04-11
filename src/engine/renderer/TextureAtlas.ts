@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ATLAS_UVS } from "@data/atlasUVs";
+import { ATLAS_UVS, ATLAS_HASH } from "@data/atlasUVs";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import type { UVRect } from "@engine/renderer/ChunkMeshBuilder";
 
@@ -15,7 +15,7 @@ export class TextureAtlas {
     return new Promise((resolve, reject) => {
       const loader = new THREE.TextureLoader();
       loader.load(
-        "/textures/atlas.png",
+        `/textures/atlas.png?v=${ATLAS_HASH}`,
         (tex) => {
           tex.magFilter = THREE.NearestFilter;
           tex.minFilter = THREE.NearestFilter;
