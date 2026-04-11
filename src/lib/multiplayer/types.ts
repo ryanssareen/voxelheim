@@ -1,6 +1,6 @@
 import type { WorldType } from "@engine/world/constants";
 
-export type MultiplayerTransport = "cloud" | "local";
+export type MultiplayerTransport = "cloud" | "rtdb" | "local";
 
 export interface MultiplayerSessionMeta {
   code: string;

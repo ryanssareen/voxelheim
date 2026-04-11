@@ -10,7 +10,20 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { firestore, firebaseConfigured } from "@lib/firebase";
+import {
+  ref as rtdbRef,
+  set as rtdbSet,
+  get as rtdbGet,
+  remove as rtdbRemove,
+  onChildAdded,
+  onChildChanged,
+  onChildRemoved,
+  onValue,
+  off,
+  type DatabaseReference,
+  type Database,
+} from "firebase/database";
+import { firestore, rtdb, firebaseConfigured } from "@lib/firebase";
 import {
   createSessionCode,
   isLocalSessionCode,
@@ -586,6 +599,166 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
   }
 }
 
+class RtdbMultiplayerConnection implements MultiplayerConnection {
+  readonly transport = "rtdb" as const;
+
+  private readonly playerListeners = new Set<
+    (players: MultiplayerPlayerState[]) => void
+  >();
+  private readonly blockListeners = new Set<
+    (change: MultiplayerBlockState) => void
+  >();
+  private readonly dropListeners = new Set<
+    (event: MultiplayerDropEvent) => void
+  >();
+  private readonly cleanup: Array<() => void> = [];
+  private readonly playerStates = new Map<string, MultiplayerPlayerState>();
+
+  private readonly playersRef: DatabaseReference;
+  private readonly blocksRef: DatabaseReference;
+  private readonly dropsRef: DatabaseReference;
+  private readonly worldStateRef: DatabaseReference;
+  private readonly playerRef: DatabaseReference;
+
+  constructor(
+    readonly session: MultiplayerSessionMeta,
+    private readonly identity: MultiplayerIdentity,
+    private readonly database: Database
+  ) {
+    const root = rtdbRef(database, `multiplayerSessions/${session.code}`);
+    this.playersRef = rtdbRef(database, `multiplayerSessions/${session.code}/players`);
+    this.blocksRef = rtdbRef(database, `multiplayerSessions/${session.code}/blocks`);
+    this.dropsRef = rtdbRef(database, `multiplayerSessions/${session.code}/drops`);
+    this.worldStateRef = rtdbRef(database, `multiplayerSessions/${session.code}/worldState`);
+    this.playerRef = rtdbRef(database, `multiplayerSessions/${session.code}/players/${identity.playerId}`);
+
+    // Subscribe to player changes
+    const onPlayerValue = onValue(this.playersRef, (snapshot) => {
+      this.playerStates.clear();
+      if (snapshot.exists()) {
+        const data = snapshot.val() as Record<string, MultiplayerPlayerState>;
+        for (const [id, state] of Object.entries(data)) {
+          this.playerStates.set(id, state);
+        }
+      }
+      this.emitPlayers();
+    });
+    this.cleanup.push(() => off(this.playersRef, "value", onPlayerValue));
+
+    // Subscribe to block changes
+    const onBlockAdd = onChildAdded(this.blocksRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const payload = snapshot.val() as MultiplayerBlockState;
+      for (const listener of this.blockListeners) listener(payload);
+    });
+    const onBlockChange = onChildChanged(this.blocksRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const payload = snapshot.val() as MultiplayerBlockState;
+      for (const listener of this.blockListeners) listener(payload);
+    });
+    this.cleanup.push(() => off(this.blocksRef, "child_added", onBlockAdd));
+    this.cleanup.push(() => off(this.blocksRef, "child_changed", onBlockChange));
+
+    // Subscribe to drop changes
+    const onDropAdd = onChildAdded(this.dropsRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const drop = snapshot.val() as MultiplayerDropState;
+      for (const listener of this.dropListeners) listener({ type: "upsert", drop });
+    });
+    const onDropChange = onChildChanged(this.dropsRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const drop = snapshot.val() as MultiplayerDropState;
+      for (const listener of this.dropListeners) listener({ type: "upsert", drop });
+    });
+    const onDropRemove = onChildRemoved(this.dropsRef, (snapshot) => {
+      for (const listener of this.dropListeners) {
+        listener({ type: "remove", dropId: snapshot.key! });
+      }
+    });
+    this.cleanup.push(() => off(this.dropsRef, "child_added", onDropAdd));
+    this.cleanup.push(() => off(this.dropsRef, "child_changed", onDropChange));
+    this.cleanup.push(() => off(this.dropsRef, "child_removed", onDropRemove));
+  }
+
+  subscribePlayers(callback: (players: MultiplayerPlayerState[]) => void): () => void {
+    this.playerListeners.add(callback);
+    callback(this.getSortedPlayers());
+    return () => { this.playerListeners.delete(callback); };
+  }
+
+  subscribeBlockChanges(callback: (change: MultiplayerBlockState) => void): () => void {
+    this.blockListeners.add(callback);
+    return () => { this.blockListeners.delete(callback); };
+  }
+
+  subscribeDropEvents(callback: (event: MultiplayerDropEvent) => void): () => void {
+    this.dropListeners.add(callback);
+    return () => { this.dropListeners.delete(callback); };
+  }
+
+  async setPlayerState(state: Omit<MultiplayerPlayerState, "updatedAt">): Promise<void> {
+    await rtdbSet(this.playerRef, { ...state, updatedAt: Date.now() } satisfies MultiplayerPlayerState);
+  }
+
+  async setBlockState(change: Omit<MultiplayerBlockState, "updatedAt">): Promise<void> {
+    const key = blockRecordKey(change.x, change.y, change.z).replaceAll(",", "_");
+    const target = rtdbRef(this.database, `multiplayerSessions/${this.session.code}/blocks/${key}`);
+    await rtdbSet(target, { ...change, updatedAt: Date.now() } satisfies MultiplayerBlockState);
+  }
+
+  async upsertDrop(drop: MultiplayerDropState): Promise<void> {
+    const target = rtdbRef(this.database, `multiplayerSessions/${this.session.code}/drops/${drop.dropId}`);
+    await rtdbSet(target, drop);
+  }
+
+  async removeDrop(dropId: string): Promise<boolean> {
+    const target = rtdbRef(this.database, `multiplayerSessions/${this.session.code}/drops/${dropId}`);
+    const snapshot = await rtdbGet(target);
+    if (!snapshot.exists()) return false;
+    await rtdbRemove(target);
+    return true;
+  }
+
+  async loadWorldState(): Promise<Map<string, Uint8Array>> {
+    const snapshot = await rtdbGet(this.worldStateRef);
+    const chunks = new Map<string, Uint8Array>();
+    if (snapshot.exists()) {
+      const data = snapshot.val() as Record<string, { data: string }>;
+      for (const [key, value] of Object.entries(data)) {
+        chunks.set(key, decodeBytes(value.data));
+      }
+    }
+    return chunks;
+  }
+
+  async saveWorldState(chunks: Map<string, Uint8Array>): Promise<void> {
+    const payload: Record<string, { data: string; updatedAt: number }> = {};
+    for (const [chunkKey, data] of chunks) {
+      payload[chunkKey] = { data: encodeBytes(data), updatedAt: Date.now() };
+    }
+    await rtdbSet(this.worldStateRef, payload);
+  }
+
+  async close(): Promise<void> {
+    for (const disposer of this.cleanup) disposer();
+    this.cleanup.length = 0;
+    try { await rtdbRemove(this.playerRef); } catch { /* ignore */ }
+  }
+
+  private emitPlayers(): void {
+    const sorted = this.getSortedPlayers();
+    for (const listener of this.playerListeners) listener(sorted);
+  }
+
+  private getSortedPlayers(): MultiplayerPlayerState[] {
+    return [...this.playerStates.values()].sort((left, right) => {
+      if (left.playerId === this.identity.playerId) return -1;
+      if (right.playerId === this.identity.playerId) return 1;
+      return left.name.localeCompare(right.name);
+    });
+  }
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -636,42 +809,42 @@ function createLocalSession(input: CreateSessionInput): MultiplayerSessionMeta {
 export async function createMultiplayerSession(
   input: CreateSessionInput
 ): Promise<MultiplayerSessionMeta> {
-  // Try cloud first; fall back to local if Firestore is unavailable or over quota
-  const database = firestore();
-  if (database) {
-    const session: MultiplayerSessionMeta = {
-      code: createSessionCode(false),
-      seed: input.seed,
-      worldType: input.worldType,
-      worldName: input.worldName,
-      hostName: input.hostName,
-      createdAt: Date.now(),
-      transport: "cloud",
-    };
+  const code = createSessionCode(false);
+  const base = { code, seed: input.seed, worldType: input.worldType, worldName: input.worldName, hostName: input.hostName, createdAt: Date.now() };
+
+  // 1. Try Firestore
+  const fsDb = firestore();
+  if (fsDb) {
+    const session: MultiplayerSessionMeta = { ...base, transport: "cloud" };
     try {
-      console.log("[createSession] writing to firestore:", session.code);
-      await withTimeout(
-        setDoc(doc(database, "multiplayerSessions", session.code), session),
-        5000
-      );
-      console.log("[createSession] firestore write succeeded:", session.code);
+      console.log("[createSession] writing to firestore:", code);
+      await withTimeout(setDoc(doc(fsDb, "multiplayerSessions", code), session), 5000);
+      console.log("[createSession] firestore write succeeded:", code);
       writeLocalSession(session);
       return session;
     } catch (error) {
-      console.warn("[createSession] firestore failed, falling back to local:", error);
+      console.warn("[createSession] firestore failed:", error);
     }
   }
 
-  // Firestore unavailable — create a local session instead
-  const session: MultiplayerSessionMeta = {
-    code: createSessionCode(true),
-    seed: input.seed,
-    worldType: input.worldType,
-    worldName: input.worldName,
-    hostName: input.hostName,
-    createdAt: Date.now(),
-    transport: "local",
-  };
+  // 2. Try RTDB
+  const rtdbDb = rtdb();
+  if (rtdbDb) {
+    const session: MultiplayerSessionMeta = { ...base, transport: "rtdb" };
+    try {
+      console.log("[createSession] writing to RTDB:", code);
+      const metaRef = rtdbRef(rtdbDb, `multiplayerSessions/${code}/meta`);
+      await withTimeout(rtdbSet(metaRef, session), 5000);
+      console.log("[createSession] RTDB write succeeded:", code);
+      writeLocalSession(session);
+      return session;
+    } catch (error) {
+      console.warn("[createSession] RTDB failed:", error);
+    }
+  }
+
+  // 3. Fall back to local
+  const session: MultiplayerSessionMeta = { ...base, code: createSessionCode(true), transport: "local" };
   console.log("[createSession] local session created:", session.code);
   writeLocalSession(session);
   return session;
@@ -681,47 +854,50 @@ export async function readMultiplayerSession(
   rawCode: string
 ): Promise<MultiplayerSessionMeta | null> {
   const code = normalizeSessionCode(rawCode);
-  console.log("[readSession] raw:", JSON.stringify(rawCode), "normalized:", JSON.stringify(code));
-  if (!code) { console.log("[readSession] empty after normalize"); return null; }
+  if (!code) return null;
 
-  const localKey = `${LOCAL_SESSION_PREFIX}${code}`;
-  console.log("[readSession] checking localStorage key:", localKey);
+  // 1. Check local storage
   const local = readLocalSession(code);
-  console.log("[readSession] local result:", local);
   if (local) return local;
 
   const isLocal = isLocalSessionCode(code);
-  console.log("[readSession] isLocalCode:", isLocal, "firebaseConfigured:", firebaseConfigured);
-  if (isLocal || !firebaseConfigured) {
-    return null;
-  }
+  if (isLocal || !firebaseConfigured) return null;
 
-  const database = firestore();
-  if (!database) { console.log("[readSession] no firestore db"); return null; }
-
-  try {
-    console.log("[readSession] querying firestore for:", code);
-    const snapshot = await withTimeout(
-      getDoc(doc(database, "multiplayerSessions", code)),
-      5000
-    );
-    console.log("[readSession] firestore exists:", snapshot.exists());
-    if (!snapshot.exists()) return null;
-
-    const session = snapshot.data() as MultiplayerSessionMeta;
-    writeLocalSession(session);
-    return session;
-  } catch (err) {
-    console.log("[readSession] firestore error:", err);
-    // Surface permission errors so the UI can show a helpful message
-    // instead of the misleading "Session not found"
-    if (err instanceof Error && err.message.includes("permissions")) {
-      throw new Error(
-        "Firestore permissions denied. The project owner needs to enable read access in Firebase Console → Firestore → Rules."
+  // 2. Try Firestore
+  const fsDb = firestore();
+  if (fsDb) {
+    try {
+      const snapshot = await withTimeout(
+        getDoc(doc(fsDb, "multiplayerSessions", code)),
+        5000
       );
+      if (snapshot.exists()) {
+        const session = snapshot.data() as MultiplayerSessionMeta;
+        writeLocalSession(session);
+        return session;
+      }
+    } catch (err) {
+      console.warn("[readSession] firestore failed:", err);
     }
-    return null;
   }
+
+  // 3. Try RTDB
+  const rtdbDb = rtdb();
+  if (rtdbDb) {
+    try {
+      const metaRef = rtdbRef(rtdbDb, `multiplayerSessions/${code}/meta`);
+      const snapshot = await withTimeout(rtdbGet(metaRef), 5000);
+      if (snapshot.exists()) {
+        const session = snapshot.val() as MultiplayerSessionMeta;
+        writeLocalSession(session);
+        return session;
+      }
+    } catch (err) {
+      console.warn("[readSession] RTDB failed:", err);
+    }
+  }
+
+  return null;
 }
 
 export async function connectMultiplayerSession(
@@ -737,7 +913,16 @@ export async function connectMultiplayerSession(
     return new LocalMultiplayerConnection(session, identity);
   }
 
-  // Cloud transport — try Firestore, fall back to local if unavailable
+  if (session.transport === "rtdb") {
+    const database = rtdb();
+    if (database) {
+      return new RtdbMultiplayerConnection(session, identity, database);
+    }
+    console.warn("[connect] no RTDB, falling back to local");
+    return new LocalMultiplayerConnection(session, identity);
+  }
+
+  // Cloud (Firestore) transport
   const database = firestore();
   if (!database) {
     console.warn("[connect] no firestore, falling back to local connection");
