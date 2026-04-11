@@ -209,6 +209,8 @@ export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.DIAMOND_SWORD]: "Diamond Sword",
   [BLOCK_ID.LAVA]: "Lava",
   [BLOCK_ID.WATER]: "Water",
+  [BLOCK_ID.SNOW]: "Snow",
+  [BLOCK_ID.ICE]: "Ice",
 };
 
 /** Numeric hex colors for Three.js renderers (hand, offhand, item drops). */
@@ -252,6 +254,8 @@ export const BLOCK_HEX_COLORS: Record<number, number> = {
   [BLOCK_ID.DIAMOND_SWORD]: 0x55cccc,
   [BLOCK_ID.LAVA]: 0xff6600,
   [BLOCK_ID.WATER]: 0x3366ff,
+  [BLOCK_ID.SNOW]: 0xf0f0ff,
+  [BLOCK_ID.ICE]: 0xa0d0ff,
 };
 
 export const ITEM_COLORS: Record<number, string> = {
@@ -294,4 +298,6 @@ export const ITEM_COLORS: Record<number, string> = {
   [BLOCK_ID.DIAMOND_SWORD]: "#55cccc",
   [BLOCK_ID.LAVA]: "#ff6600",
   [BLOCK_ID.WATER]: "#3366ff",
+  [BLOCK_ID.SNOW]: "#f0f0ff",
+  [BLOCK_ID.ICE]: "#a0d0ff",
 };

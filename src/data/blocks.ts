@@ -73,6 +73,8 @@ export const BLOCK_ID = {
   DIAMOND_SWORD: 37,
   LAVA: 38,
   WATER: 39,
+  SNOW: 40,
+  ICE: 41,
 } as const;
 
 /** All block definitions indexed by their ID. */
@@ -362,5 +364,19 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: false, transparent: true, breakable: false,
     textures: { top: "water", bottom: "water", side: "water" },
     special: "none", breakTime: 0, dropId: 0,
+  },
+  {
+    id: BLOCK_ID.SNOW,
+    name: "Snow",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "snow", bottom: "snow", side: "snow" },
+    special: "none", breakTime: 0.3, dropId: BLOCK_ID.SNOW,
+  },
+  {
+    id: BLOCK_ID.ICE,
+    name: "Ice",
+    solid: true, transparent: true, breakable: true,
+    textures: { top: "ice", bottom: "ice", side: "ice" },
+    special: "none", breakTime: 0.5, dropId: BLOCK_ID.ICE,
   },
 ];

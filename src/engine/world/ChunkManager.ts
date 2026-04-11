@@ -4,6 +4,7 @@ import { ChunkMeshBuilder, type GetUV, type ChunkNeighbors } from "@engine/rende
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { TerrainGenerator } from "@engine/generation/TerrainGenerator";
 import { StructureGenerator } from "@engine/generation/StructureGenerator";
+import { BLOCK_ID } from "@data/blocks";
 import { ATLAS_UVS } from "@data/atlasUVs";
 import {
   CHUNK_SIZE,
@@ -374,10 +375,17 @@ export class ChunkManager {
     if (!chunk) {
       if (this.worldType === "infinite") {
         // Bedrock floor — never fall below y=0
-        if (wy <= 0) return 3;
-        // Unloaded chunks: use noise-estimated surface to prevent falling through
+        if (wy <= 0) return BLOCK_ID.STONE;
+        // Unloaded chunks: biome-aware surface fallback to prevent falling through
         const surfaceY = this.terrainGen.getSurfaceHeight(wx, wz);
-        return wy <= surfaceY ? 3 : 0; // STONE below surface, AIR above
+        if (wy === surfaceY) {
+          const biome = this.terrainGen.getBiome(wx, wz);
+          if (biome === "desert") return BLOCK_ID.SAND;
+          if (biome === "snowy") return BLOCK_ID.SNOW;
+          if (biome === "mountains" && surfaceY > 38) return BLOCK_ID.STONE;
+          return BLOCK_ID.GRASS;
+        }
+        return wy < surfaceY ? BLOCK_ID.STONE : 0;
       }
       // Finite worlds: barrier walls at edges
       if (this.worldType !== "island") {

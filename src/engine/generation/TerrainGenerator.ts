@@ -10,6 +10,9 @@ import {
 } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
 
+/** Biome types for infinite world generation. */
+export type Biome = "plains" | "forest" | "desert" | "mountains" | "snowy";
+
 /** Simple deterministic string hash producing a 32-bit integer. */
 function hashString(s: string): number {
   let h = 0;
@@ -48,14 +51,38 @@ export class TerrainGenerator {
     this.noise = new SeededNoise(this.seedHash);
   }
 
+  /**
+   * Determine the biome at a world column using temperature and humidity noise.
+   * Only meaningful for infinite worlds.
+   */
+  getBiome(wx: number, wz: number): Biome {
+    const temp = this.noise.noise2D(wx / 250, wz / 250);
+    const humidity = this.noise.noise2D(wx / 200 + 1000, wz / 200 + 1000);
+
+    if (temp > 0.3) return "desert";
+    if (temp < -0.3) return "snowy";
+    if (humidity > 0.2) return "forest";
+    if (temp > 0 && humidity < -0.2) return "mountains";
+    return "plains";
+  }
+
   /** Compute the surface Y height for a single world column. Pure function of coords + noise. */
   getSurfaceHeight(wx: number, wz: number): number {
     if (this.worldType === "flat") return 30;
 
     if (this.worldType === "infinite") {
-      const baseHeight = 30;
+      const biome = this.getBiome(wx, wz);
+      let baseHeight: number;
+      let amplitudeScale: number;
+      switch (biome) {
+        case "plains":    baseHeight = 30; amplitudeScale = 0.6; break;
+        case "forest":    baseHeight = 30; amplitudeScale = 1.0; break;
+        case "desert":    baseHeight = 28; amplitudeScale = 0.5; break;
+        case "mountains": baseHeight = 35; amplitudeScale = 1.8; break;
+        case "snowy":     baseHeight = 32; amplitudeScale = 1.0; break;
+      }
       const noiseValue = this.noise.octaveNoise2D(wx, wz, 5, 0.5, 2.0, 40);
-      return Math.floor(baseHeight + noiseValue * 14);
+      return Math.floor(baseHeight + noiseValue * 14 * amplitudeScale);
     }
 
     // island
@@ -99,9 +126,7 @@ export class TerrainGenerator {
         if (this.worldType === "flat") {
           surfaceY = 30;
         } else if (this.worldType === "infinite") {
-          const baseHeight = 30;
-          const noiseValue = this.noise.octaveNoise2D(wx, wz, 5, 0.5, 2.0, 40);
-          surfaceY = Math.floor(baseHeight + noiseValue * 14);
+          surfaceY = this.getSurfaceHeight(wx, wz);
         } else {
           // "island" (default)
           const baseHeight = 30;
@@ -146,7 +171,63 @@ export class TerrainGenerator {
               }
               chunk.setBlock(x, y, z, blockId);
             }
+          } else if (this.worldType === "infinite") {
+            // Biome-aware block placement for infinite worlds
+            const biome = this.getBiome(wx, wz);
+            if (wy === 0) {
+              chunk.setBlock(x, y, z, BLOCK_ID.STONE); // bedrock
+            } else if (wy > surfaceY) {
+              // Above surface: water/ice at or below sea level, air above
+              if (wy <= SEA_LEVEL) {
+                if (biome === "snowy") {
+                  chunk.setBlock(x, y, z, BLOCK_ID.ICE);
+                } else {
+                  chunk.setBlock(x, y, z, BLOCK_ID.WATER);
+                }
+              }
+            } else if (wy === surfaceY && surfaceY > SEA_LEVEL) {
+              // Surface block depends on biome
+              if (biome === "desert") {
+                chunk.setBlock(x, y, z, BLOCK_ID.SAND);
+              } else if (biome === "snowy") {
+                chunk.setBlock(x, y, z, BLOCK_ID.SNOW);
+              } else if (biome === "mountains" && surfaceY > 38) {
+                chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+              } else {
+                chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
+              }
+            } else if (wy === surfaceY && surfaceY <= SEA_LEVEL) {
+              chunk.setBlock(x, y, z, BLOCK_ID.SAND);
+            } else if (wy > surfaceY - 4) {
+              // Subsurface layers
+              if (biome === "desert") {
+                chunk.setBlock(x, y, z, BLOCK_ID.SAND);
+              } else {
+                chunk.setBlock(x, y, z, BLOCK_ID.DIRT);
+              }
+            } else {
+              // Stone with ore and lava replacement
+              let blockId: number = BLOCK_ID.STONE;
+              const oreHash = mixHash(wx, wy, wz, this.seedHash);
+              const oreChance = oreHash / 4294967296;
+              if (wy >= 5 && wy <= 25 && oreChance < 0.03) {
+                blockId = BLOCK_ID.IRON_ORE;
+              } else if (wy >= 1 && wy <= 12 && oreChance >= 0.03 && oreChance < 0.038) {
+                blockId = BLOCK_ID.DIAMOND_ORE;
+              }
+              chunk.setBlock(x, y, z, blockId);
+            }
+
+            // Lava: replace underground air at Y<=5 with lava pools (~2%)
+            if (wy <= 5 && wy > 0 && chunk.getBlock(x, y, z) === BLOCK_ID.AIR) {
+              const lavaHash = mixHash(wx + 17, wy + 31, wz + 53, this.seedHash);
+              const lavaChance = lavaHash / 4294967296;
+              if (lavaChance < 0.02) {
+                chunk.setBlock(x, y, z, BLOCK_ID.LAVA);
+              }
+            }
           } else {
+            // Island world (original behavior)
             if (wy === 0) {
               chunk.setBlock(x, y, z, BLOCK_ID.STONE); // bedrock
             } else if (wy > surfaceY) {
@@ -154,7 +235,6 @@ export class TerrainGenerator {
               if (wy <= SEA_LEVEL) {
                 chunk.setBlock(x, y, z, BLOCK_ID.WATER);
               }
-              // else AIR — already default
             } else if (wy === surfaceY && surfaceY > SEA_LEVEL) {
               chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
             } else if (wy === surfaceY && surfaceY <= SEA_LEVEL) {

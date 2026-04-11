@@ -34,6 +34,8 @@ const TEXTURES: TextureDef[] = [
   { name: "diamond_ore", color: "", custom: diamondOre },
   { name: "lava", color: "", custom: lavaTexture },
   { name: "water", color: "", custom: waterTexture },
+  { name: "snow", color: "", custom: snowTexture },
+  { name: "ice", color: "", custom: iceTexture },
 ];
 
 function hexToRGB(hex: string): RGB {
@@ -336,6 +338,57 @@ function waterTexture(buf: Buffer): void {
     for (let x = 0; x < 16; x++) {
       const i = (y * TILE + x) * 4;
       buf[i + 3] = 160;
+    }
+  }
+}
+
+function snowTexture(buf: Buffer): void {
+  const snowWhite: RGB = { r: 240, g: 240, b: 255 };
+  const snowGray: RGB = { r: 220, g: 220, b: 230 };
+
+  // Base white
+  fillRect(buf, 0, 0, 16, 16, snowWhite);
+
+  // Very subtle gray speckles for texture
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if ((x * 7 + y * 13) % 17 === 0) {
+        setPixel(buf, x, y, snowGray);
+      }
+    }
+  }
+}
+
+function iceTexture(buf: Buffer): void {
+  const iceBase: RGB = { r: 140, g: 200, b: 240 };
+  const iceLight: RGB = { r: 170, g: 220, b: 255 };
+  const iceStreak: RGB = { r: 220, g: 240, b: 255 };
+
+  // Base light blue
+  fillRect(buf, 0, 0, 16, 16, iceBase);
+
+  // Lighter variation patches
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if ((x * 5 + y * 3) % 11 < 3) {
+        setPixel(buf, x, y, iceLight);
+      }
+    }
+  }
+
+  // White streaks (diagonal lines)
+  for (let i = 0; i < 16; i++) {
+    const x1 = (i * 2 + 3) % 16;
+    const y1 = (i * 3 + 1) % 16;
+    setPixel(buf, x1, y1, iceStreak);
+    if (x1 + 1 < 16) setPixel(buf, x1 + 1, y1, iceStreak);
+  }
+
+  // Semi-transparent
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const i = (y * TILE + x) * 4;
+      buf[i + 3] = 180;
     }
   }
 }

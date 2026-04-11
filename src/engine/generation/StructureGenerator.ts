@@ -2,7 +2,7 @@ import { Chunk } from "@engine/world/Chunk";
 import { BLOCK_ID } from "@data/blocks";
 import { CHUNK_SIZE, SEA_LEVEL, CRYSTAL_MIN_DEPTH } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
-import type { TerrainGenerator } from "@engine/generation/TerrainGenerator";
+import type { TerrainGenerator, Biome } from "@engine/generation/TerrainGenerator";
 
 /** Simple deterministic string hash producing a 32-bit integer. */
 function hashString(s: string): number {
@@ -75,7 +75,8 @@ export class StructureGenerator {
       const chunk = chunks.get(chunkKey(cx, cy, cz));
       if (!chunk) continue;
       const { lx, ly, lz } = worldToLocal(wx, surfaceY, wz);
-      if (chunk.getBlock(lx, ly, lz) !== BLOCK_ID.GRASS) continue;
+      const surfaceBlock = chunk.getBlock(lx, ly, lz);
+      if (surfaceBlock !== BLOCK_ID.GRASS && surfaceBlock !== BLOCK_ID.SNOW) continue;
 
       // ~3% chance of tree placement (hash-based for uniform distribution)
       const chance = mixHash(wx + this.seedHash, wz) / 4294967296;
@@ -142,9 +143,19 @@ export class StructureGenerator {
         const surfaceY = terrainGen.getSurfaceHeight(wx, wz);
         if (surfaceY <= SEA_LEVEL + 2) continue;
 
-        // Same hash-based 3% tree check as placeTrees
+        // Biome-dependent tree chance
+        const biome: Biome = terrainGen.getBiome(wx, wz);
+        if (biome === "desert") continue; // No trees in deserts
+        let treeThreshold: number;
+        switch (biome) {
+          case "plains":    treeThreshold = 0.01; break;
+          case "forest":    treeThreshold = 0.08; break;
+          case "mountains": treeThreshold = 0.02; break;
+          case "snowy":     treeThreshold = 0.03; break;
+          default:          treeThreshold = 0.03; break;
+        }
         const chance = mixHash(wx + this.seedHash, wz) / 4294967296;
-        if (chance > 0.03) continue;
+        if (chance > treeThreshold) continue;
 
         const trunkRand = mixHash(wx + this.seedHash + 1000, wz + 1000) / 4294967296;
         const trunkHeight = 4 + Math.floor(trunkRand * 3);
