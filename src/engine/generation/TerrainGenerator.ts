@@ -56,8 +56,8 @@ export class TerrainGenerator {
    * Only meaningful for infinite worlds.
    */
   getBiome(wx: number, wz: number): Biome {
-    const temp = this.noise.noise2D(wx / 250, wz / 250);
-    const humidity = this.noise.noise2D(wx / 200 + 1000, wz / 200 + 1000);
+    const temp = this.noise.noise2D(wx / 120, wz / 120);
+    const humidity = this.noise.noise2D(wx / 100 + 1000, wz / 100 + 1000);
 
     if (temp > 0.3) return "desert";
     if (temp < -0.3) return "snowy";
@@ -75,9 +75,9 @@ export class TerrainGenerator {
       let baseHeight: number;
       let amplitudeScale: number;
       switch (biome) {
-        case "plains":    baseHeight = 30; amplitudeScale = 0.6; break;
+        case "plains":    baseHeight = 30; amplitudeScale = 0.9; break;
         case "forest":    baseHeight = 30; amplitudeScale = 1.0; break;
-        case "desert":    baseHeight = 28; amplitudeScale = 0.5; break;
+        case "desert":    baseHeight = 28; amplitudeScale = 0.8; break;
         case "mountains": baseHeight = 35; amplitudeScale = 1.8; break;
         case "snowy":     baseHeight = 32; amplitudeScale = 1.0; break;
       }
