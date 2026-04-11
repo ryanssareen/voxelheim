@@ -651,14 +651,14 @@ export async function createMultiplayerSession(
 
   const database = firestore();
   if (database) {
-    try {
-      await withTimeout(
-        setDoc(doc(database, "multiplayerSessions", session.code), session),
-        5000
-      );
-    } catch (error) {
-      console.warn("[multiplayer] Cloud write failed, code still usable:", error);
-    }
+    console.log("[createSession] writing to firestore:", session.code);
+    await withTimeout(
+      setDoc(doc(database, "multiplayerSessions", session.code), session),
+      5000
+    );
+    console.log("[createSession] firestore write succeeded:", session.code);
+  } else {
+    console.warn("[createSession] no firestore database — session will be local-only");
   }
 
   // Also persist locally so the host can always find the session
