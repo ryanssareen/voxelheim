@@ -8,8 +8,11 @@ export type DeathCause =
   | "creeper"
   | "starvation";
 
+export type GameMode = "survival" | "creative" | "hardcore";
+
 interface GameState {
-  gameMode: "survival" | "creative";
+  gameMode: GameMode;
+  hardcoreLocked: boolean;
   shardsCollected: number;
   shardsTotal: number;
   isComplete: boolean;
@@ -24,7 +27,8 @@ interface GameState {
   maxHunger: number;
   lastDamageTime: number;
   lastDamageCause: DeathCause | null;
-  setGameMode: (mode: "survival" | "creative") => void;
+  setGameMode: (mode: GameMode) => void;
+  setHardcoreLocked: (locked: boolean) => void;
   collectShard: () => void;
   resetObjective: () => void;
   setPaused: (paused: boolean) => void;
@@ -97,7 +101,8 @@ function getDeathMessage(cause: DeathCause): string {
 
 /** Global game state: objectives, pause, death, break progress, health, hunger. */
 export const useGameStore = create<GameState>((set, get) => ({
-  gameMode: "survival" as "survival" | "creative",
+  gameMode: "survival" as GameMode,
+  hardcoreLocked: false,
   shardsCollected: 0,
   shardsTotal: 5,
   isComplete: false,
@@ -113,7 +118,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastDamageTime: 0,
   lastDamageCause: null,
 
-  setGameMode: (mode: "survival" | "creative") => set({ gameMode: mode }),
+  setGameMode: (mode: GameMode) => set({ gameMode: mode }),
+  setHardcoreLocked: (locked: boolean) => set({ hardcoreLocked: locked }),
 
   collectShard: () => {
     const { shardsCollected, shardsTotal } = get();
@@ -141,13 +147,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ health: newHealth, lastDamageTime: performance.now(), lastDamageCause: cause ?? get().lastDamageCause });
     if (newHealth <= 0) {
       const deathCause = cause ?? get().lastDamageCause ?? "void";
-      set({ isDead: true, deathMessage: getDeathMessage(deathCause) });
+      const locked = get().gameMode === "hardcore";
+      set({ isDead: true, deathMessage: getDeathMessage(deathCause), hardcoreLocked: locked });
     }
   },
 
   killPlayer: (cause: DeathCause) => {
     if (get().gameMode === "creative") return;
-    set({ health: 0, isDead: true, deathMessage: getDeathMessage(cause), lastDamageTime: performance.now() });
+    const locked = get().gameMode === "hardcore";
+    set({ health: 0, isDead: true, deathMessage: getDeathMessage(cause), lastDamageTime: performance.now(), hardcoreLocked: locked });
   },
 
   respawnPlayer: () =>

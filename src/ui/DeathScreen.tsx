@@ -13,6 +13,7 @@ export function DeathScreen({
 }) {
   const isDead = useGameStore((s) => s.isDead);
   const deathMessage = useGameStore((s) => s.deathMessage);
+  const hardcoreLocked = useGameStore((s) => s.hardcoreLocked);
   const router = useRouter();
 
   if (!isDead) return null;
@@ -28,31 +29,44 @@ export function DeathScreen({
 
       {deathMessage && (
         <p
-          className="text-lg font-mono text-red-100/80 mb-10"
+          className="text-lg font-mono text-red-100/80 mb-2"
           style={{ textShadow: "1px 1px 0 #2a0000" }}
         >
           {deathMessage}
         </p>
       )}
 
-      <div className="flex flex-col gap-3 w-64">
-        <button
-          onClick={onRespawn}
-          className="py-3 text-white font-mono text-base tracking-wide hover:brightness-125 active:brightness-90 transition-all"
-          style={{
-            background:
-              "linear-gradient(to bottom, #7a7a7a 0%, #5a5a5a 40%, #484848 60%, #3a3a3a 100%)",
-            border: "3px solid #1a1a1a",
-            boxShadow:
-              "inset 0 2px 0 rgba(255,255,255,0.15), inset 0 -2px 0 rgba(0,0,0,0.3)",
-            textShadow: "2px 2px 0 #2a2a2a",
-          }}
+      {hardcoreLocked && (
+        <p
+          className="text-sm font-mono text-red-300/90 mb-8"
+          style={{ textShadow: "1px 1px 0 #2a0000" }}
         >
-          Respawn
-        </button>
+          Hardcore mode — this world is now locked.
+        </p>
+      )}
+
+      {!hardcoreLocked && <div className="mb-6" />}
+
+      <div className="flex flex-col gap-3 w-64">
+        {!hardcoreLocked && (
+          <button
+            onClick={onRespawn}
+            className="py-3 text-white font-mono text-base tracking-wide hover:brightness-125 active:brightness-90 transition-all"
+            style={{
+              background:
+                "linear-gradient(to bottom, #7a7a7a 0%, #5a5a5a 40%, #484848 60%, #3a3a3a 100%)",
+              border: "3px solid #1a1a1a",
+              boxShadow:
+                "inset 0 2px 0 rgba(255,255,255,0.15), inset 0 -2px 0 rgba(0,0,0,0.3)",
+              textShadow: "2px 2px 0 #2a2a2a",
+            }}
+          >
+            Respawn
+          </button>
+        )}
 
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/worlds")}
           className="py-3 text-white/70 font-mono text-sm tracking-wide hover:brightness-125 active:brightness-90 transition-all"
           style={{
             background:
@@ -63,7 +77,7 @@ export function DeathScreen({
             textShadow: "1px 1px 0 #1a1a1a",
           }}
         >
-          Save and Quit
+          {hardcoreLocked ? "Return to Menu" : "Save and Quit"}
         </button>
       </div>
     </div>

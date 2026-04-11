@@ -77,7 +77,7 @@ export class Engine {
   private wasFalling = false;
   private frameCount = 0;
   private worldType: WorldType = "island";
-  private gameMode: "survival" | "creative" = "survival";
+  private gameMode: "survival" | "creative" | "hardcore" = "survival";
   private spawn = { ...DEFAULT_SPAWN };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -93,7 +93,7 @@ export class Engine {
     let savedMeta: WorldMeta | null = null;
 
     let worldType: WorldType = "island";
-    let gameMode: "survival" | "creative" = "survival";
+    let gameMode: "survival" | "creative" | "hardcore" = "survival";
 
     if (worldId) {
       savedMeta = await loadWorldMeta(worldId);
@@ -102,8 +102,11 @@ export class Engine {
         if (savedMeta.worldType === "flat" || savedMeta.worldType === "infinite") {
           worldType = savedMeta.worldType;
         }
-        if (savedMeta.gameMode === "creative") {
-          gameMode = "creative";
+        if (savedMeta.gameMode === "creative" || savedMeta.gameMode === "hardcore") {
+          gameMode = savedMeta.gameMode;
+        }
+        if (savedMeta.hardcoreLocked) {
+          useGameStore.getState().setHardcoreLocked(true);
         }
       }
     } else {
@@ -116,8 +119,8 @@ export class Engine {
         if (config.worldType === "flat" || config.worldType === "infinite") {
           worldType = config.worldType;
         }
-        if (config.gameMode === "creative") {
-          gameMode = "creative";
+        if (config.gameMode === "creative" || config.gameMode === "hardcore") {
+          gameMode = config.gameMode;
         }
       } catch {
         /* ignore */
@@ -309,6 +312,7 @@ export class Engine {
       hunger: useGameStore.getState().hunger,
       worldType: this.worldType,
       gameMode: this.gameMode,
+      hardcoreLocked: useGameStore.getState().hardcoreLocked || undefined,
     };
 
     await saveWorld(meta, modifiedChunks);
@@ -817,6 +821,10 @@ export class Engine {
     if (useGameStore.getState().isDead && !state.isDead) {
       this.lastDeathPos = { ...this.player!.position };
       this.dropAllItems();
+      // Hardcore: save immediately to persist locked state
+      if (this.gameMode === "hardcore") {
+        void this.save();
+      }
       if (document.pointerLockElement) {
         document.exitPointerLock();
       }

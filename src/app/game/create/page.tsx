@@ -16,7 +16,7 @@ const MC_BTN_STYLE: React.CSSProperties = {
   textShadow: "2px 2px 0 #2a2a2a",
 };
 
-const GAME_MODES = ["Survival", "Creative"] as const;
+const GAME_MODES = ["Survival", "Creative", "Hardcore"] as const;
 
 const WORLD_TYPES = [
   { name: "Island", desc: "A small island surrounded by ocean", color: "#4a8a3a" },
@@ -56,7 +56,7 @@ export default function CreateWorldPage() {
           ? { x: 32, y: 35, z: 32 }
           : { x: 32, y: 50, z: 32 };
 
-      const actualGameMode = GAME_MODES[gameMode].toLowerCase() as "survival" | "creative";
+      const actualGameMode = GAME_MODES[gameMode].toLowerCase() as "survival" | "creative" | "hardcore";
 
       await saveWorld(
         {
@@ -220,12 +220,16 @@ export default function CreateWorldPage() {
           style={{
             background: gameMode === 1
               ? "linear-gradient(to bottom, rgba(255,200,50,0.15) 0%, rgba(255,200,50,0.05) 100%)"
+              : gameMode === 2
+              ? "linear-gradient(to bottom, rgba(255,60,60,0.15) 0%, rgba(255,60,60,0.05) 100%)"
               : "rgba(255,255,255,0.02)",
             border: gameMode === 1
               ? "2px solid rgba(255,200,50,0.25)"
+              : gameMode === 2
+              ? "2px solid rgba(255,60,60,0.3)"
               : "2px solid rgba(255,255,255,0.06)",
-            color: gameMode === 1 ? "#ffd54f" : "rgba(255,255,255,0.5)",
-            textShadow: gameMode === 1 ? "1px 1px 0 rgba(0,0,0,0.5)" : "none",
+            color: gameMode === 1 ? "#ffd54f" : gameMode === 2 ? "#ff6666" : "rgba(255,255,255,0.5)",
+            textShadow: gameMode >= 1 ? "1px 1px 0 rgba(0,0,0,0.5)" : "none",
           }}
         >
           Game Mode: {GAME_MODES[gameMode]}
