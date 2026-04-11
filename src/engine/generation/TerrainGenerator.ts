@@ -19,6 +19,14 @@ function hashString(s: string): number {
   return h;
 }
 
+/** Deterministic hash for probability decisions (uniform distribution, NOT noise). */
+function mixHash(a: number, b: number, c: number, seed: number): number {
+  let h = (Math.imul(a, 73856093) ^ Math.imul(b, 19349663) ^ Math.imul(c, 83492791) ^ seed) | 0;
+  h = Math.imul(h ^ (h >>> 15), 0x45d9f3b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0x45d9f3b) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
 /** Clamps a value between min and max. */
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -30,12 +38,14 @@ function clamp(value: number, min: number, max: number): number {
 export class TerrainGenerator {
   private readonly noise: SeededNoise;
   private readonly seed: string;
+  private readonly seedHash: number;
   private readonly worldType: WorldType;
 
   constructor(seed: string, worldType: WorldType = "island") {
     this.seed = seed;
+    this.seedHash = hashString(seed);
     this.worldType = worldType;
-    this.noise = new SeededNoise(hashString(seed));
+    this.noise = new SeededNoise(this.seedHash);
   }
 
   /** Compute the surface Y height for a single world column. Pure function of coords + noise. */
@@ -125,13 +135,26 @@ export class TerrainGenerator {
             } else if (wy > surfaceY - 4) {
               chunk.setBlock(x, y, z, BLOCK_ID.DIRT);
             } else {
-              chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+              // Stone with ore replacement
+              let blockId: number = BLOCK_ID.STONE;
+              const oreHash = mixHash(wx, wy, wz, this.seedHash);
+              const oreChance = oreHash / 4294967296;
+              if (wy >= 5 && wy <= 25 && oreChance < 0.03) {
+                blockId = BLOCK_ID.IRON_ORE;
+              } else if (wy >= 1 && wy <= 12 && oreChance >= 0.03 && oreChance < 0.038) {
+                blockId = BLOCK_ID.DIAMOND_ORE;
+              }
+              chunk.setBlock(x, y, z, blockId);
             }
           } else {
             if (wy === 0) {
               chunk.setBlock(x, y, z, BLOCK_ID.STONE); // bedrock
             } else if (wy > surfaceY) {
-              // AIR — already default
+              // Above surface: water at or below sea level, air above
+              if (wy <= SEA_LEVEL) {
+                chunk.setBlock(x, y, z, BLOCK_ID.WATER);
+              }
+              // else AIR — already default
             } else if (wy === surfaceY && surfaceY > SEA_LEVEL) {
               chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
             } else if (wy === surfaceY && surfaceY <= SEA_LEVEL) {
@@ -139,7 +162,25 @@ export class TerrainGenerator {
             } else if (wy > surfaceY - 4) {
               chunk.setBlock(x, y, z, BLOCK_ID.DIRT);
             } else {
-              chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+              // Stone with ore and lava replacement
+              let blockId: number = BLOCK_ID.STONE;
+              const oreHash = mixHash(wx, wy, wz, this.seedHash);
+              const oreChance = oreHash / 4294967296;
+              if (wy >= 5 && wy <= 25 && oreChance < 0.03) {
+                blockId = BLOCK_ID.IRON_ORE;
+              } else if (wy >= 1 && wy <= 12 && oreChance >= 0.03 && oreChance < 0.038) {
+                blockId = BLOCK_ID.DIAMOND_ORE;
+              }
+              chunk.setBlock(x, y, z, blockId);
+            }
+
+            // Lava: replace underground air at Y<=5 with lava pools (~2%)
+            if (wy <= 5 && wy > 0 && chunk.getBlock(x, y, z) === BLOCK_ID.AIR) {
+              const lavaHash = mixHash(wx + 17, wy + 31, wz + 53, this.seedHash);
+              const lavaChance = lavaHash / 4294967296;
+              if (lavaChance < 0.02) {
+                chunk.setBlock(x, y, z, BLOCK_ID.LAVA);
+              }
             }
           }
         }

@@ -30,6 +30,10 @@ const TEXTURES: TextureDef[] = [
   { name: "crafting_table_side", color: "", custom: craftingTableSide },
   { name: "furnace_top", color: "", custom: furnaceTop },
   { name: "furnace_side", color: "", custom: furnaceSide },
+  { name: "iron_ore", color: "", custom: ironOre },
+  { name: "diamond_ore", color: "", custom: diamondOre },
+  { name: "lava", color: "", custom: lavaTexture },
+  { name: "water", color: "", custom: waterTexture },
 ];
 
 function hexToRGB(hex: string): RGB {
@@ -210,6 +214,130 @@ function furnaceSide(buf: Buffer): void {
   fillRect(buf, 7, 11, 2, 2, fireLight);
   setPixel(buf, 7, 13, fireDark);
   setPixel(buf, 8, 12, fireLight);
+}
+
+function ironOre(buf: Buffer): void {
+  const stoneBase: RGB = { r: 158, g: 158, b: 158 };
+  const stoneDark: RGB = { r: 130, g: 130, b: 130 };
+  const oreTan: RGB = { r: 180, g: 150, b: 110 };
+  const oreBrown: RGB = { r: 150, g: 120, b: 80 };
+
+  // Fill with stone
+  fillRect(buf, 0, 0, 16, 16, stoneBase);
+
+  // Stone texture variation
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if ((x + y * 3) % 7 === 0) setPixel(buf, x, y, stoneDark);
+    }
+  }
+
+  // Iron ore specks (brown/tan clusters)
+  const orePositions = [
+    [3, 3], [4, 3], [3, 4],
+    [10, 5], [11, 5], [11, 6],
+    [6, 9], [7, 9], [7, 10],
+    [2, 12], [3, 12], [2, 13],
+    [12, 11], [13, 11], [13, 12],
+  ];
+  for (const [x, y] of orePositions) {
+    setPixel(buf, x, y, ((x + y) % 2 === 0) ? oreTan : oreBrown);
+  }
+}
+
+function diamondOre(buf: Buffer): void {
+  const stoneBase: RGB = { r: 158, g: 158, b: 158 };
+  const stoneDark: RGB = { r: 130, g: 130, b: 130 };
+  const diamondLight: RGB = { r: 100, g: 220, b: 230 };
+  const diamondDark: RGB = { r: 50, g: 180, b: 200 };
+
+  // Fill with stone
+  fillRect(buf, 0, 0, 16, 16, stoneBase);
+
+  // Stone texture variation
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if ((x + y * 3) % 7 === 0) setPixel(buf, x, y, stoneDark);
+    }
+  }
+
+  // Diamond specks (cyan/blue gem-like patterns)
+  const gemPositions = [
+    [4, 3], [5, 3], [4, 4], [5, 4],
+    [10, 7], [11, 7], [10, 8], [11, 8],
+    [3, 11], [4, 11], [3, 12], [4, 12],
+  ];
+  for (const [x, y] of gemPositions) {
+    setPixel(buf, x, y, ((x + y) % 2 === 0) ? diamondLight : diamondDark);
+  }
+}
+
+function lavaTexture(buf: Buffer): void {
+  const lavaDeep: RGB = { r: 180, g: 40, b: 0 };
+  const lavaMid: RGB = { r: 220, g: 80, b: 10 };
+  const lavaHot: RGB = { r: 255, g: 140, b: 20 };
+  const lavaBright: RGB = { r: 255, g: 200, b: 60 };
+
+  // Base deep red-orange
+  fillRect(buf, 0, 0, 16, 16, lavaDeep);
+
+  // Flowing pattern using sine-like wave approximation
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const v = ((x * 3 + y * 5) % 11);
+      if (v < 3) {
+        setPixel(buf, x, y, lavaMid);
+      } else if (v < 5) {
+        setPixel(buf, x, y, lavaHot);
+      }
+    }
+  }
+
+  // Bright hotspots
+  const hotspots = [[4, 4], [11, 3], [7, 8], [2, 12], [13, 10], [8, 14]];
+  for (const [hx, hy] of hotspots) {
+    setPixel(buf, hx, hy, lavaBright);
+    if (hx > 0) setPixel(buf, hx - 1, hy, lavaHot);
+    if (hx < 15) setPixel(buf, hx + 1, hy, lavaHot);
+    if (hy > 0) setPixel(buf, hx, hy - 1, lavaHot);
+    if (hy < 15) setPixel(buf, hx, hy + 1, lavaHot);
+  }
+}
+
+function waterTexture(buf: Buffer): void {
+  const waterDeep: RGB = { r: 20, g: 60, b: 180 };
+  const waterMid: RGB = { r: 40, g: 90, b: 210 };
+  const waterLight: RGB = { r: 70, g: 130, b: 230 };
+  const waterHighlight: RGB = { r: 120, g: 180, b: 255 };
+
+  // Base deep blue
+  fillRect(buf, 0, 0, 16, 16, waterDeep);
+
+  // Wave pattern
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const v = ((x * 2 + y * 3) % 9);
+      if (v < 2) {
+        setPixel(buf, x, y, waterMid);
+      } else if (v < 4) {
+        setPixel(buf, x, y, waterLight);
+      }
+    }
+  }
+
+  // Surface highlights
+  const highlights = [[3, 2], [9, 5], [5, 10], [12, 13], [1, 7]];
+  for (const [hx, hy] of highlights) {
+    setPixel(buf, hx, hy, waterHighlight);
+  }
+
+  // Semi-transparent: set alpha to ~160 for slight transparency
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const i = (y * TILE + x) * 4;
+      buf[i + 3] = 160;
+    }
+  }
 }
 
 function solidTile(hex: string): Buffer {

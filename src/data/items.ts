@@ -1,7 +1,7 @@
 import { BLOCK_ID } from "@data/blocks";
 
 export type ToolType = "pickaxe" | "axe" | "shovel" | "sword";
-export type ToolMaterial = "wood" | "stone";
+export type ToolMaterial = "wood" | "stone" | "iron" | "diamond";
 
 export interface ToolDef {
   itemId: number;
@@ -86,6 +86,78 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     attackDamage: 5,
     effectiveAgainst: [],
   },
+  [BLOCK_ID.IRON_PICKAXE]: {
+    itemId: BLOCK_ID.IRON_PICKAXE,
+    toolType: "pickaxe",
+    material: "iron",
+    durability: 250,
+    miningSpeedMultiplier: 6,
+    attackDamage: 4,
+    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.CRYSTAL, BLOCK_ID.IRON_ORE, BLOCK_ID.DIAMOND_ORE],
+  },
+  [BLOCK_ID.IRON_AXE]: {
+    itemId: BLOCK_ID.IRON_AXE,
+    toolType: "axe",
+    material: "iron",
+    durability: 250,
+    miningSpeedMultiplier: 6,
+    attackDamage: 5,
+    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
+  },
+  [BLOCK_ID.IRON_SHOVEL]: {
+    itemId: BLOCK_ID.IRON_SHOVEL,
+    toolType: "shovel",
+    material: "iron",
+    durability: 250,
+    miningSpeedMultiplier: 6,
+    attackDamage: 3,
+    effectiveAgainst: [BLOCK_ID.DIRT, BLOCK_ID.GRASS, BLOCK_ID.SAND],
+  },
+  [BLOCK_ID.IRON_SWORD]: {
+    itemId: BLOCK_ID.IRON_SWORD,
+    toolType: "sword",
+    material: "iron",
+    durability: 250,
+    miningSpeedMultiplier: 1,
+    attackDamage: 6,
+    effectiveAgainst: [],
+  },
+  [BLOCK_ID.DIAMOND_PICKAXE]: {
+    itemId: BLOCK_ID.DIAMOND_PICKAXE,
+    toolType: "pickaxe",
+    material: "diamond",
+    durability: 1561,
+    miningSpeedMultiplier: 8,
+    attackDamage: 5,
+    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.CRYSTAL, BLOCK_ID.IRON_ORE, BLOCK_ID.DIAMOND_ORE],
+  },
+  [BLOCK_ID.DIAMOND_AXE]: {
+    itemId: BLOCK_ID.DIAMOND_AXE,
+    toolType: "axe",
+    material: "diamond",
+    durability: 1561,
+    miningSpeedMultiplier: 8,
+    attackDamage: 6,
+    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
+  },
+  [BLOCK_ID.DIAMOND_SHOVEL]: {
+    itemId: BLOCK_ID.DIAMOND_SHOVEL,
+    toolType: "shovel",
+    material: "diamond",
+    durability: 1561,
+    miningSpeedMultiplier: 8,
+    attackDamage: 4,
+    effectiveAgainst: [BLOCK_ID.DIRT, BLOCK_ID.GRASS, BLOCK_ID.SAND],
+  },
+  [BLOCK_ID.DIAMOND_SWORD]: {
+    itemId: BLOCK_ID.DIAMOND_SWORD,
+    toolType: "sword",
+    material: "diamond",
+    durability: 1561,
+    miningSpeedMultiplier: 1,
+    attackDamage: 7,
+    effectiveAgainst: [],
+  },
 };
 
 export function isToolItem(itemId: number): boolean {
@@ -123,6 +195,20 @@ export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.COOKED_PORK]: "Cooked Pork",
   [BLOCK_ID.COOKED_BEEF]: "Cooked Beef",
   [BLOCK_ID.COOKED_MUTTON]: "Cooked Mutton",
+  [BLOCK_ID.IRON_ORE]: "Iron Ore",
+  [BLOCK_ID.IRON_INGOT]: "Iron Ingot",
+  [BLOCK_ID.DIAMOND_ORE]: "Diamond Ore",
+  [BLOCK_ID.DIAMOND]: "Diamond",
+  [BLOCK_ID.IRON_PICKAXE]: "Iron Pickaxe",
+  [BLOCK_ID.IRON_AXE]: "Iron Axe",
+  [BLOCK_ID.IRON_SHOVEL]: "Iron Shovel",
+  [BLOCK_ID.IRON_SWORD]: "Iron Sword",
+  [BLOCK_ID.DIAMOND_PICKAXE]: "Diamond Pickaxe",
+  [BLOCK_ID.DIAMOND_AXE]: "Diamond Axe",
+  [BLOCK_ID.DIAMOND_SHOVEL]: "Diamond Shovel",
+  [BLOCK_ID.DIAMOND_SWORD]: "Diamond Sword",
+  [BLOCK_ID.LAVA]: "Lava",
+  [BLOCK_ID.WATER]: "Water",
 };
 
 /** Numeric hex colors for Three.js renderers (hand, offhand, item drops). */
@@ -152,6 +238,20 @@ export const BLOCK_HEX_COLORS: Record<number, number> = {
   [BLOCK_ID.COOKED_PORK]: 0xc87040,
   [BLOCK_ID.COOKED_BEEF]: 0x8b4020,
   [BLOCK_ID.COOKED_MUTTON]: 0xa06040,
+  [BLOCK_ID.IRON_ORE]: 0x8a7a6a,
+  [BLOCK_ID.IRON_INGOT]: 0xd4d4d4,
+  [BLOCK_ID.DIAMOND_ORE]: 0x4a9a9a,
+  [BLOCK_ID.DIAMOND]: 0x00d4ff,
+  [BLOCK_ID.IRON_PICKAXE]: 0xc0c0c0,
+  [BLOCK_ID.IRON_AXE]: 0xc0c0c0,
+  [BLOCK_ID.IRON_SHOVEL]: 0xc0c0c0,
+  [BLOCK_ID.IRON_SWORD]: 0xc0c0c0,
+  [BLOCK_ID.DIAMOND_PICKAXE]: 0x55cccc,
+  [BLOCK_ID.DIAMOND_AXE]: 0x55cccc,
+  [BLOCK_ID.DIAMOND_SHOVEL]: 0x55cccc,
+  [BLOCK_ID.DIAMOND_SWORD]: 0x55cccc,
+  [BLOCK_ID.LAVA]: 0xff6600,
+  [BLOCK_ID.WATER]: 0x3366ff,
 };
 
 export const ITEM_COLORS: Record<number, string> = {
@@ -180,4 +280,18 @@ export const ITEM_COLORS: Record<number, string> = {
   [BLOCK_ID.COOKED_PORK]: "#c87040",
   [BLOCK_ID.COOKED_BEEF]: "#8b4020",
   [BLOCK_ID.COOKED_MUTTON]: "#a06040",
+  [BLOCK_ID.IRON_ORE]: "#8a7a6a",
+  [BLOCK_ID.IRON_INGOT]: "#d4d4d4",
+  [BLOCK_ID.DIAMOND_ORE]: "#4a9a9a",
+  [BLOCK_ID.DIAMOND]: "#00d4ff",
+  [BLOCK_ID.IRON_PICKAXE]: "#c0c0c0",
+  [BLOCK_ID.IRON_AXE]: "#c0c0c0",
+  [BLOCK_ID.IRON_SHOVEL]: "#c0c0c0",
+  [BLOCK_ID.IRON_SWORD]: "#c0c0c0",
+  [BLOCK_ID.DIAMOND_PICKAXE]: "#55cccc",
+  [BLOCK_ID.DIAMOND_AXE]: "#55cccc",
+  [BLOCK_ID.DIAMOND_SHOVEL]: "#55cccc",
+  [BLOCK_ID.DIAMOND_SWORD]: "#55cccc",
+  [BLOCK_ID.LAVA]: "#ff6600",
+  [BLOCK_ID.WATER]: "#3366ff",
 };

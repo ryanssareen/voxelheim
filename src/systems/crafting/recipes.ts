@@ -133,6 +133,8 @@ const C = BLOCK_ID.CRYSTAL;
 const SN = BLOCK_ID.SAND;
 const LV = BLOCK_ID.LEAVES;
 const ST = BLOCK_ID.STICK;
+const I = BLOCK_ID.IRON_INGOT;
+const DM = BLOCK_ID.DIAMOND;
 
 /** All 3x3 crafting table recipes. */
 export const RECIPES_3x3: CraftingRecipe3x3[] = [
@@ -268,6 +270,62 @@ export const RECIPES_3x3: CraftingRecipe3x3[] = [
     result: BLOCK_ID.FURNACE,
     count: 1,
     name: "Furnace",
+  },
+  // Iron Pickaxe
+  {
+    grid: [I, I, I, _, ST, _, _, ST, _],
+    result: BLOCK_ID.IRON_PICKAXE,
+    count: 1,
+    name: "Iron Pickaxe",
+  },
+  // Iron Axe
+  {
+    grid: [I, I, _, I, ST, _, _, ST, _],
+    result: BLOCK_ID.IRON_AXE,
+    count: 1,
+    name: "Iron Axe",
+  },
+  // Iron Shovel
+  {
+    grid: [_, I, _, _, ST, _, _, ST, _],
+    result: BLOCK_ID.IRON_SHOVEL,
+    count: 1,
+    name: "Iron Shovel",
+  },
+  // Iron Sword
+  {
+    grid: [_, I, _, _, I, _, _, ST, _],
+    result: BLOCK_ID.IRON_SWORD,
+    count: 1,
+    name: "Iron Sword",
+  },
+  // Diamond Pickaxe
+  {
+    grid: [DM, DM, DM, _, ST, _, _, ST, _],
+    result: BLOCK_ID.DIAMOND_PICKAXE,
+    count: 1,
+    name: "Diamond Pickaxe",
+  },
+  // Diamond Axe
+  {
+    grid: [DM, DM, _, DM, ST, _, _, ST, _],
+    result: BLOCK_ID.DIAMOND_AXE,
+    count: 1,
+    name: "Diamond Axe",
+  },
+  // Diamond Shovel
+  {
+    grid: [_, DM, _, _, ST, _, _, ST, _],
+    result: BLOCK_ID.DIAMOND_SHOVEL,
+    count: 1,
+    name: "Diamond Shovel",
+  },
+  // Diamond Sword
+  {
+    grid: [_, DM, _, _, DM, _, _, ST, _],
+    result: BLOCK_ID.DIAMOND_SWORD,
+    count: 1,
+    name: "Diamond Sword",
   },
 ];
 

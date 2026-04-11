@@ -75,6 +75,7 @@ export class Engine {
   private lastDeathPos: { x: number; y: number; z: number } | null = null;
   private fallStartY = 0;
   private wasFalling = false;
+  private lavaDamageTimer = 0;
   private frameCount = 0;
   private worldType: WorldType = "island";
   private gameMode: "survival" | "creative" | "hardcore" = "survival";
@@ -631,6 +632,23 @@ export class Engine {
       }
     }
     this.wasFalling = isFalling;
+
+    // Lava damage — skip in creative
+    if (!creative && this.chunkManager) {
+      const px = Math.floor(this.player!.position.x);
+      const py = Math.floor(this.player!.position.y);
+      const pz = Math.floor(this.player!.position.z);
+      const feetBlock = this.chunkManager.getBlock(px, py, pz);
+      if (feetBlock === BLOCK_ID.LAVA) {
+        this.lavaDamageTimer -= dt;
+        if (this.lavaDamageTimer <= 0) {
+          useGameStore.getState().damagePlayer(2, "void");
+          this.lavaDamageTimer = 0.5;
+        }
+      } else {
+        this.lavaDamageTimer = 0;
+      }
+    }
 
     // Void recovery (flat/infinite/creative) or void death (island survival)
     if (this.player!.position.y < VOID_Y) {
