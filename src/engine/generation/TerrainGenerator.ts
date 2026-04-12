@@ -56,14 +56,19 @@ export class TerrainGenerator {
    * Only meaningful for infinite worlds.
    */
   getBiome(wx: number, wz: number): Biome {
-    const temp = this.noise.noise2D(wx / 120, wz / 120);
-    const humidity = this.noise.noise2D(wx / 100 + 1000, wz / 100 + 1000);
+    // Large-scale noise -> big biome regions (hundreds of blocks each)
+    const temp = this.noise.noise2D(wx / 800, wz / 800);
+    const humidity = this.noise.noise2D(wx / 700 + 1000, wz / 700 + 1000);
 
-    if (temp > 0.3) return "desert";
-    if (temp < -0.3) return "snowy";
-    if (humidity > 0.2) return "forest";
-    if (temp > 0 && humidity < -0.2) return "mountains";
-    return "plains";
+    // Only extreme temps produce desert/snowy (~15% each)
+    if (temp > 0.5) return "desert";
+    if (temp < -0.5) return "snowy";
+    // Warm + dry -> mountains (~8%)
+    if (temp > 0.15 && humidity < -0.15) return "mountains";
+    // Very dry -> plains (~12%)
+    if (humidity < -0.4) return "plains";
+    // Everything else -> forest (dominant ~50%)
+    return "forest";
   }
 
   /** Compute the surface Y height for a single world column. Pure function of coords + noise. */

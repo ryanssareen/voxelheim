@@ -348,6 +348,17 @@ export default function WorldsPage() {
             + Create New World
           </button>
           <button
+            onClick={() => router.push("/dressing-room")}
+            className={MC_BTN + " w-36 text-sm"}
+            style={{
+              ...MC_BTN_STYLE,
+              background:
+                "linear-gradient(to bottom, #8a5a9a 0%, #6a3a7a 40%, #5a2a6a 60%, #4a1a5a 100%)",
+            }}
+          >
+            Dressing Room
+          </button>
+          <button
             onClick={() => router.push("/")}
             className={MC_BTN + " w-28 text-sm"}
             style={MC_BTN_STYLE}

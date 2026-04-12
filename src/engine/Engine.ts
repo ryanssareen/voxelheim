@@ -20,6 +20,7 @@ import { useHotbarStore } from "@store/useHotbarStore";
 import { useGameStore } from "@store/useGameStore";
 import { useSettingsStore } from "@store/useSettingsStore";
 import { useInventoryStore } from "@store/useInventoryStore";
+import { useSkinStore } from "@store/useSkinStore";
 import {
   saveWorld,
   loadWorldMeta,
@@ -148,10 +149,11 @@ export class Engine {
 
     this.chunkManager = new ChunkManager(this.renderer, this.seed, worldType);
 
-    if (worldType === "infinite") {
-      this.chunkManager.generateSpawnArea(startPos.x, startPos.z);
-    } else {
+    if (worldType === "island") {
       this.chunkManager.update(0, 0, 0);
+    } else {
+      // Flat & Infinite: stream chunks around player
+      this.chunkManager.generateSpawnArea(startPos.x, startPos.z);
     }
 
     // Load saved chunk modifications
@@ -184,13 +186,20 @@ export class Engine {
     this.itemDrops.setGetBlock((x, y, z) => this.chunkManager!.getBlock(x, y, z));
     this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry, this.itemDrops);
 
-    // Player model (3rd person)
-    this.playerModel = new PlayerModel();
+    // Player model (3rd person) — use saved skin colors
+    const skinColors = useSkinStore.getState();
+    this.playerModel = new PlayerModel({
+      skinColor: skinColors.skinColor,
+      hairColor: skinColors.hairColor,
+      shirtColor: skinColors.shirtColor,
+      pantsColor: skinColors.pantsColor,
+      shoeColor: skinColors.shoeColor,
+    });
     this.renderer.getScene().add(this.playerModel.group);
 
     // Hand (1st person)
-    this.handRenderer = new HandRenderer(this.renderer.getCamera());
-    this.offhandRenderer = new OffhandRenderer(this.renderer.getCamera());
+    this.handRenderer = new HandRenderer(this.renderer.getCamera(), skinColors.skinColor);
+    this.offhandRenderer = new OffhandRenderer(this.renderer.getCamera(), skinColors.skinColor);
 
     // Break overlay
     this.breakOverlay = new BlockBreakOverlay();
@@ -271,8 +280,8 @@ export class Engine {
 
     this.renderer.resize(this.canvas.clientWidth, this.canvas.clientHeight);
 
-    // Distance fog for infinite worlds
-    if (worldType === "infinite") {
+    // Distance fog for streaming worlds (flat + infinite)
+    if (worldType !== "island") {
       const settings = useSettingsStore.getState();
       this.renderer.setupFog(settings.renderDistance);
     }
@@ -325,7 +334,7 @@ export class Engine {
     if (!this.chunkManager) return this.spawn.y;
 
     // Infinite worlds: use terrain generator directly — faster and works before chunks load
-    if (this.worldType === "infinite") {
+    if (this.worldType !== "island") {
       const terrainGen = this.chunkManager.getTerrainGenerator();
       const surfaceY = terrainGen.getSurfaceHeight(Math.floor(x), Math.floor(z));
       return surfaceY + 2; // +2 to be safely above surface
@@ -364,7 +373,7 @@ export class Engine {
     if (!this.player) return;
 
     // Infinite: ensure spawn chunks are loaded before respawning
-    if (this.worldType === "infinite" && this.chunkManager) {
+    if (this.worldType !== "island" && this.chunkManager) {
       this.chunkManager.generateSpawnArea(this.spawn.x, this.spawn.z);
     }
 
@@ -430,7 +439,7 @@ export class Engine {
         this.music.setEnabled(settings.musicEnabled);
         this.music.setVolume(settings.musicVolume);
       }
-      if (this.worldType === "infinite" && this.renderer) {
+      if (this.worldType !== "island" && this.renderer) {
         this.renderer.updateFogDistance(settings.renderDistance);
       }
     }
@@ -507,7 +516,7 @@ export class Engine {
     }
 
     // Infinite world: stream chunks around player each frame
-    if (this.worldType === "infinite" && this.player && this.chunkManager) {
+    if (this.worldType !== "island" && this.player && this.chunkManager) {
       this.chunkManager.update(this.player.position.x, this.player.position.y, this.player.position.z);
       this.chunkManager.processGenerationQueue();
       this.chunkManager.processMeshQueue();

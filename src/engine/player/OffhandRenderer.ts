@@ -4,6 +4,13 @@ import { BLOCK_HEX_COLORS } from "@data/items";
 
 const BLOCK_COLORS = BLOCK_HEX_COLORS;
 
+function darkenColor(hex: number): number {
+  const r = Math.floor(((hex >> 16) & 0xff) * 0.75);
+  const g = Math.floor(((hex >> 8) & 0xff) * 0.75);
+  const b = Math.floor((hex & 0xff) * 0.75);
+  return (r << 16) | (g << 8) | b;
+}
+
 /**
  * First-person offhand (left hand). Mirrors HandRenderer to the left side.
  * All coordinates in camera-local space. Camera looks down -Z.
@@ -14,14 +21,18 @@ export class OffhandRenderer {
   private readonly fist: THREE.Mesh;
   private readonly heldBlock: THREE.Mesh;
   private readonly heldBlockMat: THREE.MeshBasicMaterial;
+  private readonly skinMat: THREE.MeshBasicMaterial;
+  private readonly skinDarkMat: THREE.MeshBasicMaterial;
   private time = 0;
 
-  constructor(camera: THREE.PerspectiveCamera) {
+  constructor(camera: THREE.PerspectiveCamera, skinColor = 0xc8a882) {
     this.group = new THREE.Group();
     this.armPivot = new THREE.Group();
 
-    const skin = new THREE.MeshBasicMaterial({ color: 0xc8a882, depthTest: false });
-    const skinDark = new THREE.MeshBasicMaterial({ color: 0xa07850, depthTest: false });
+    this.skinMat = new THREE.MeshBasicMaterial({ color: skinColor, depthTest: false });
+    this.skinDarkMat = new THREE.MeshBasicMaterial({ color: darkenColor(skinColor), depthTest: false });
+    const skin = this.skinMat;
+    const skinDark = this.skinDarkMat;
 
     const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), skin);
     upperArm.position.set(0, -0.2, 0);
@@ -75,6 +86,11 @@ export class OffhandRenderer {
     } else {
       this.armPivot.rotation.x = Math.sin(this.time * 1.5 + Math.PI) * 0.015;
     }
+  }
+
+  setSkinColor(color: number): void {
+    this.skinMat.color.setHex(color);
+    this.skinDarkMat.color.setHex(darkenColor(color));
   }
 
   setVisible(visible: boolean): void {

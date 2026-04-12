@@ -42,6 +42,12 @@ export class PlayerModel {
   private bootsLeft: THREE.Mesh;
   private bootsRight: THREE.Mesh;
 
+  private readonly skinMat: THREE.MeshLambertMaterial;
+  private readonly shirtMat: THREE.MeshLambertMaterial;
+  private readonly pantsMat: THREE.MeshLambertMaterial;
+  private readonly hairMat: THREE.MeshLambertMaterial;
+  private readonly shoeMat: THREE.MeshLambertMaterial;
+
   private walkTime = 0;
   private lastArmorHash = "";
 
@@ -49,11 +55,16 @@ export class PlayerModel {
     this.group = new THREE.Group();
     this.syncArmor = options.syncArmor ?? true;
 
-    const skin = new THREE.MeshLambertMaterial({ color: options.skinColor ?? 0xc8a882 });
-    const shirt = new THREE.MeshLambertMaterial({ color: options.shirtColor ?? 0x4a90d9 });
-    const pants = new THREE.MeshLambertMaterial({ color: options.pantsColor ?? 0x3b3b6e });
-    const hair = new THREE.MeshLambertMaterial({ color: options.hairColor ?? 0x3a2a1a });
-    const shoes = new THREE.MeshLambertMaterial({ color: options.shoeColor ?? 0x4a4a4a });
+    this.skinMat = new THREE.MeshLambertMaterial({ color: options.skinColor ?? 0xc8a882 });
+    this.shirtMat = new THREE.MeshLambertMaterial({ color: options.shirtColor ?? 0x4a90d9 });
+    this.pantsMat = new THREE.MeshLambertMaterial({ color: options.pantsColor ?? 0x3b3b6e });
+    this.hairMat = new THREE.MeshLambertMaterial({ color: options.hairColor ?? 0x3a2a1a });
+    this.shoeMat = new THREE.MeshLambertMaterial({ color: options.shoeColor ?? 0x4a4a4a });
+    const skin = this.skinMat;
+    const shirt = this.shirtMat;
+    const pants = this.pantsMat;
+    const hair = this.hairMat;
+    const shoes = this.shoeMat;
 
     // Head (8x8x8 pixels → 0.5x0.5x0.5 blocks)
     this.head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skin);
@@ -217,6 +228,14 @@ export class PlayerModel {
   /** Show or hide the model (hide in 1st person). */
   setVisible(visible: boolean): void {
     this.group.visible = visible;
+  }
+
+  updateColors(colors: Partial<PlayerModelOptions>): void {
+    if (colors.skinColor !== undefined) this.skinMat.color.setHex(colors.skinColor);
+    if (colors.hairColor !== undefined) this.hairMat.color.setHex(colors.hairColor);
+    if (colors.shirtColor !== undefined) this.shirtMat.color.setHex(colors.shirtColor);
+    if (colors.pantsColor !== undefined) this.pantsMat.color.setHex(colors.pantsColor);
+    if (colors.shoeColor !== undefined) this.shoeMat.color.setHex(colors.shoeColor);
   }
 
   dispose(): void {

@@ -43,9 +43,9 @@ export class MobManager {
   ): void {
     const getBlock = (x: number, y: number, z: number) => chunkManager.getBlock(x, y, z);
     const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
-    const isInfinite = chunkManager.worldType === "infinite";
+    const isStreaming = chunkManager.worldType !== "island";
     const simDist = useSettingsStore.getState().simulationDistance;
-    const despawnDist = isInfinite ? simDist * CHUNK_SIZE + 16 : 50;
+    const despawnDist = isStreaming ? simDist * CHUNK_SIZE + 16 : 50;
 
     // Spawn timer
     this.spawnTimer -= dt;
@@ -64,7 +64,7 @@ export class MobManager {
     }
 
     // Update mobs within simulation distance (burning is handled inside Mob.update)
-    const simRange = isInfinite ? simDist * CHUNK_SIZE : 999;
+    const simRange = isStreaming ? simDist * CHUNK_SIZE : 999;
     for (const mob of this.mobs) {
       const mobDist = Math.sqrt(
         (mob.position.x - playerPos.x) ** 2 +
@@ -133,13 +133,13 @@ export class MobManager {
   }
 
   private trySpawnPassive(chunkManager: ChunkManager, playerPos?: { x: number; y: number; z: number }): void {
-    const isInfinite = chunkManager.worldType === "infinite";
+    const isStreaming = chunkManager.worldType !== "island";
     const simDist = useSettingsStore.getState().simulationDistance;
-    const maxScanY = isInfinite ? 120 : 60;
+    const maxScanY = isStreaming ? 120 : 60;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       let wx: number, wz: number;
-      if (isInfinite && playerPos) {
+      if (isStreaming && playerPos) {
         const range = simDist * CHUNK_SIZE;
         wx = Math.floor(playerPos.x + (Math.random() * 2 - 1) * range);
         wz = Math.floor(playerPos.z + (Math.random() * 2 - 1) * range);
@@ -158,7 +158,7 @@ export class MobManager {
 
           const type = PASSIVE_TYPES[Math.floor(Math.random() * PASSIVE_TYPES.length)];
           const mob = new Mob(type, wx + 0.5, y + 1, wz + 0.5);
-          if (!isInfinite) {
+          if (!isStreaming) {
             mob.worldBounds = { min: 4, max: 60, center: 32 };
           }
           this.scene.add(mob.group);
@@ -173,8 +173,8 @@ export class MobManager {
     chunkManager: ChunkManager,
     playerPos: { x: number; y: number; z: number }
   ): void {
-    const isInfinite = chunkManager.worldType === "infinite";
-    const maxScanY = isInfinite ? 120 : 60;
+    const isStreaming = chunkManager.worldType !== "island";
+    const maxScanY = isStreaming ? 120 : 60;
 
     for (let attempt = 0; attempt < 10; attempt++) {
       const angle = Math.random() * Math.PI * 2;
@@ -182,7 +182,7 @@ export class MobManager {
       const wx = Math.floor(playerPos.x + Math.cos(angle) * dist);
       const wz = Math.floor(playerPos.z + Math.sin(angle) * dist);
 
-      if (!isInfinite && (wx < 1 || wx > 62 || wz < 1 || wz > 62)) continue;
+      if (!isStreaming && (wx < 1 || wx > 62 || wz < 1 || wz > 62)) continue;
 
       for (let y = maxScanY; y >= 0; y--) {
         if (this.registry.isSolid(chunkManager.getBlock(wx, y, wz))) {
@@ -190,7 +190,7 @@ export class MobManager {
               !this.registry.isSolid(chunkManager.getBlock(wx, y + 2, wz))) {
             const type = HOSTILE_TYPES[Math.floor(Math.random() * HOSTILE_TYPES.length)];
             const mob = new Mob(type, wx + 0.5, y + 1, wz + 0.5);
-            if (!isInfinite) {
+            if (!isStreaming) {
               mob.worldBounds = { min: 4, max: 60, center: 32 };
             }
             this.scene.add(mob.group);

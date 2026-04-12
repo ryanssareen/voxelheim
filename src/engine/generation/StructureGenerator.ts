@@ -148,11 +148,11 @@ export class StructureGenerator {
         if (biome === "desert") continue; // No trees in deserts
         let treeThreshold: number;
         switch (biome) {
-          case "plains":    treeThreshold = 0.01; break;
-          case "forest":    treeThreshold = 0.08; break;
-          case "mountains": treeThreshold = 0.02; break;
-          case "snowy":     treeThreshold = 0.03; break;
-          default:          treeThreshold = 0.03; break;
+          case "plains":    treeThreshold = 0.015; break;
+          case "forest":    treeThreshold = 0.10;  break;
+          case "mountains": treeThreshold = 0.025; break;
+          case "snowy":     treeThreshold = 0.04;  break;
+          default:          treeThreshold = 0.04;  break;
         }
         const chance = mixHash(wx + this.seedHash, wz) / 4294967296;
         if (chance > treeThreshold) continue;

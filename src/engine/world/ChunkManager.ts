@@ -59,8 +59,9 @@ export class ChunkManager {
     this.renderer = renderer;
     this.seed = seed;
     this.worldType = worldType;
-    this.sizeChunks = worldType === "infinite" ? 0 : WORLD_SIZE_CHUNKS;
-    this.heightChunks = worldType === "infinite" ? WORLD_HEIGHT_CHUNKS_INFINITE : WORLD_HEIGHT_CHUNKS;
+    // Island: fixed small grid. Flat & Infinite: stream chunks dynamically.
+    this.sizeChunks = worldType === "island" ? WORLD_SIZE_CHUNKS : 0;
+    this.heightChunks = worldType === "island" ? WORLD_HEIGHT_CHUNKS : WORLD_HEIGHT_CHUNKS_INFINITE;
     this.terrainGen = new TerrainGenerator(seed, worldType);
     this.structureGen = new StructureGenerator(seed);
   }
@@ -138,7 +139,7 @@ export class ChunkManager {
   // ──────────────────────────────────────────────
 
   update(playerX: number, playerY: number, playerZ: number): void {
-    if (this.worldType !== "infinite") {
+    if (this.worldType === "island") {
       if (!this.loaded) {
         this.loaded = true;
         this.generateFiniteWorld();
@@ -373,27 +374,20 @@ export class ChunkManager {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
     if (!chunk) {
-      if (this.worldType === "infinite") {
-        // Bedrock floor — never fall below y=0
+      if (this.worldType !== "island") {
+        // Streaming worlds (flat + infinite): surface fallback for unloaded chunks
         if (wy <= 0) return BLOCK_ID.STONE;
-        // Unloaded chunks: biome-aware surface fallback to prevent falling through
         const surfaceY = this.terrainGen.getSurfaceHeight(wx, wz);
         if (wy === surfaceY) {
-          const biome = this.terrainGen.getBiome(wx, wz);
-          if (biome === "desert") return BLOCK_ID.SAND;
-          if (biome === "snowy") return BLOCK_ID.SNOW;
-          if (biome === "mountains" && surfaceY > 38) return BLOCK_ID.STONE;
+          if (this.worldType === "infinite") {
+            const biome = this.terrainGen.getBiome(wx, wz);
+            if (biome === "desert") return BLOCK_ID.SAND;
+            if (biome === "snowy") return BLOCK_ID.SNOW;
+            if (biome === "mountains" && surfaceY > 38) return BLOCK_ID.STONE;
+          }
           return BLOCK_ID.GRASS;
         }
         return wy < surfaceY ? BLOCK_ID.STONE : 0;
-      }
-      // Finite worlds: barrier walls at edges
-      if (this.worldType !== "island") {
-        const worldBlocks = this.sizeChunks * CHUNK_SIZE;
-        if (wx < 0 || wx >= worldBlocks || wz < 0 || wz >= worldBlocks) {
-          return wy >= 0 ? 3 : 0;
-        }
-        if (wy < 0) return 3;
       }
       return 0;
     }
@@ -485,7 +479,7 @@ export class ChunkManager {
   }
 
   loadModifiedChunks(saved: Map<string, Uint8Array>): void {
-    if (this.worldType === "infinite") {
+    if (this.worldType !== "island") {
       // Defer: store for later application when chunks generate
       for (const [key, data] of saved) {
         if (this.chunks.has(key)) {

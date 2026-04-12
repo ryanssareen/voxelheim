@@ -20,7 +20,7 @@ const GAME_MODES = ["Survival", "Creative", "Hardcore"] as const;
 
 const WORLD_TYPES = [
   { name: "Island", desc: "A small island surrounded by ocean", color: "#4a8a3a" },
-  { name: "Flat", desc: "Flat terrain stretching to the edges", color: "#8a7a3a" },
+  { name: "Flat", desc: "Flat terrain stretching endlessly in all directions", color: "#8a7a3a" },
   { name: "Infinite", desc: "Endless procedural terrain in all directions", color: "#3a6a8a" },
 ] as const;
 
