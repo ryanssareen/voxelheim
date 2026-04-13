@@ -11,7 +11,7 @@
       ]
     },
     {
-      "source": "/game",
+      "source": "/game(.*)",
       "headers": [
         {
           "key": "Cross-Origin-Opener-Policy",

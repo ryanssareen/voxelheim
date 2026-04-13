@@ -54,7 +54,7 @@ After `PlayerController.update()` returns, `Engine.gameLoopInner()` handles:
 |----------|-------|---------|
 | GRAVITY | 20 m/s^2 | Downward acceleration when airborne |
 | JUMP_VELOCITY | 8 m/s | Initial upward velocity on jump |
-| MAX_FALL_SPEED | -10 m/s | Terminal velocity cap |
+| MAX_FALL_SPEED | -40 m/s | Terminal velocity cap |
 | WALK_SPEED | 5 blocks/s | Normal movement speed |
 | SPRINT_SPEED | 8 blocks/s | Sprint (Shift) movement speed |
 | CROUCH_SPEED | 2.5 blocks/s | Crouch (Ctrl/CapsLock) movement speed |
@@ -116,7 +116,7 @@ If adding a flight mode, swimming, or other movement mode:
 
 ### Mob Physics Parity
 
-Mobs use the same gravity constant (20 m/s^2) and axis-by-axis AABB collision as the player, but with their own `moveAxis()` implementation in `Mob.ts`. They have a lower terminal velocity cap (-15 vs -10) and no sub-stepping. If collision behavior changes in `PlayerController`, consider whether `Mob.moveAxis()` needs the same fix.
+Mobs use the same gravity constant (20 m/s^2) and axis-by-axis AABB collision as the player, but with their own `moveAxis()` implementation in `Mob.ts`. They have a different terminal velocity cap (-15 vs -40) and no sub-stepping. If collision behavior changes in `PlayerController`, consider whether `Mob.moveAxis()` needs the same fix.
 
 ## Related Files
 
