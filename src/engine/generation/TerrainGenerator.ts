@@ -83,7 +83,7 @@ export class TerrainGenerator {
         case "plains":    baseHeight = 30; amplitudeScale = 0.9; break;
         case "forest":    baseHeight = 30; amplitudeScale = 1.0; break;
         case "desert":    baseHeight = 28; amplitudeScale = 0.8; break;
-        case "mountains": baseHeight = 35; amplitudeScale = 1.8; break;
+        case "mountains": baseHeight = 50; amplitudeScale = 3.5; break;
         case "snowy":     baseHeight = 32; amplitudeScale = 1.0; break;
       }
       const noiseValue = this.noise.octaveNoise2D(wx, wz, 5, 0.5, 2.0, 40);
@@ -196,8 +196,15 @@ export class TerrainGenerator {
                 chunk.setBlock(x, y, z, BLOCK_ID.SAND);
               } else if (biome === "snowy") {
                 chunk.setBlock(x, y, z, BLOCK_ID.SNOW);
-              } else if (biome === "mountains" && surfaceY > 38) {
-                chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+              } else if (biome === "mountains") {
+                // Snow above 55, stone between 45-55, grass below
+                if (surfaceY > 55) {
+                  chunk.setBlock(x, y, z, BLOCK_ID.SNOW);
+                } else if (surfaceY > 45) {
+                  chunk.setBlock(x, y, z, BLOCK_ID.STONE);
+                } else {
+                  chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
+                }
               } else {
                 chunk.setBlock(x, y, z, BLOCK_ID.GRASS);
               }
