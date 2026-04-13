@@ -373,24 +373,7 @@ export class ChunkManager {
   getBlock(wx: number, wy: number, wz: number): number {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
     const chunk = this.chunks.get(chunkKey(cx, cy, cz));
-    if (!chunk) {
-      if (this.worldType !== "island") {
-        // Streaming worlds (flat + infinite): surface fallback for unloaded chunks
-        if (wy <= 0) return BLOCK_ID.STONE;
-        const surfaceY = this.terrainGen.getSurfaceHeight(wx, wz);
-        if (wy === surfaceY) {
-          if (this.worldType === "infinite") {
-            const biome = this.terrainGen.getBiome(wx, wz);
-            if (biome === "desert") return BLOCK_ID.SAND;
-            if (biome === "snowy") return BLOCK_ID.SNOW;
-            if (biome === "mountains" && surfaceY > 38) return BLOCK_ID.STONE;
-          }
-          return BLOCK_ID.GRASS;
-        }
-        return wy < surfaceY ? BLOCK_ID.STONE : 0;
-      }
-      return 0;
-    }
+    if (!chunk) return 0;
     const { lx, ly, lz } = worldToLocal(wx, wy, wz);
     return chunk.getBlock(lx, ly, lz);
   }

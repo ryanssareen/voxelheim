@@ -59,22 +59,23 @@ export class Renderer {
 
   /** Enables distance fog for infinite worlds and updates the camera far plane. */
   setupFog(renderDistance: number): void {
-    const farDist = renderDistance * CHUNK_SIZE;
-    const nearDist = farDist * 0.65;
+    // Fog fully opaque 1 chunk before render distance so chunk edges are never visible
+    const farDist = (renderDistance - 1) * CHUNK_SIZE;
+    const nearDist = farDist * 0.5;
     const bgColor = this.scene.background as THREE.Color;
     this.scene.fog = new THREE.Fog(bgColor.clone(), nearDist, farDist);
-    this.camera.far = farDist + 32;
+    this.camera.far = (renderDistance + 2) * CHUNK_SIZE;
     this.camera.updateProjectionMatrix();
   }
 
   /** Updates fog distances when render distance changes. */
   updateFogDistance(renderDistance: number): void {
     if (!this.scene.fog) return;
-    const farDist = renderDistance * CHUNK_SIZE;
-    const nearDist = farDist * 0.65;
+    const farDist = (renderDistance - 1) * CHUNK_SIZE;
+    const nearDist = farDist * 0.5;
     (this.scene.fog as THREE.Fog).near = nearDist;
     (this.scene.fog as THREE.Fog).far = farDist;
-    this.camera.far = farDist + 32;
+    this.camera.far = (renderDistance + 2) * CHUNK_SIZE;
     this.camera.updateProjectionMatrix();
   }
 
