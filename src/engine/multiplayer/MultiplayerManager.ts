@@ -4,12 +4,14 @@ import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { RemotePlayerAvatar } from "@engine/multiplayer/RemotePlayerAvatar";
 import { connectMultiplayerSession } from "@lib/multiplayer/sessionClient";
 import type {
+  ChatMessageKind,
   MultiplayerConnection,
   MultiplayerDropState,
   MultiplayerPlayerState,
   MultiplayerSessionMeta,
 } from "@lib/multiplayer/types";
 import { useAuthStore } from "@store/useAuthStore";
+import { useChatStore } from "@store/useChatStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 
 const PLAYER_SEND_INTERVAL_MS = 120;
@@ -128,7 +130,47 @@ export class MultiplayerManager {
       })
     );
 
+    this.cleanup.push(
+      connection.subscribeChat((message) => {
+        useChatStore.getState().appendMessage(message);
+      })
+    );
+
     return connection.session;
+  }
+
+  get localPlayerName(): string {
+    return this.playerName;
+  }
+
+  get localPlayerId(): string {
+    return this.playerId;
+  }
+
+  sendChat(text: string, kind: ChatMessageKind = "chat"): void {
+    const trimmed = text.trim().slice(0, 256);
+    if (!trimmed) return;
+
+    if (this.connection) {
+      // Transport loopback will re-emit through subscribeChat for the local client
+      void this.connection.sendChatMessage({
+        playerId: this.playerId,
+        name: this.playerName,
+        text: trimmed,
+        kind,
+      });
+      return;
+    }
+
+    // Solo: append directly so the chat feed still works without a session
+    useChatStore.getState().appendMessage({
+      id: `${this.playerId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      playerId: this.playerId,
+      name: this.playerName,
+      text: trimmed,
+      kind,
+      createdAt: Date.now(),
+    });
   }
 
   update(dt: number, localPlayer: LocalPlayerSnapshot): void {
@@ -210,6 +252,7 @@ export class MultiplayerManager {
     this.avatars.clear();
     this.appliedBlockTimestamps.clear();
     useMultiplayerStore.getState().reset();
+    useChatStore.getState().clear();
   }
 
   private syncRemotePlayers(players: MultiplayerPlayerState[]): void {

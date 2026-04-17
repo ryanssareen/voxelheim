@@ -1,7 +1,10 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { useEngine } from "@hooks/useEngine";
+import { useChatStore } from "@store/useChatStore";
+import { useGameStore } from "@store/useGameStore";
+import { useInventoryStore } from "@store/useInventoryStore";
 import { HUD } from "@ui/HUD";
 import { HotbarUI } from "@ui/HotbarUI";
 import { PauseMenu } from "@ui/PauseMenu";
@@ -11,6 +14,7 @@ import { InventoryUI } from "@ui/InventoryUI";
 import { CraftingTableUI } from "@ui/CraftingTableUI";
 import { FurnaceUI } from "@ui/FurnaceUI";
 import { CreativeInventoryUI } from "@ui/CreativeInventoryUI";
+import { ChatUI } from "@ui/ChatUI";
 
 export function GameCanvas({
   worldId,
@@ -38,6 +42,9 @@ export function GameCanvas({
     engineRef.current?.respawn();
   }, [engineRef]);
 
+  // Counter bump to signal ChatUI to open on T keypress
+  const [chatOpenRequest, setChatOpenRequest] = useState(0);
+
   useEffect(() => {
     const handleResize = () => {
       const canvas = canvasRef.current;
@@ -48,6 +55,37 @@ export function GameCanvas({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [engineRef]);
+
+  // T-key opens chat (only when game is active and no modal UI is open)
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.code !== "KeyT") return;
+      // Don't hijack T if already typing somewhere else
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+
+      const gameState = useGameStore.getState();
+      const invState = useInventoryStore.getState();
+      const chatState = useChatStore.getState();
+
+      if (gameState.isDead || gameState.isPaused) return;
+      if (chatState.composing) return;
+      if (invState.isOpen || invState.tableOpen || invState.furnaceOpen || invState.creativeOpen) return;
+
+      event.preventDefault();
+      if (document.pointerLockElement) document.exitPointerLock();
+      setChatOpenRequest((n) => n + 1);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
+
+  const handleSendChat = useCallback(
+    (text: string) => {
+      engineRef.current?.sendChat(text);
+    },
+    [engineRef],
+  );
 
   return (
     <div className="relative w-full h-full">
@@ -72,6 +110,7 @@ export function GameCanvas({
           <CraftingTableUI />
           <FurnaceUI />
           <CreativeInventoryUI />
+          <ChatUI onSend={handleSendChat} openRequest={chatOpenRequest} />
         </>
       )}
     </div>

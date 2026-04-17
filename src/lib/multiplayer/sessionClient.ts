@@ -32,6 +32,7 @@ import {
 import type {
   CreateSessionInput,
   MultiplayerBlockState,
+  MultiplayerChatMessage,
   MultiplayerConnection,
   MultiplayerDropEvent,
   MultiplayerDropState,
@@ -56,7 +57,12 @@ type LocalMessage =
   | { type: "player-leave"; playerId: string }
   | { type: "block-state"; payload: MultiplayerBlockState }
   | { type: "drop-upsert"; payload: MultiplayerDropState }
-  | { type: "drop-remove"; dropId: string };
+  | { type: "drop-remove"; dropId: string }
+  | { type: "chat"; payload: MultiplayerChatMessage };
+
+function makeChatId(playerId: string): string {
+  return `${playerId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function sessionStorageKey(code: string): string {
   return `${LOCAL_SESSION_PREFIX}${code}`;
@@ -185,6 +191,9 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
   private readonly dropListeners = new Set<
     (event: MultiplayerDropEvent) => void
   >();
+  private readonly chatListeners = new Set<
+    (message: MultiplayerChatMessage) => void
+  >();
   private readonly playerStates = new Map<string, MultiplayerPlayerState>();
   private latestLocalState: MultiplayerPlayerState | null = null;
 
@@ -246,6 +255,30 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
     return () => {
       this.dropListeners.delete(callback);
     };
+  }
+
+  subscribeChat(
+    callback: (message: MultiplayerChatMessage) => void
+  ): () => void {
+    this.chatListeners.add(callback);
+    return () => {
+      this.chatListeners.delete(callback);
+    };
+  }
+
+  async sendChatMessage(
+    message: Omit<MultiplayerChatMessage, "id" | "createdAt">
+  ): Promise<void> {
+    const next: MultiplayerChatMessage = {
+      ...message,
+      id: makeChatId(message.playerId),
+      createdAt: Date.now(),
+    };
+    for (const listener of this.chatListeners) listener(next);
+    this.channel.postMessage({
+      type: "chat",
+      payload: next,
+    } satisfies LocalMessage);
   }
 
   async setPlayerState(
@@ -360,6 +393,11 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
     if (message.type === "drop-remove") {
       deleteLocalDrop(this.session.code, message.dropId);
       this.emitDrop({ type: "remove", dropId: message.dropId });
+      return;
+    }
+
+    if (message.type === "chat") {
+      for (const listener of this.chatListeners) listener(message.payload);
     }
   };
 
@@ -403,13 +441,18 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
   private readonly dropListeners = new Set<
     (event: MultiplayerDropEvent) => void
   >();
+  private readonly chatListeners = new Set<
+    (message: MultiplayerChatMessage) => void
+  >();
   private readonly cleanup: Array<() => void> = [];
   private latestPlayers: MultiplayerPlayerState[] = [];
+  private chatSubscribedAt = Date.now();
   private readonly playerDocRef;
   private readonly playersColRef;
   private readonly blocksColRef;
   private readonly dropsColRef;
   private readonly worldStateColRef;
+  private readonly chatColRef;
 
   constructor(
     readonly session: MultiplayerSessionMeta,
@@ -446,6 +489,24 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
       "multiplayerSessions",
       session.code,
       "worldState"
+    );
+    this.chatColRef = collection(
+      database,
+      "multiplayerSessions",
+      session.code,
+      "chat"
+    );
+
+    this.cleanup.push(
+      onSnapshot(this.chatColRef, (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === "removed") continue;
+          const payload = change.doc.data() as MultiplayerChatMessage;
+          // Ignore historical messages that landed before this client subscribed
+          if (payload.createdAt < this.chatSubscribedAt - 2000) continue;
+          for (const listener of this.chatListeners) listener(payload);
+        }
+      })
     );
 
     this.cleanup.push(
@@ -522,6 +583,27 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
     return () => {
       this.dropListeners.delete(callback);
     };
+  }
+
+  subscribeChat(
+    callback: (message: MultiplayerChatMessage) => void
+  ): () => void {
+    this.chatListeners.add(callback);
+    this.chatSubscribedAt = Date.now();
+    return () => {
+      this.chatListeners.delete(callback);
+    };
+  }
+
+  async sendChatMessage(
+    message: Omit<MultiplayerChatMessage, "id" | "createdAt">
+  ): Promise<void> {
+    const payload: MultiplayerChatMessage = {
+      ...message,
+      id: makeChatId(message.playerId),
+      createdAt: Date.now(),
+    };
+    await setDoc(doc(this.chatColRef, payload.id), payload);
   }
 
   async setPlayerState(
@@ -611,12 +693,17 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
   private readonly dropListeners = new Set<
     (event: MultiplayerDropEvent) => void
   >();
+  private readonly chatListeners = new Set<
+    (message: MultiplayerChatMessage) => void
+  >();
   private readonly cleanup: Array<() => void> = [];
   private readonly playerStates = new Map<string, MultiplayerPlayerState>();
+  private chatSubscribedAt = Date.now();
 
   private readonly playersRef: DatabaseReference;
   private readonly blocksRef: DatabaseReference;
   private readonly dropsRef: DatabaseReference;
+  private readonly chatRef: DatabaseReference;
   private readonly worldStateRef: DatabaseReference;
   private readonly playerRef: DatabaseReference;
 
@@ -629,6 +716,7 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
     this.playersRef = rtdbRef(database, `multiplayerSessions/${session.code}/players`);
     this.blocksRef = rtdbRef(database, `multiplayerSessions/${session.code}/blocks`);
     this.dropsRef = rtdbRef(database, `multiplayerSessions/${session.code}/drops`);
+    this.chatRef = rtdbRef(database, `multiplayerSessions/${session.code}/chat`);
     this.worldStateRef = rtdbRef(database, `multiplayerSessions/${session.code}/worldState`);
     this.playerRef = rtdbRef(database, `multiplayerSessions/${session.code}/players/${identity.playerId}`);
 
@@ -678,6 +766,16 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
     this.cleanup.push(() => off(this.dropsRef, "child_added", onDropAdd));
     this.cleanup.push(() => off(this.dropsRef, "child_changed", onDropChange));
     this.cleanup.push(() => off(this.dropsRef, "child_removed", onDropRemove));
+
+    // Subscribe to chat additions
+    const onChatAdd = onChildAdded(this.chatRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const payload = snapshot.val() as MultiplayerChatMessage;
+      // Ignore historical messages from before this client subscribed
+      if (payload.createdAt < this.chatSubscribedAt - 2000) return;
+      for (const listener of this.chatListeners) listener(payload);
+    });
+    this.cleanup.push(() => off(this.chatRef, "child_added", onChatAdd));
   }
 
   subscribePlayers(callback: (players: MultiplayerPlayerState[]) => void): () => void {
@@ -694,6 +792,27 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
   subscribeDropEvents(callback: (event: MultiplayerDropEvent) => void): () => void {
     this.dropListeners.add(callback);
     return () => { this.dropListeners.delete(callback); };
+  }
+
+  subscribeChat(callback: (message: MultiplayerChatMessage) => void): () => void {
+    this.chatListeners.add(callback);
+    this.chatSubscribedAt = Date.now();
+    return () => { this.chatListeners.delete(callback); };
+  }
+
+  async sendChatMessage(
+    message: Omit<MultiplayerChatMessage, "id" | "createdAt">
+  ): Promise<void> {
+    const payload: MultiplayerChatMessage = {
+      ...message,
+      id: makeChatId(message.playerId),
+      createdAt: Date.now(),
+    };
+    const target = rtdbRef(
+      this.database,
+      `multiplayerSessions/${this.session.code}/chat/${payload.id}`
+    );
+    await rtdbSet(target, payload);
   }
 
   async setPlayerState(state: Omit<MultiplayerPlayerState, "updatedAt">): Promise<void> {

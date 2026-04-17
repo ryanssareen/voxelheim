@@ -51,6 +51,17 @@ export type MultiplayerDropEvent =
   | { type: "upsert"; drop: MultiplayerDropState }
   | { type: "remove"; dropId: string };
 
+export type ChatMessageKind = "chat" | "death" | "system";
+
+export interface MultiplayerChatMessage {
+  id: string;
+  playerId: string;
+  name: string;
+  text: string;
+  kind: ChatMessageKind;
+  createdAt: number;
+}
+
 export interface MultiplayerIdentity {
   playerId: string;
   name: string;
@@ -75,11 +86,17 @@ export interface MultiplayerConnection {
   subscribeDropEvents: (
     callback: (event: MultiplayerDropEvent) => void
   ) => () => void;
+  subscribeChat: (
+    callback: (message: MultiplayerChatMessage) => void
+  ) => () => void;
   setPlayerState: (
     state: Omit<MultiplayerPlayerState, "updatedAt">
   ) => Promise<void>;
   setBlockState: (
     change: Omit<MultiplayerBlockState, "updatedAt">
+  ) => Promise<void>;
+  sendChatMessage: (
+    message: Omit<MultiplayerChatMessage, "id" | "createdAt">
   ) => Promise<void>;
   upsertDrop: (drop: MultiplayerDropState) => Promise<void>;
   removeDrop: (dropId: string) => Promise<boolean>;

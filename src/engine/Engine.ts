@@ -18,6 +18,7 @@ import { MobManager } from "@engine/entities/MobManager";
 import { MusicManager } from "@engine/audio/MusicManager";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useGameStore } from "@store/useGameStore";
+import { useChatStore } from "@store/useChatStore";
 import { useSettingsStore } from "@store/useSettingsStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { useSkinStore } from "@store/useSkinStore";
@@ -74,6 +75,7 @@ export class Engine {
   private starvationTimer = 0;
   private stuckTimer = 0;
   private lastDeathPos: { x: number; y: number; z: number } | null = null;
+  private wasDead = false;
   private fallStartY = 0;
   private wasFalling = false;
   private lavaDamageTimer = 0;
@@ -169,9 +171,17 @@ export class Engine {
 
     this.input.init(this.canvas);
     this.input.onPointerLockLost = () => {
-      // Don't pause if dead or inventory is open
+      // Don't pause if dead, inventory open, or chat composing
       const invS = useInventoryStore.getState();
-      if (!useGameStore.getState().isDead && !invS.isOpen && !invS.tableOpen && !invS.furnaceOpen && !invS.creativeOpen) {
+      const chatS = useChatStore.getState();
+      if (
+        !useGameStore.getState().isDead &&
+        !invS.isOpen &&
+        !invS.tableOpen &&
+        !invS.furnaceOpen &&
+        !invS.creativeOpen &&
+        !chatS.composing
+      ) {
         useGameStore.getState().setPaused(true);
       }
     };
@@ -415,6 +425,45 @@ export class Engine {
     this.starvationTimer = 0;
     this.fallStartY = 0;
     this.wasFalling = false;
+    this.wasDead = false;
+  }
+
+  private broadcastDeathMessage(rawMessage: string): void {
+    if (!rawMessage) return;
+    const localName = this.multiplayer?.localPlayerName ?? "You";
+    // The templated messages begin with "Player " — swap for the real name
+    const personalized = rawMessage.replace(/^Player\b/, localName);
+    if (this.multiplayer) {
+      this.multiplayer.sendChat(personalized, "death");
+      return;
+    }
+    useChatStore.getState().appendMessage({
+      id: `death-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      playerId: "local",
+      name: localName,
+      text: personalized,
+      kind: "death",
+      createdAt: Date.now(),
+    });
+  }
+
+  /** Send a chat message — broadcasts over multiplayer if connected, else local-only. */
+  sendChat(text: string): void {
+    if (this.multiplayer) {
+      this.multiplayer.sendChat(text, "chat");
+      return;
+    }
+    // Solo fallback: append directly so the chat feed still works
+    const trimmed = text.trim().slice(0, 256);
+    if (!trimmed) return;
+    useChatStore.getState().appendMessage({
+      id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      playerId: "local",
+      name: "You",
+      text: trimmed,
+      kind: "chat",
+      createdAt: Date.now(),
+    });
   }
 
   private gameLoop = (): void => {
@@ -445,10 +494,21 @@ export class Engine {
     }
 
     const state = useGameStore.getState();
+    // Detect fresh death transitions and broadcast a chat message
+    if (state.isDead && !this.wasDead) {
+      this.wasDead = true;
+      this.broadcastDeathMessage(state.deathMessage);
+    } else if (!state.isDead && this.wasDead) {
+      this.wasDead = false;
+    }
     if (state.isDead) return;
 
-    // When paused: still run gravity/physics and rendering, but skip all input
-    if (state.isPaused) {
+    // Chat composing behaves like paused for input purposes — player
+    // shouldn't turn/mine just because they typed "s" into the chat box.
+    const chatComposing = useChatStore.getState().composing;
+
+    // When paused (or chat open): still run gravity/physics and rendering, but skip all input
+    if (state.isPaused || chatComposing) {
       // Apply gravity so players don't float when they pause mid-air
       if (this.player && this.chunkManager) {
         if (!this.player.onGround) {

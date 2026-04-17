@@ -34,6 +34,9 @@ export class ChunkManager {
   private readonly registry = BlockRegistry.getInstance();
   private readonly chunks = new Map<string, Chunk>();
   private readonly modifiedChunks = new Set<string>();
+  // Chunks with meshes built — collision only applies to meshed chunks so
+  // physics never disagrees with what the player can see.
+  private readonly meshedChunks = new Set<string>();
   private loaded = false;
 
   // --- Infinite-mode streaming state ---
@@ -95,6 +98,7 @@ export class ChunkManager {
         chunk.cy * CHUNK_SIZE,
         chunk.cz * CHUNK_SIZE
       );
+      this.meshedChunks.add(key);
     }
   }
 
@@ -127,6 +131,7 @@ export class ChunkManager {
         chunk.cy * CHUNK_SIZE,
         chunk.cz * CHUNK_SIZE
       );
+      this.meshedChunks.add(key);
     }
 
     this.lastPlayerCX = pcx;
@@ -287,6 +292,7 @@ export class ChunkManager {
         chunk.cy * CHUNK_SIZE,
         chunk.cz * CHUNK_SIZE
       );
+      this.meshedChunks.add(key);
       this.pendingMesh.delete(key);
     }
   }
@@ -324,6 +330,7 @@ export class ChunkManager {
       const key = chunkKey(ccx, cy, ccz);
       this.renderer.removeChunkMesh(key);
       this.chunks.delete(key);
+      this.meshedChunks.delete(key);
       this.pendingGeneration.delete(key);
       this.pendingMesh.delete(key);
     }
@@ -372,8 +379,11 @@ export class ChunkManager {
 
   getBlock(wx: number, wy: number, wz: number): number {
     const { cx, cy, cz } = worldToChunk(wx, wy, wz);
-    const chunk = this.chunks.get(chunkKey(cx, cy, cz));
-    if (!chunk) return 0;
+    const key = chunkKey(cx, cy, cz);
+    const chunk = this.chunks.get(key);
+    // Only consider chunks that have had their mesh built — otherwise collision
+    // exists without any visible geometry (physics/visuals desync).
+    if (!chunk || !this.meshedChunks.has(key)) return 0;
     const { lx, ly, lz } = worldToLocal(wx, wy, wz);
     return chunk.getBlock(lx, ly, lz);
   }
@@ -404,6 +414,7 @@ export class ChunkManager {
       cy * CHUNK_SIZE,
       cz * CHUNK_SIZE
     );
+    this.meshedChunks.add(key);
 
     // If block is on a chunk boundary, re-mesh the neighbor too
     if (lx === 0) this.remeshIfLoaded(cx - 1, cy, cz);
@@ -430,6 +441,7 @@ export class ChunkManager {
     const neighbors = this.getNeighbors(cx, cy, cz);
     const meshData = ChunkMeshBuilder.buildMesh(chunk, neighbors, this.registry, this.getUV);
     this.renderer.addChunkMesh(key, meshData, cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE);
+    this.meshedChunks.add(key);
   }
 
   // ──────────────────────────────────────────────
@@ -480,6 +492,7 @@ export class ChunkManager {
             chunk.cy * CHUNK_SIZE,
             chunk.cz * CHUNK_SIZE
           );
+          this.meshedChunks.add(key);
         } else {
           this.savedModifications.set(key, data);
         }
@@ -500,6 +513,7 @@ export class ChunkManager {
             chunk.cy * CHUNK_SIZE,
             chunk.cz * CHUNK_SIZE
           );
+          this.meshedChunks.add(key);
         }
       }
     }
@@ -508,6 +522,7 @@ export class ChunkManager {
   dispose(): void {
     this.chunks.clear();
     this.modifiedChunks.clear();
+    this.meshedChunks.clear();
     this.pendingGeneration.clear();
     this.pendingMesh.clear();
     this.activeColumns.clear();
