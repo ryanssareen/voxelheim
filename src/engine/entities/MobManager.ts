@@ -39,7 +39,13 @@ export class MobManager {
     playerPos: { x: number; y: number; z: number },
     timeOfDay: number,
     onDamagePlayer?: (amount: number, fromX: number, fromZ: number, mobType?: string) => void,
-    creative = false
+    creative = false,
+    onMobShoot?: (
+      origin: { x: number; y: number; z: number },
+      target: { x: number; y: number; z: number },
+      damage: number,
+      ownerId: string,
+    ) => void,
   ): void {
     const getBlock = (x: number, y: number, z: number) => chunkManager.getBlock(x, y, z);
     const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
@@ -74,12 +80,23 @@ export class MobManager {
       mob.update(dt, getBlock, this.registry, playerPos, timeOfDay, creative);
 
       // Mob attacks — skip in creative mode (mobs don't attack)
-      if (!creative && !mob.dead && mob.attackCooldown <= 0 && onDamagePlayer) {
+      if (!creative && !mob.dead && mob.attackCooldown <= 0) {
         if (mob.type === "zombie" && mob.distanceTo(playerPos) < 1.5) {
-          onDamagePlayer(3, mob.position.x, mob.position.z, "zombie");
+          onDamagePlayer?.(3, mob.position.x, mob.position.z, "zombie");
           mob.attackCooldown = 1;
-        } else if (mob.type === "skeleton" && mob.distanceTo(playerPos) < 10 && mob.distanceTo(playerPos) > 2) {
-          onDamagePlayer(2, mob.position.x, mob.position.z, "skeleton");
+        } else if (
+          mob.type === "skeleton" &&
+          mob.distanceTo(playerPos) < 15 &&
+          mob.distanceTo(playerPos) > 2 &&
+          onMobShoot
+        ) {
+          // Spawn a physical arrow aimed at the player — dodgeable
+          onMobShoot(
+            { x: mob.position.x, y: mob.position.y + 1.3, z: mob.position.z },
+            { x: playerPos.x, y: playerPos.y + 0.9, z: playerPos.z },
+            2,
+            `skeleton-${mob.position.x.toFixed(1)}-${mob.position.z.toFixed(1)}`,
+          );
           mob.attackCooldown = 2;
         }
       }

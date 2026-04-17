@@ -58,6 +58,7 @@ export class Engine {
   private mobManager: MobManager | null = null;
   private music: MusicManager | null = null;
   private multiplayer: MultiplayerManager | null = null;
+  private arrowManager: import("@engine/entities/ArrowManager").ArrowManager | null = null;
   private ambientLight: THREE.AmbientLight | null = null;
   private directionalLight: THREE.DirectionalLight | null = null;
   private animationFrameId = 0;
@@ -268,6 +269,16 @@ export class Engine {
     // Mob manager
     this.mobManager = new MobManager(this.renderer.getScene());
     this.mobManager.setItemDrops(this.itemDrops);
+
+    // Arrow manager — physical projectiles for skeletons
+    const { ArrowManager } = await import("@engine/entities/ArrowManager");
+    this.arrowManager = new ArrowManager(this.renderer.getScene());
+    this.arrowManager.setPlayerHitHandler((hit) => {
+      if (useGameStore.getState().isDead) return;
+      useGameStore.getState().damagePlayer(hit.damage, "skeleton");
+      this.player?.applyKnockback(hit.fromX, hit.fromZ, 3);
+      this.hungerExhaustion += 1;
+    });
 
     // Get light references from scene for day/night updates
     this.renderer.getScene().traverse((obj) => {
@@ -920,8 +931,20 @@ export class Engine {
         // Exhaustion from taking damage (mild)
         this.hungerExhaustion += 1;
       },
-      creative
+      creative,
+      (origin, target, damage, ownerId) => {
+        this.arrowManager?.spawnAimed(origin, target, 24, damage, ownerId);
+      },
     );
+
+    // Update arrows (skip in creative: arrows that were already in flight just expire)
+    if (this.arrowManager && this.chunkManager) {
+      this.arrowManager.update(
+        dt,
+        this.player!.position,
+        (x, y, z) => this.chunkManager!.getBlock(x, y, z),
+      );
+    }
 
     // Hunger mechanics — skip entirely in creative (no hunger drain, no starvation)
     if (creative) {
@@ -1078,6 +1101,7 @@ export class Engine {
     this.breakOverlay?.dispose();
     this.itemDrops?.dispose();
     this.mobManager?.dispose();
+    this.arrowManager?.dispose();
     this.playerModel?.dispose();
     this.chunkManager?.dispose();
     this.renderer?.dispose();
