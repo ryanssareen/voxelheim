@@ -36,6 +36,7 @@ import type {
   MultiplayerConnection,
   MultiplayerDropEvent,
   MultiplayerDropState,
+  MultiplayerHitEvent,
   MultiplayerIdentity,
   MultiplayerPlayerState,
   MultiplayerSessionMeta,
@@ -58,10 +59,15 @@ type LocalMessage =
   | { type: "block-state"; payload: MultiplayerBlockState }
   | { type: "drop-upsert"; payload: MultiplayerDropState }
   | { type: "drop-remove"; dropId: string }
-  | { type: "chat"; payload: MultiplayerChatMessage };
+  | { type: "chat"; payload: MultiplayerChatMessage }
+  | { type: "hit"; payload: MultiplayerHitEvent };
 
 function makeChatId(playerId: string): string {
   return `${playerId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeHitId(attackerId: string): string {
+  return `${attackerId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function sessionStorageKey(code: string): string {
@@ -194,6 +200,9 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
   private readonly chatListeners = new Set<
     (message: MultiplayerChatMessage) => void
   >();
+  private readonly hitListeners = new Set<
+    (hit: MultiplayerHitEvent) => void
+  >();
   private readonly playerStates = new Map<string, MultiplayerPlayerState>();
   private latestLocalState: MultiplayerPlayerState | null = null;
 
@@ -279,6 +288,27 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
       type: "chat",
       payload: next,
     } satisfies LocalMessage);
+  }
+
+  subscribeHits(
+    callback: (hit: MultiplayerHitEvent) => void
+  ): () => void {
+    this.hitListeners.add(callback);
+    return () => {
+      this.hitListeners.delete(callback);
+    };
+  }
+
+  async sendHit(
+    hit: Omit<MultiplayerHitEvent, "id" | "createdAt">
+  ): Promise<void> {
+    const next: MultiplayerHitEvent = {
+      ...hit,
+      id: makeHitId(hit.attackerId),
+      createdAt: Date.now(),
+    };
+    // Don't loop back to sender; only broadcast
+    this.channel.postMessage({ type: "hit", payload: next } satisfies LocalMessage);
   }
 
   async setPlayerState(
@@ -398,6 +428,11 @@ class LocalMultiplayerConnection implements MultiplayerConnection {
 
     if (message.type === "chat") {
       for (const listener of this.chatListeners) listener(message.payload);
+      return;
+    }
+
+    if (message.type === "hit") {
+      for (const listener of this.hitListeners) listener(message.payload);
     }
   };
 
@@ -444,15 +479,20 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
   private readonly chatListeners = new Set<
     (message: MultiplayerChatMessage) => void
   >();
+  private readonly hitListeners = new Set<
+    (hit: MultiplayerHitEvent) => void
+  >();
   private readonly cleanup: Array<() => void> = [];
   private latestPlayers: MultiplayerPlayerState[] = [];
   private chatSubscribedAt = Date.now();
+  private hitSubscribedAt = Date.now();
   private readonly playerDocRef;
   private readonly playersColRef;
   private readonly blocksColRef;
   private readonly dropsColRef;
   private readonly worldStateColRef;
   private readonly chatColRef;
+  private readonly hitsColRef;
 
   constructor(
     readonly session: MultiplayerSessionMeta,
@@ -496,6 +536,12 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
       session.code,
       "chat"
     );
+    this.hitsColRef = collection(
+      database,
+      "multiplayerSessions",
+      session.code,
+      "hits"
+    );
 
     this.cleanup.push(
       onSnapshot(this.chatColRef, (snapshot) => {
@@ -505,6 +551,17 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
           // Ignore historical messages that landed before this client subscribed
           if (payload.createdAt < this.chatSubscribedAt - 2000) continue;
           for (const listener of this.chatListeners) listener(payload);
+        }
+      })
+    );
+
+    this.cleanup.push(
+      onSnapshot(this.hitsColRef, (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === "removed") continue;
+          const payload = change.doc.data() as MultiplayerHitEvent;
+          if (payload.createdAt < this.hitSubscribedAt - 2000) continue;
+          for (const listener of this.hitListeners) listener(payload);
         }
       })
     );
@@ -606,6 +663,27 @@ class CloudMultiplayerConnection implements MultiplayerConnection {
     await setDoc(doc(this.chatColRef, payload.id), payload);
   }
 
+  subscribeHits(
+    callback: (hit: MultiplayerHitEvent) => void
+  ): () => void {
+    this.hitListeners.add(callback);
+    this.hitSubscribedAt = Date.now();
+    return () => {
+      this.hitListeners.delete(callback);
+    };
+  }
+
+  async sendHit(
+    hit: Omit<MultiplayerHitEvent, "id" | "createdAt">
+  ): Promise<void> {
+    const payload: MultiplayerHitEvent = {
+      ...hit,
+      id: makeHitId(hit.attackerId),
+      createdAt: Date.now(),
+    };
+    await setDoc(doc(this.hitsColRef, payload.id), payload);
+  }
+
   async setPlayerState(
     state: Omit<MultiplayerPlayerState, "updatedAt">
   ): Promise<void> {
@@ -696,14 +774,19 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
   private readonly chatListeners = new Set<
     (message: MultiplayerChatMessage) => void
   >();
+  private readonly hitListeners = new Set<
+    (hit: MultiplayerHitEvent) => void
+  >();
   private readonly cleanup: Array<() => void> = [];
   private readonly playerStates = new Map<string, MultiplayerPlayerState>();
   private chatSubscribedAt = Date.now();
+  private hitSubscribedAt = Date.now();
 
   private readonly playersRef: DatabaseReference;
   private readonly blocksRef: DatabaseReference;
   private readonly dropsRef: DatabaseReference;
   private readonly chatRef: DatabaseReference;
+  private readonly hitsRef: DatabaseReference;
   private readonly worldStateRef: DatabaseReference;
   private readonly playerRef: DatabaseReference;
 
@@ -717,6 +800,7 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
     this.blocksRef = rtdbRef(database, `multiplayerSessions/${session.code}/blocks`);
     this.dropsRef = rtdbRef(database, `multiplayerSessions/${session.code}/drops`);
     this.chatRef = rtdbRef(database, `multiplayerSessions/${session.code}/chat`);
+    this.hitsRef = rtdbRef(database, `multiplayerSessions/${session.code}/hits`);
     this.worldStateRef = rtdbRef(database, `multiplayerSessions/${session.code}/worldState`);
     this.playerRef = rtdbRef(database, `multiplayerSessions/${session.code}/players/${identity.playerId}`);
 
@@ -776,6 +860,15 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
       for (const listener of this.chatListeners) listener(payload);
     });
     this.cleanup.push(() => off(this.chatRef, "child_added", onChatAdd));
+
+    // Subscribe to hit events
+    const onHitAdd = onChildAdded(this.hitsRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const payload = snapshot.val() as MultiplayerHitEvent;
+      if (payload.createdAt < this.hitSubscribedAt - 2000) return;
+      for (const listener of this.hitListeners) listener(payload);
+    });
+    this.cleanup.push(() => off(this.hitsRef, "child_added", onHitAdd));
   }
 
   subscribePlayers(callback: (players: MultiplayerPlayerState[]) => void): () => void {
@@ -811,6 +904,27 @@ class RtdbMultiplayerConnection implements MultiplayerConnection {
     const target = rtdbRef(
       this.database,
       `multiplayerSessions/${this.session.code}/chat/${payload.id}`
+    );
+    await rtdbSet(target, payload);
+  }
+
+  subscribeHits(callback: (hit: MultiplayerHitEvent) => void): () => void {
+    this.hitListeners.add(callback);
+    this.hitSubscribedAt = Date.now();
+    return () => { this.hitListeners.delete(callback); };
+  }
+
+  async sendHit(
+    hit: Omit<MultiplayerHitEvent, "id" | "createdAt">
+  ): Promise<void> {
+    const payload: MultiplayerHitEvent = {
+      ...hit,
+      id: makeHitId(hit.attackerId),
+      createdAt: Date.now(),
+    };
+    const target = rtdbRef(
+      this.database,
+      `multiplayerSessions/${this.session.code}/hits/${payload.id}`
     );
     await rtdbSet(target, payload);
   }

@@ -327,6 +327,62 @@ export const RECIPES_3x3: CraftingRecipe3x3[] = [
     count: 1,
     name: "Diamond Sword",
   },
+
+  // ───────────── Iron Armor ─────────────
+  // Iron Helmet: 5 ingots (top row + sides of middle)
+  {
+    grid: [I, I, I, I, _, I, _, _, _],
+    result: BLOCK_ID.IRON_HELMET,
+    count: 1,
+    name: "Iron Helmet",
+  },
+  // Iron Chestplate: 8 ingots
+  {
+    grid: [I, _, I, I, I, I, I, I, I],
+    result: BLOCK_ID.IRON_CHESTPLATE,
+    count: 1,
+    name: "Iron Chestplate",
+  },
+  // Iron Leggings: 7 ingots
+  {
+    grid: [I, I, I, I, _, I, I, _, I],
+    result: BLOCK_ID.IRON_LEGGINGS,
+    count: 1,
+    name: "Iron Leggings",
+  },
+  // Iron Boots: 4 ingots
+  {
+    grid: [_, _, _, I, _, I, I, _, I],
+    result: BLOCK_ID.IRON_BOOTS,
+    count: 1,
+    name: "Iron Boots",
+  },
+
+  // ───────────── Diamond Armor ─────────────
+  {
+    grid: [DM, DM, DM, DM, _, DM, _, _, _],
+    result: BLOCK_ID.DIAMOND_HELMET,
+    count: 1,
+    name: "Diamond Helmet",
+  },
+  {
+    grid: [DM, _, DM, DM, DM, DM, DM, DM, DM],
+    result: BLOCK_ID.DIAMOND_CHESTPLATE,
+    count: 1,
+    name: "Diamond Chestplate",
+  },
+  {
+    grid: [DM, DM, DM, DM, _, DM, DM, _, DM],
+    result: BLOCK_ID.DIAMOND_LEGGINGS,
+    count: 1,
+    name: "Diamond Leggings",
+  },
+  {
+    grid: [_, _, _, DM, _, DM, DM, _, DM],
+    result: BLOCK_ID.DIAMOND_BOOTS,
+    count: 1,
+    name: "Diamond Boots",
+  },
 ];
 
 /** Shift non-empty cells to top-left corner so recipes match in any position. */

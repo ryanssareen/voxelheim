@@ -1,4 +1,7 @@
 import { create } from "zustand";
+import { getArmorDef } from "@data/items";
+import { useHotbarStore } from "@store/useHotbarStore";
+import { BLOCK_ID } from "@data/blocks";
 
 export type DeathCause =
   | "void"
@@ -142,8 +145,35 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   damagePlayer: (amount: number, cause?: DeathCause) => {
     if (get().gameMode === "creative") return;
+
+    // Apply armor damage reduction (starvation & void bypass armor)
+    const bypassArmor = cause === "starvation" || cause === "void";
+    let finalAmount = amount;
+    if (!bypassArmor) {
+      const armor = useHotbarStore.getState().armor;
+      let reduction = 0;
+      for (const slot of armor) {
+        if (slot.count > 0) {
+          const def = getArmorDef(slot.blockId);
+          if (def) reduction += def.damageReduction;
+        }
+      }
+      reduction = Math.min(0.8, reduction);
+      finalAmount = Math.max(1, Math.round(amount * (1 - reduction)));
+      // Wear armor durability — 1 point per damage event per worn piece
+      if (reduction > 0) {
+        const newArmor = armor.map((slot) => {
+          if (slot.count <= 0 || slot.durability === undefined) return slot;
+          const nextDur = slot.durability - 1;
+          if (nextDur <= 0) return { blockId: BLOCK_ID.AIR, count: 0 };
+          return { ...slot, durability: nextDur };
+        });
+        useHotbarStore.setState({ armor: newArmor });
+      }
+    }
+
     const { health } = get();
-    const newHealth = Math.max(0, health - amount);
+    const newHealth = Math.max(0, health - finalAmount);
     set({ health: newHealth, lastDamageTime: performance.now(), lastDamageCause: cause ?? get().lastDamageCause });
     if (newHealth <= 0) {
       const deathCause = cause ?? get().lastDamageCause ?? "void";

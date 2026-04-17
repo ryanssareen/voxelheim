@@ -62,6 +62,18 @@ export interface MultiplayerChatMessage {
   createdAt: number;
 }
 
+/** Transient combat event — one player hitting another. Not persisted. */
+export interface MultiplayerHitEvent {
+  id: string;
+  attackerId: string;
+  attackerName: string;
+  targetId: string;
+  damage: number;
+  fromX: number;
+  fromZ: number;
+  createdAt: number;
+}
+
 export interface MultiplayerIdentity {
   playerId: string;
   name: string;
@@ -89,6 +101,12 @@ export interface MultiplayerConnection {
   subscribeChat: (
     callback: (message: MultiplayerChatMessage) => void
   ) => () => void;
+  subscribeHits: (
+    callback: (hit: MultiplayerHitEvent) => void
+  ) => () => void;
+  sendHit: (
+    hit: Omit<MultiplayerHitEvent, "id" | "createdAt">
+  ) => Promise<void>;
   setPlayerState: (
     state: Omit<MultiplayerPlayerState, "updatedAt">
   ) => Promise<void>;

@@ -136,7 +136,61 @@ export class MultiplayerManager {
       })
     );
 
+    this.cleanup.push(
+      connection.subscribeHits((hit) => {
+        // Ignore hits targeted at others — only apply damage if we're the target
+        if (hit.targetId !== this.playerId) return;
+        this.onHitReceived?.(hit);
+      })
+    );
+
     return connection.session;
+  }
+
+  onHitReceived: ((hit: import("@lib/multiplayer/types").MultiplayerHitEvent) => void) | null = null;
+
+  /** Raycast against remote avatars — returns the nearest one hit within range, if any. */
+  hitTestRemote(
+    origin: { x: number; y: number; z: number },
+    dir: { x: number; y: number; z: number },
+    maxDist: number
+  ): { playerId: string; name: string; position: { x: number; y: number; z: number } } | null {
+    let best: { playerId: string; name: string; position: { x: number; y: number; z: number }; t: number } | null = null;
+    const HALF_WIDTH = 0.4;
+    const HEIGHT = 1.9;
+    for (const [playerId, avatar] of this.avatars) {
+      const pos = avatar.group.position;
+      const minX = pos.x - HALF_WIDTH;
+      const maxX = pos.x + HALF_WIDTH;
+      const minY = pos.y;
+      const maxY = pos.y + HEIGHT;
+      const minZ = pos.z - HALF_WIDTH;
+      const maxZ = pos.z + HALF_WIDTH;
+      const t = rayAabb(origin, dir, minX, minY, minZ, maxX, maxY, maxZ);
+      if (t !== null && t >= 0 && t <= maxDist && (!best || t < best.t)) {
+        // Get player name from the avatar's state — fall back to playerId
+        const state = useMultiplayerStore.getState().players.find(p => p.playerId === playerId);
+        best = {
+          playerId,
+          name: state?.name ?? playerId,
+          position: { x: pos.x, y: pos.y, z: pos.z },
+          t,
+        };
+      }
+    }
+    return best ? { playerId: best.playerId, name: best.name, position: best.position } : null;
+  }
+
+  sendPlayerHit(targetId: string, damage: number, fromX: number, fromZ: number): void {
+    if (!this.connection) return;
+    void this.connection.sendHit({
+      attackerId: this.playerId,
+      attackerName: this.playerName,
+      targetId,
+      damage,
+      fromX,
+      fromZ,
+    });
   }
 
   get localPlayerName(): string {
@@ -255,6 +309,8 @@ export class MultiplayerManager {
     useChatStore.getState().clear();
   }
 
+  // ------------------------------------------------------------------
+
   private syncRemotePlayers(players: MultiplayerPlayerState[]): void {
     const remoteIds = new Set<string>();
 
@@ -279,4 +335,32 @@ export class MultiplayerManager {
       this.avatars.delete(playerId);
     }
   }
+}
+
+/** Slab ray-vs-AABB test. Returns t along the ray, or null if no intersection. */
+function rayAabb(
+  origin: { x: number; y: number; z: number },
+  dir: { x: number; y: number; z: number },
+  minX: number, minY: number, minZ: number,
+  maxX: number, maxY: number, maxZ: number
+): number | null {
+  let tmin = -Infinity;
+  let tmax = Infinity;
+  for (const axis of ["x", "y", "z"] as const) {
+    const o = origin[axis];
+    const d = dir[axis];
+    const lo = axis === "x" ? minX : axis === "y" ? minY : minZ;
+    const hi = axis === "x" ? maxX : axis === "y" ? maxY : maxZ;
+    if (Math.abs(d) < 1e-8) {
+      if (o < lo || o > hi) return null;
+      continue;
+    }
+    let t1 = (lo - o) / d;
+    let t2 = (hi - o) / d;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tmin) tmin = t1;
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return null;
+  }
+  return tmin >= 0 ? tmin : (tmax >= 0 ? tmax : null);
 }

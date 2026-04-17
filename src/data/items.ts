@@ -168,6 +168,49 @@ export function getToolDef(itemId: number): ToolDef | null {
   return TOOL_DEFS[itemId] ?? null;
 }
 
+// ────────────── Armor ──────────────
+
+export type ArmorSlot = "helmet" | "chestplate" | "leggings" | "boots";
+export type ArmorMaterial = "iron" | "diamond";
+
+export interface ArmorDef {
+  itemId: number;
+  slot: ArmorSlot;
+  material: ArmorMaterial;
+  /** Fraction of incoming damage blocked (0..1). Full set = sum of pieces. */
+  damageReduction: number;
+  durability: number;
+}
+
+export const ARMOR_DEFS: Record<number, ArmorDef> = {
+  // Iron: ~60% damage reduction for a full set
+  [BLOCK_ID.IRON_HELMET]:     { itemId: BLOCK_ID.IRON_HELMET,     slot: "helmet",     material: "iron", damageReduction: 0.12, durability: 165 },
+  [BLOCK_ID.IRON_CHESTPLATE]: { itemId: BLOCK_ID.IRON_CHESTPLATE, slot: "chestplate", material: "iron", damageReduction: 0.24, durability: 240 },
+  [BLOCK_ID.IRON_LEGGINGS]:   { itemId: BLOCK_ID.IRON_LEGGINGS,   slot: "leggings",   material: "iron", damageReduction: 0.18, durability: 225 },
+  [BLOCK_ID.IRON_BOOTS]:      { itemId: BLOCK_ID.IRON_BOOTS,      slot: "boots",      material: "iron", damageReduction: 0.09, durability: 195 },
+  // Diamond: ~80% damage reduction for a full set
+  [BLOCK_ID.DIAMOND_HELMET]:     { itemId: BLOCK_ID.DIAMOND_HELMET,     slot: "helmet",     material: "diamond", damageReduction: 0.15, durability: 363 },
+  [BLOCK_ID.DIAMOND_CHESTPLATE]: { itemId: BLOCK_ID.DIAMOND_CHESTPLATE, slot: "chestplate", material: "diamond", damageReduction: 0.32, durability: 528 },
+  [BLOCK_ID.DIAMOND_LEGGINGS]:   { itemId: BLOCK_ID.DIAMOND_LEGGINGS,   slot: "leggings",   material: "diamond", damageReduction: 0.24, durability: 495 },
+  [BLOCK_ID.DIAMOND_BOOTS]:      { itemId: BLOCK_ID.DIAMOND_BOOTS,      slot: "boots",      material: "diamond", damageReduction: 0.12, durability: 429 },
+};
+
+export function isArmorItem(itemId: number): boolean {
+  return itemId in ARMOR_DEFS;
+}
+
+export function getArmorDef(itemId: number): ArmorDef | null {
+  return ARMOR_DEFS[itemId] ?? null;
+}
+
+export function getArmorSlotIndex(slot: ArmorSlot): number {
+  // Matches useHotbarStore armor array: [helmet, chest, legs, boots]
+  if (slot === "helmet") return 0;
+  if (slot === "chestplate") return 1;
+  if (slot === "leggings") return 2;
+  return 3;
+}
+
 export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.AIR]: "Air",
   [BLOCK_ID.GRASS]: "Grass",
@@ -211,6 +254,14 @@ export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.WATER]: "Water",
   [BLOCK_ID.SNOW]: "Snow",
   [BLOCK_ID.ICE]: "Ice",
+  [BLOCK_ID.IRON_HELMET]: "Iron Helmet",
+  [BLOCK_ID.IRON_CHESTPLATE]: "Iron Chestplate",
+  [BLOCK_ID.IRON_LEGGINGS]: "Iron Leggings",
+  [BLOCK_ID.IRON_BOOTS]: "Iron Boots",
+  [BLOCK_ID.DIAMOND_HELMET]: "Diamond Helmet",
+  [BLOCK_ID.DIAMOND_CHESTPLATE]: "Diamond Chestplate",
+  [BLOCK_ID.DIAMOND_LEGGINGS]: "Diamond Leggings",
+  [BLOCK_ID.DIAMOND_BOOTS]: "Diamond Boots",
 };
 
 /** Numeric hex colors for Three.js renderers (hand, offhand, item drops). */
@@ -256,6 +307,14 @@ export const BLOCK_HEX_COLORS: Record<number, number> = {
   [BLOCK_ID.WATER]: 0x3366ff,
   [BLOCK_ID.SNOW]: 0xf0f0ff,
   [BLOCK_ID.ICE]: 0xa0d0ff,
+  [BLOCK_ID.IRON_HELMET]: 0xc0c0c0,
+  [BLOCK_ID.IRON_CHESTPLATE]: 0xc0c0c0,
+  [BLOCK_ID.IRON_LEGGINGS]: 0xc0c0c0,
+  [BLOCK_ID.IRON_BOOTS]: 0xc0c0c0,
+  [BLOCK_ID.DIAMOND_HELMET]: 0x55cccc,
+  [BLOCK_ID.DIAMOND_CHESTPLATE]: 0x55cccc,
+  [BLOCK_ID.DIAMOND_LEGGINGS]: 0x55cccc,
+  [BLOCK_ID.DIAMOND_BOOTS]: 0x55cccc,
 };
 
 export const ITEM_COLORS: Record<number, string> = {
@@ -300,4 +359,12 @@ export const ITEM_COLORS: Record<number, string> = {
   [BLOCK_ID.WATER]: "#3366ff",
   [BLOCK_ID.SNOW]: "#f0f0ff",
   [BLOCK_ID.ICE]: "#a0d0ff",
+  [BLOCK_ID.IRON_HELMET]: "#c0c0c0",
+  [BLOCK_ID.IRON_CHESTPLATE]: "#c0c0c0",
+  [BLOCK_ID.IRON_LEGGINGS]: "#c0c0c0",
+  [BLOCK_ID.IRON_BOOTS]: "#c0c0c0",
+  [BLOCK_ID.DIAMOND_HELMET]: "#55cccc",
+  [BLOCK_ID.DIAMOND_CHESTPLATE]: "#55cccc",
+  [BLOCK_ID.DIAMOND_LEGGINGS]: "#55cccc",
+  [BLOCK_ID.DIAMOND_BOOTS]: "#55cccc",
 };

@@ -75,6 +75,14 @@ export const BLOCK_ID = {
   WATER: 39,
   SNOW: 40,
   ICE: 41,
+  IRON_HELMET: 42,
+  IRON_CHESTPLATE: 43,
+  IRON_LEGGINGS: 44,
+  IRON_BOOTS: 45,
+  DIAMOND_HELMET: 46,
+  DIAMOND_CHESTPLATE: 47,
+  DIAMOND_LEGGINGS: 48,
+  DIAMOND_BOOTS: 49,
 } as const;
 
 /** All block definitions indexed by their ID. */
@@ -378,5 +386,62 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: true, transparent: true, breakable: true,
     textures: { top: "ice", bottom: "ice", side: "ice" },
     special: "none", breakTime: 0.5, dropId: BLOCK_ID.ICE,
+  },
+  // Armor items — non-placeable, non-solid. Rendered in inventory & on player model.
+  {
+    id: BLOCK_ID.IRON_HELMET,
+    name: "Iron Helmet",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.IRON_HELMET,
+  },
+  {
+    id: BLOCK_ID.IRON_CHESTPLATE,
+    name: "Iron Chestplate",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.IRON_CHESTPLATE,
+  },
+  {
+    id: BLOCK_ID.IRON_LEGGINGS,
+    name: "Iron Leggings",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.IRON_LEGGINGS,
+  },
+  {
+    id: BLOCK_ID.IRON_BOOTS,
+    name: "Iron Boots",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.IRON_BOOTS,
+  },
+  {
+    id: BLOCK_ID.DIAMOND_HELMET,
+    name: "Diamond Helmet",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.DIAMOND_HELMET,
+  },
+  {
+    id: BLOCK_ID.DIAMOND_CHESTPLATE,
+    name: "Diamond Chestplate",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.DIAMOND_CHESTPLATE,
+  },
+  {
+    id: BLOCK_ID.DIAMOND_LEGGINGS,
+    name: "Diamond Leggings",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.DIAMOND_LEGGINGS,
+  },
+  {
+    id: BLOCK_ID.DIAMOND_BOOTS,
+    name: "Diamond Boots",
+    solid: false, transparent: true, breakable: false,
+    textures: { top: "", bottom: "", side: "" },
+    special: "none", breakTime: 0, dropId: BLOCK_ID.DIAMOND_BOOTS,
   },
 ];

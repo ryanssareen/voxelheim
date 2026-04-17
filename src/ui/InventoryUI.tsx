@@ -10,7 +10,7 @@ import {
   type ItemStack,
 } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
-import { getToolDef } from "@data/items";
+import { getToolDef, getArmorDef, getArmorSlotIndex } from "@data/items";
 import { findRecipe } from "@systems/crafting/recipes";
 import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
 
@@ -80,23 +80,42 @@ export function InventoryUI() {
   );
 
   const handleArmorClick = useCallback((index: number) => {
-    // Armor slots are cosmetic for now — no functional armor
     const store = useHotbarStore.getState();
     const invStore = useInventoryStore.getState();
     const slot = store.armor[index];
     const cursor = invStore.cursorItem;
+
+    // Only accept armor items that match this slot type
+    const cursorArmor = cursor.count > 0 ? getArmorDef(cursor.blockId) : null;
+    const cursorFits = cursorArmor !== null && getArmorSlotIndex(cursorArmor.slot) === index;
 
     if (cursor.count === 0 && slot.count > 0) {
       invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       const newArmor = [...store.armor];
       newArmor[index] = { blockId: BLOCK_ID.AIR, count: 0 };
       useHotbarStore.setState({ armor: newArmor });
-    } else if (cursor.count > 0 && slot.count === 0 && !getToolDef(cursor.blockId)) {
+    } else if (cursor.count > 0 && slot.count === 0 && cursorFits) {
       const newArmor = [...store.armor];
-      newArmor[index] = { blockId: cursor.blockId, count: 1, durability: cursor.durability };
+      const def = getArmorDef(cursor.blockId);
+      newArmor[index] = {
+        blockId: cursor.blockId,
+        count: 1,
+        durability: cursor.durability ?? def?.durability,
+      };
       if (cursor.count === 1) invStore.clearCursor();
       else invStore.setCursorItem(cursor.blockId, cursor.count - 1, cursor.durability);
       useHotbarStore.setState({ armor: newArmor });
+    } else if (cursor.count > 0 && slot.count > 0 && cursorFits) {
+      // Swap
+      const newArmor = [...store.armor];
+      const def = getArmorDef(cursor.blockId);
+      newArmor[index] = {
+        blockId: cursor.blockId,
+        count: 1,
+        durability: cursor.durability ?? def?.durability,
+      };
+      useHotbarStore.setState({ armor: newArmor });
+      invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
     }
   }, []);
 

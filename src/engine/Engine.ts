@@ -243,6 +243,14 @@ export class Engine {
           this.multiplayer?.claimDrop(dropId) ?? Promise.resolve(true),
       });
 
+      // Friendly fire: take damage when another player hits us
+      this.multiplayer.onHitReceived = (hit) => {
+        if (useGameStore.getState().isDead) return;
+        useGameStore.getState().damagePlayer(hit.damage);
+        useGameStore.setState({ lastDamageTime: performance.now() });
+        this.player?.applyKnockback(hit.fromX, hit.fromZ, 5);
+      };
+
       this.dayNight.timeOfDay =
         ((Date.now() - session.createdAt) / 600_000) % 1;
     }
@@ -400,7 +408,6 @@ export class Engine {
             this.player.position = { x: this.spawn.x + dx, y: sy, z: this.spawn.z + dz };
             this.player.velocity = { x: 0, y: 0, z: 0 };
             this.player.onGround = false;
-            useHotbarStore.getState().resetSlots();
             useGameStore.getState().respawnPlayer();
             this.hungerExhaustion = 0;
             this.passiveHungerTimer = 0;
@@ -426,6 +433,40 @@ export class Engine {
     this.fallStartY = 0;
     this.wasFalling = false;
     this.wasDead = false;
+  }
+
+  private dropInventoryAtPlayer(): void {
+    // Creative mode never drops items
+    if (this.gameMode === "creative") return;
+    if (!this.player || !this.itemDrops) return;
+
+    const hotbar = useHotbarStore.getState();
+    const drops: Array<{ blockId: number; count: number }> = [];
+    for (const slot of hotbar.slots) {
+      if (slot.count > 0 && slot.blockId !== 0) drops.push({ blockId: slot.blockId, count: slot.count });
+    }
+    for (const slot of hotbar.armor) {
+      if (slot.count > 0 && slot.blockId !== 0) drops.push({ blockId: slot.blockId, count: slot.count });
+    }
+    if (hotbar.offhand.count > 0 && hotbar.offhand.blockId !== 0) {
+      drops.push({ blockId: hotbar.offhand.blockId, count: hotbar.offhand.count });
+    }
+
+    const px = this.player.position.x;
+    const py = this.player.position.y + 0.5;
+    const pz = this.player.position.z;
+
+    for (const { blockId, count } of drops) {
+      // Spawn one drop per item in the stack so piles look right
+      for (let i = 0; i < count; i++) {
+        const offX = (Math.random() - 0.5) * 0.6;
+        const offZ = (Math.random() - 0.5) * 0.6;
+        this.itemDrops.spawnDrop(blockId, px + offX, py, pz + offZ, 1.0);
+      }
+    }
+
+    // Clear inventory now that it's on the ground
+    useHotbarStore.getState().resetSlots();
   }
 
   private broadcastDeathMessage(rawMessage: string): void {
@@ -494,10 +535,11 @@ export class Engine {
     }
 
     const state = useGameStore.getState();
-    // Detect fresh death transitions and broadcast a chat message
+    // Detect fresh death transitions — broadcast chat + drop inventory
     if (state.isDead && !this.wasDead) {
       this.wasDead = true;
       this.broadcastDeathMessage(state.deathMessage);
+      this.dropInventoryAtPlayer();
     } else if (!state.isDead && this.wasDead) {
       this.wasDead = false;
     }
@@ -774,7 +816,47 @@ export class Engine {
       }
     }
 
-    if (hitMob && isLeftHeld && this.playerAttackCooldown <= 0) {
+    // Check remote player hit (friendly fire) — only if no mob is closer
+    let hitRemotePlayer: { playerId: string; name: string; position: { x: number; y: number; z: number } } | null = null;
+    if (isLeftHeld && this.multiplayer) {
+      const remote = this.multiplayer.hitTestRemote(eyePos, lookDir, 5);
+      if (remote) {
+        // If we hit a mob too, take whichever is closer
+        if (hitMob) {
+          const mobDist = Math.sqrt(
+            (hitMob.position.x - eyePos.x) ** 2 +
+            (hitMob.position.y + hitMob.config.height / 2 - eyePos.y) ** 2 +
+            (hitMob.position.z - eyePos.z) ** 2
+          );
+          const remoteDist = Math.sqrt(
+            (remote.position.x - eyePos.x) ** 2 +
+            (remote.position.y + 1 - eyePos.y) ** 2 +
+            (remote.position.z - eyePos.z) ** 2
+          );
+          if (remoteDist < mobDist) {
+            hitRemotePlayer = remote;
+            hitMob = null;
+          }
+        } else {
+          hitRemotePlayer = remote;
+        }
+      }
+    }
+
+    if (hitRemotePlayer && isLeftHeld && this.playerAttackCooldown <= 0 && !hitMob) {
+      const toolDef = getToolDef(selectedBlockId);
+      const damage = toolDef ? toolDef.attackDamage : 1;
+      this.multiplayer!.sendPlayerHit(
+        hitRemotePlayer.playerId,
+        damage,
+        this.player!.position.x,
+        this.player!.position.z
+      );
+      this.playerAttackCooldown = 0.4;
+      if (toolDef) {
+        useHotbarStore.getState().damageSelectedTool();
+      }
+    } else if (hitMob && isLeftHeld && this.playerAttackCooldown <= 0) {
       const toolDef = getToolDef(selectedBlockId);
       const damage = toolDef ? toolDef.attackDamage : 1;
       hitMob.takeDamage(damage, { x: this.player!.position.x, z: this.player!.position.z });
@@ -784,11 +866,11 @@ export class Engine {
       }
     }
 
-    // Only break blocks if we didn't hit a mob
+    // Only break blocks if we didn't hit a mob or player
     const breakState = this.blockInteraction!.update(
       this.player!.position,
       lookDir,
-      isLeftHeld && !hitMob,
+      isLeftHeld && !hitMob && !hitRemotePlayer,
       rightClick,
       selectedBlockId,
       dt,
