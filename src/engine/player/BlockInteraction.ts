@@ -38,6 +38,7 @@ export class BlockInteraction {
   private breakingPos: { x: number; y: number; z: number } | null = null;
   private breakProgress = 0;
   private breakBlockId = 0;
+  private creativeCooldown = 0;
 
   constructor(chunkManager: ChunkManager, registry: BlockRegistry, itemDrops: ItemDropManager) {
     this.chunkManager = chunkManager;
@@ -97,8 +98,11 @@ export class BlockInteraction {
   ): BreakState {
     const target = this.getTargetBlock(playerPos, lookDir);
 
-    // --- Creative: instant break, no drops, no tool damage ---
-    if (creative && isLeftHeld && target.hit && target.blockPos) {
+    // --- Creative: instant break with cooldown to prevent sweeping ---
+    if (creative) {
+      this.creativeCooldown = Math.max(0, this.creativeCooldown - dt);
+    }
+    if (creative && isLeftHeld && target.hit && target.blockPos && this.creativeCooldown <= 0) {
       const bp = target.blockPos;
       const blockDef = this.registry.getBlock(target.blockId!);
       if (blockDef && blockDef.breakable) {
@@ -106,6 +110,7 @@ export class BlockInteraction {
         if (target.blockId === BLOCK_ID.CRYSTAL) {
           useGameStore.getState().collectShard();
         }
+        this.creativeCooldown = 0.2; // 200ms between breaks
       }
       this.breakingPos = null;
       this.breakProgress = 0;

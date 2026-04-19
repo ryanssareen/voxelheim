@@ -282,10 +282,14 @@ export class PlayerController {
           const candidates: Array<{ pen: number; axis: "x" | "y" | "z"; dir: number; push: number }> = [
             { pen: (bx + 1) - minX, axis: "x", dir: 1, push: (bx + 1) + HALF_WIDTH + EPS },
             { pen: maxX - bx, axis: "x", dir: -1, push: bx - HALF_WIDTH - EPS },
-            { pen: maxY - by, axis: "y", dir: -1, push: by - h },
             { pen: (bz + 1) - minZ, axis: "z", dir: 1, push: (bz + 1) + HALF_WIDTH + EPS },
             { pen: maxZ - bz, axis: "z", dir: -1, push: bz - HALF_WIDTH - EPS },
           ];
+          // Only allow downward push if NOT on ground — pushing down while
+          // standing on a floor teleports the player underground.
+          if (!this.onGround) {
+            candidates.push({ pen: maxY - by, axis: "y", dir: -1, push: by - h });
+          }
           for (const c of candidates) {
             // pen > EPS filters out point-touching (zero-area overlap) at boundaries
             if (c.pen > EPS && c.pen < bestPen) {
@@ -305,6 +309,23 @@ export class PlayerController {
         this.velocity.y = 0;
       }
       // X/Z pushes: leave onGround unchanged — no free jumps from wall clips
+
+      // Floor safety: if the push placed feet inside a solid block, snap up
+      const footY = Math.floor(this.position.y);
+      const footMinX = Math.floor(this.position.x - HALF_WIDTH);
+      const footMaxX = Math.floor(this.position.x + HALF_WIDTH);
+      const footMinZ = Math.floor(this.position.z - HALF_WIDTH);
+      const footMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+      for (let fx = footMinX; fx <= footMaxX; fx++) {
+        for (let fz = footMinZ; fz <= footMaxZ; fz++) {
+          if (registry.isSolid(getBlock(fx, footY, fz))) {
+            this.position.y = footY + 1;
+            this.velocity.y = 0;
+            this.onGround = true;
+            return;
+          }
+        }
+      }
     }
   }
 
