@@ -57,6 +57,16 @@ export class Renderer {
     return this.scene;
   }
 
+  /** Enables distance fog for island worlds to hide terrain edges. */
+  setupIslandFog(worldSizeBlocks: number): void {
+    const farDist = worldSizeBlocks * 0.75;
+    const nearDist = farDist * 0.5;
+    const bgColor = this.scene.background as THREE.Color;
+    this.scene.fog = new THREE.Fog(bgColor.clone(), nearDist, farDist);
+    this.camera.far = worldSizeBlocks + CHUNK_SIZE;
+    this.camera.updateProjectionMatrix();
+  }
+
   /** Enables distance fog for infinite worlds and updates the camera far plane. */
   setupFog(renderDistance: number): void {
     // Fog fully opaque 2 chunks before render distance so chunk edges

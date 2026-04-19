@@ -104,7 +104,9 @@ export function CraftingTableUI() {
     } else if (!isTool && cursor.blockId === recipe.result && cursor.count + recipe.count <= 64) {
       invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
     } else {
-      useHotbarStore.getState().addItem(recipe.result);
+      for (let i = 0; i < recipe.count; i++) {
+        useHotbarStore.getState().addItem(recipe.result);
+      }
     }
     useInventoryStore.setState({ tableGrid: newGrid });
   }, [recipe]);

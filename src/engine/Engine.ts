@@ -28,7 +28,7 @@ import {
   loadWorldChunks,
   type WorldMeta,
 } from "@systems/persistence/WorldStorage";
-import type { WorldType } from "@engine/world/constants";
+import { WORLD_SIZE_BLOCKS, type WorldType } from "@engine/world/constants";
 import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import { getToolDef } from "@data/items";
 
@@ -309,8 +309,10 @@ export class Engine {
 
     this.renderer.resize(this.canvas.clientWidth, this.canvas.clientHeight);
 
-    // Distance fog for streaming worlds (flat + infinite)
-    if (worldType !== "island") {
+    // Distance fog to hide terrain edges
+    if (worldType === "island") {
+      this.renderer.setupIslandFog(WORLD_SIZE_BLOCKS);
+    } else {
       const settings = useSettingsStore.getState();
       this.renderer.setupFog(settings.renderDistance);
     }
