@@ -55,9 +55,10 @@ export class BlockInteraction {
     const eyeY = playerPos.y + EYE_HEIGHT;
     const eyeZ = playerPos.z;
 
-    let prevX = -1;
-    let prevY = -1;
-    let prevZ = -1;
+    let prevX = 0;
+    let prevY = 0;
+    let prevZ = 0;
+    let hasPrev = false;
 
     const steps = Math.ceil(MAX_DISTANCE / STEP_SIZE);
     for (let i = 0; i <= steps; i++) {
@@ -66,14 +67,14 @@ export class BlockInteraction {
       const wy = Math.floor(eyeY + lookDir.y * t);
       const wz = Math.floor(eyeZ + lookDir.z * t);
 
-      if (wx === prevX && wy === prevY && wz === prevZ) continue;
+      if (hasPrev && wx === prevX && wy === prevY && wz === prevZ) continue;
 
       const blockId = this.chunkManager.getBlock(wx, wy, wz);
       if (this.registry.isSolid(blockId)) {
         return {
           hit: true,
           blockPos: { x: wx, y: wy, z: wz },
-          facePos: { x: prevX, y: prevY, z: prevZ },
+          facePos: hasPrev ? { x: prevX, y: prevY, z: prevZ } : undefined,
           blockId,
         };
       }
@@ -81,6 +82,7 @@ export class BlockInteraction {
       prevX = wx;
       prevY = wy;
       prevZ = wz;
+      hasPrev = true;
     }
 
     return { hit: false };
@@ -205,7 +207,7 @@ export class BlockInteraction {
         };
       }
     }
-    if (rightClick && target.hit && target.facePos && target.facePos.x >= 0) {
+    if (rightClick && target.hit && target.facePos) {
       // Check we have items to place
       const hotbar = useHotbarStore.getState();
       const placeId = hotbar.getSelectedBlockId();
