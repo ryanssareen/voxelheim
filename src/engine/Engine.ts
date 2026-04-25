@@ -75,7 +75,6 @@ export class Engine {
   private regenTimer = 0;
   private starvationTimer = 0;
   private stuckTimer = 0;
-  private lastDeathPos: { x: number; y: number; z: number } | null = null;
   private wasDead = false;
   private fallStartY = 0;
   private wasFalling = false;
@@ -378,25 +377,6 @@ export class Engine {
       }
     }
     return this.spawn.y;
-  }
-
-  /** Drop all inventory items at the player's current position. */
-  private dropAllItems(): void {
-    if (!this.itemDrops || !this.player) return;
-    const slots = useHotbarStore.getState().slots;
-    const pos = this.lastDeathPos ?? this.player.position;
-    for (const slot of slots) {
-      if (slot.count <= 0 || slot.blockId === BLOCK_ID.AIR) continue;
-      for (let i = 0; i < slot.count; i++) {
-        this.itemDrops.spawnDrop(
-          slot.blockId,
-          Math.floor(pos.x),
-          Math.floor(pos.y),
-          Math.floor(pos.z),
-          0
-        );
-      }
-    }
   }
 
   /** Respawn after death. Clears inventory. Finds safe spawn if original is void. */
@@ -1011,11 +991,10 @@ export class Engine {
       }
     }
 
-    // Check for health death — drop items at death position
+    // Check for health death — exit pointer lock and persist hardcore state.
+    // Inventory dropping is handled next frame in the wasDead transition (line ~553)
+    // via dropInventoryAtPlayer, which also covers armor + offhand.
     if (useGameStore.getState().isDead && !state.isDead) {
-      this.lastDeathPos = { ...this.player!.position };
-      this.dropAllItems();
-      // Hardcore: save immediately to persist locked state
       if (this.gameMode === "hardcore") {
         void this.save();
       }

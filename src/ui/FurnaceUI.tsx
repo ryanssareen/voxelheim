@@ -42,16 +42,25 @@ export function FurnaceUI() {
     const cursor = invStore.cursorItem;
 
     if (cursor.count === 0 && slot.count > 0) {
+      // Pick up whole slot
       invStore.setCursorItem(slot.blockId, slot.count);
       invStore.setFurnaceSlot(slotIndex, 0, 0);
     } else if (cursor.count > 0 && slot.count === 0) {
-      invStore.setFurnaceSlot(slotIndex, cursor.blockId, 1);
-      if (cursor.count === 1) invStore.clearCursor();
-      else invStore.setCursorItem(cursor.blockId, cursor.count - 1);
+      // Drop whole cursor stack into empty slot
+      invStore.setFurnaceSlot(slotIndex, cursor.blockId, cursor.count);
+      invStore.clearCursor();
     } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId === slot.blockId) {
-      invStore.setFurnaceSlot(slotIndex, slot.blockId, slot.count + 1);
-      if (cursor.count === 1) invStore.clearCursor();
-      else invStore.setCursorItem(cursor.blockId, cursor.count - 1);
+      // Merge cursor stack onto slot (cap at 99 to match inventory UI)
+      const total = slot.count + cursor.count;
+      const fit = Math.min(total, 99);
+      const leftover = total - fit;
+      invStore.setFurnaceSlot(slotIndex, slot.blockId, fit);
+      if (leftover > 0) invStore.setCursorItem(cursor.blockId, leftover);
+      else invStore.clearCursor();
+    } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId !== slot.blockId) {
+      // Swap cursor and slot
+      invStore.setFurnaceSlot(slotIndex, cursor.blockId, cursor.count);
+      invStore.setCursorItem(slot.blockId, slot.count);
     }
   }, []);
 
