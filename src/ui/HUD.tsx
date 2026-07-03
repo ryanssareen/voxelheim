@@ -130,6 +130,7 @@ export function HUD() {
   const maxHealth = useGameStore((s) => s.maxHealth);
   const hunger = useGameStore((s) => s.hunger);
   const maxHunger = useGameStore((s) => s.maxHunger);
+  const minimapVisible = useGameStore((s) => s.minimapVisible);
   const multiplayerSession = useMultiplayerStore((s) => s.session);
   const multiplayerPlayers = useMultiplayerStore((s) => s.players);
   const multiplayerStatus = useMultiplayerStore((s) => s.status);
@@ -187,7 +188,7 @@ export function HUD() {
 
       {(multiplayerSession || multiplayerStatus === "connecting") && (
         <div
-          className="absolute top-3 right-3 px-3 py-2 bg-black/50 border border-white/10 rounded"
+          className={`absolute top-3 ${minimapVisible ? "right-[204px]" : "right-3"} px-3 py-2 bg-black/50 border border-white/10 rounded`}
           style={{ textShadow: "1px 1px 0 #000" }}
         >
           <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-300/90">

@@ -1011,6 +1011,8 @@ async function createCloudSession(
     code: createSessionCode(false),
     seed: input.seed,
     worldType: input.worldType,
+    // Firestore rejects undefined field values — only include when set
+    ...(input.islandSize !== undefined ? { islandSize: input.islandSize } : {}),
     worldName: input.worldName,
     hostName: input.hostName,
     createdAt: Date.now(),
@@ -1029,6 +1031,7 @@ function createLocalSession(input: CreateSessionInput): MultiplayerSessionMeta {
     code: createSessionCode(true),
     seed: input.seed,
     worldType: input.worldType,
+    ...(input.islandSize !== undefined ? { islandSize: input.islandSize } : {}),
     worldName: input.worldName,
     hostName: input.hostName,
     createdAt: Date.now(),
@@ -1043,7 +1046,16 @@ export async function createMultiplayerSession(
   input: CreateSessionInput
 ): Promise<MultiplayerSessionMeta> {
   const code = createSessionCode(false);
-  const base = { code, seed: input.seed, worldType: input.worldType, worldName: input.worldName, hostName: input.hostName, createdAt: Date.now() };
+  // Firestore rejects undefined field values — only include islandSize when set
+  const base = {
+    code,
+    seed: input.seed,
+    worldType: input.worldType,
+    ...(input.islandSize !== undefined ? { islandSize: input.islandSize } : {}),
+    worldName: input.worldName,
+    hostName: input.hostName,
+    createdAt: Date.now(),
+  };
 
   // 1. Try Firestore
   const fsDb = firestore();

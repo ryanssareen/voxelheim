@@ -8,7 +8,7 @@ import { BLOCK_ID } from "@data/blocks";
 import { ATLAS_UVS } from "@data/atlasUVs";
 import {
   CHUNK_SIZE,
-  WORLD_SIZE_CHUNKS,
+  WORLD_SIZE_BLOCKS,
   WORLD_HEIGHT_CHUNKS,
   WORLD_HEIGHT_CHUNKS_INFINITE,
   CHUNK_GEN_BUDGET_MS,
@@ -29,6 +29,7 @@ export class ChunkManager {
   private readonly renderer: Renderer;
   private readonly seed: string;
   readonly worldType: WorldType;
+  private readonly islandSize: number;
   private readonly sizeChunks: number;
   private readonly heightChunks: number;
   private readonly registry = BlockRegistry.getInstance();
@@ -58,14 +59,20 @@ export class ChunkManager {
     return { u0: 0, v0: 0, u1: 1, v1: 1 };
   };
 
-  constructor(renderer: Renderer, seed: string, worldType: WorldType = "island") {
+  constructor(
+    renderer: Renderer,
+    seed: string,
+    worldType: WorldType = "island",
+    islandSize: number = WORLD_SIZE_BLOCKS
+  ) {
     this.renderer = renderer;
     this.seed = seed;
     this.worldType = worldType;
+    this.islandSize = islandSize;
     // Island: fixed small grid. Flat & Infinite: stream chunks dynamically.
-    this.sizeChunks = worldType === "island" ? WORLD_SIZE_CHUNKS : 0;
+    this.sizeChunks = worldType === "island" ? islandSize / CHUNK_SIZE : 0;
     this.heightChunks = worldType === "island" ? WORLD_HEIGHT_CHUNKS : WORLD_HEIGHT_CHUNKS_INFINITE;
-    this.terrainGen = new TerrainGenerator(seed, worldType);
+    this.terrainGen = new TerrainGenerator(seed, worldType, islandSize);
     this.structureGen = new StructureGenerator(seed);
   }
 
@@ -469,6 +476,11 @@ export class ChunkManager {
 
   getSeed(): string {
     return this.seed;
+  }
+
+  /** Island footprint in blocks along each horizontal axis (legacy saves are 64). */
+  getIslandSize(): number {
+    return this.islandSize;
   }
 
   getTerrainGenerator(): TerrainGenerator {

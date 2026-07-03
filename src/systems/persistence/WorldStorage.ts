@@ -16,6 +16,10 @@ export interface WorldMeta {
   worldType?: string;
   gameMode?: "survival" | "creative" | "hardcore";
   hardcoreLocked?: boolean;
+  /** Island footprint in blocks (island worlds only). Absent on legacy saves, which are 64. */
+  islandSize?: number;
+  /** Custom world spawn set via /setspawn. Absent = world-type default. */
+  spawn?: { x: number; y: number; z: number };
 }
 
 interface ChunkRecord {

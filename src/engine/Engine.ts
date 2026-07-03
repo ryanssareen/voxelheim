@@ -28,12 +28,21 @@ import {
   loadWorldChunks,
   type WorldMeta,
 } from "@systems/persistence/WorldStorage";
-import { WORLD_SIZE_BLOCKS, type WorldType } from "@engine/world/constants";
+import {
+  WORLD_HEIGHT_BLOCKS,
+  LEGACY_ISLAND_SIZE_BLOCKS,
+  type WorldType,
+} from "@engine/world/constants";
 import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import { getToolDef } from "@data/items";
+import type { MobType } from "@engine/entities/MobModel";
+import type { Biome } from "@engine/generation/TerrainGenerator";
 
 const MOUSE_SENSITIVITY = 0.002;
-const DEFAULT_SPAWN = { x: 32, y: 50, z: 32 };
+const DEFAULT_FOV = 75; // must match the Renderer's PerspectiveCamera
+const ZOOM_FOV = 22; // hold V to zoom
+const ZOOM_LERP_SPEED = 12; // FOV units of smoothing per second (exponential)
+const ISLAND_SPAWN_Y = 50; // island spawns at the island center (islandSize/2)
 const FLAT_SPAWN = { x: 32, y: 35, z: 32 };
 const INFINITE_SPAWN = { x: 8, y: 80, z: 8 };
 const VOID_Y = -10;
@@ -76,13 +85,20 @@ export class Engine {
   private starvationTimer = 0;
   private stuckTimer = 0;
   private wasDead = false;
+  // Last death position (XZ) — persists through respawn so players can find
+  // their drops; cleared only on world load (each Engine instance starts null).
+  private lastDeathPos: { x: number; z: number } | null = null;
   private fallStartY = 0;
   private wasFalling = false;
   private lavaDamageTimer = 0;
   private frameCount = 0;
+  private currentFov = DEFAULT_FOV;
   private worldType: WorldType = "island";
   private gameMode: "survival" | "creative" | "hardcore" = "survival";
-  private spawn = { ...DEFAULT_SPAWN };
+  // Effective island footprint in blocks — legacy saves stay 64 so their
+  // terrain regenerates identically; new island worlds are WORLD_SIZE_BLOCKS.
+  private islandSize = LEGACY_ISLAND_SIZE_BLOCKS;
+  private spawn = { x: LEGACY_ISLAND_SIZE_BLOCKS / 2, y: ISLAND_SPAWN_Y, z: LEGACY_ISLAND_SIZE_BLOCKS / 2 };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -98,6 +114,8 @@ export class Engine {
 
     let worldType: WorldType = "island";
     let gameMode: "survival" | "creative" | "hardcore" = "survival";
+    // Saves/sessions without an islandSize predate the field — they were 64
+    let islandSize = LEGACY_ISLAND_SIZE_BLOCKS;
 
     if (worldId) {
       savedMeta = await loadWorldMeta(worldId);
@@ -111,6 +129,9 @@ export class Engine {
         }
         if (savedMeta.hardcoreLocked) {
           useGameStore.getState().setHardcoreLocked(true);
+        }
+        if (typeof savedMeta.islandSize === "number") {
+          islandSize = savedMeta.islandSize;
         }
       }
     } else {
@@ -126,6 +147,9 @@ export class Engine {
         if (config.gameMode === "creative" || config.gameMode === "hardcore") {
           gameMode = config.gameMode;
         }
+        if (typeof config.islandSize === "number") {
+          islandSize = config.islandSize;
+        }
       } catch {
         /* ignore */
       }
@@ -133,14 +157,18 @@ export class Engine {
 
     this.worldType = worldType;
     this.gameMode = gameMode;
+    this.islandSize = islandSize;
     useGameStore.getState().setGameMode(gameMode);
 
-    // Set spawn based on world type (fresh copy each init — never mutate module-level defaults)
-    const spawn = worldType === "infinite"
-      ? { ...INFINITE_SPAWN }
-      : worldType === "flat"
-        ? { ...FLAT_SPAWN }
-        : { ...DEFAULT_SPAWN };
+    // Set spawn based on world type (fresh copy each init — never mutate module-level defaults).
+    // A custom spawn saved via /setspawn overrides the world-type default.
+    const spawn = savedMeta?.spawn
+      ? { ...savedMeta.spawn }
+      : worldType === "infinite"
+        ? { ...INFINITE_SPAWN }
+        : worldType === "flat"
+          ? { ...FLAT_SPAWN }
+          : { x: islandSize / 2, y: ISLAND_SPAWN_Y, z: islandSize / 2 };
     this.spawn = spawn;
 
     // Determine actual player start position BEFORE generating terrain
@@ -149,7 +177,7 @@ export class Engine {
       ? { x: savedMeta.playerPos.x, y: savedMeta.playerPos.y, z: savedMeta.playerPos.z }
       : { ...spawn };
 
-    this.chunkManager = new ChunkManager(this.renderer, this.seed, worldType);
+    this.chunkManager = new ChunkManager(this.renderer, this.seed, worldType, islandSize);
 
     if (worldType === "island") {
       this.chunkManager.update(0, 0, 0);
@@ -310,7 +338,7 @@ export class Engine {
 
     // Distance fog to hide terrain edges
     if (worldType === "island") {
-      this.renderer.setupIslandFog(WORLD_SIZE_BLOCKS);
+      this.renderer.setupIslandFog(this.islandSize);
     } else {
       const settings = useSettingsStore.getState();
       this.renderer.setupFog(settings.renderDistance);
@@ -353,6 +381,8 @@ export class Engine {
       worldType: this.worldType,
       gameMode: this.gameMode,
       hardcoreLocked: useGameStore.getState().hardcoreLocked || undefined,
+      islandSize: this.worldType === "island" ? this.islandSize : undefined,
+      spawn: { ...this.spawn },
     };
 
     await saveWorld(meta, modifiedChunks);
@@ -370,7 +400,7 @@ export class Engine {
       return surfaceY + 2; // +2 to be safely above surface
     }
 
-    const maxY = 63;
+    const maxY = WORLD_HEIGHT_BLOCKS - 1;
     for (let y = maxY; y >= 0; y--) {
       if (this.registry.isSolid(this.chunkManager.getBlock(Math.floor(x), y, Math.floor(z)))) {
         return y + 1;
@@ -481,15 +511,23 @@ export class Engine {
     });
   }
 
-  /** Send a chat message — broadcasts over multiplayer if connected, else local-only. */
+  /**
+   * Send a chat message — broadcasts over multiplayer if connected, else
+   * local-only. Messages starting with "/" are commands: handled locally,
+   * never broadcast.
+   */
   sendChat(text: string): void {
+    const trimmed = text.trim().slice(0, 256);
+    if (!trimmed) return;
+    if (trimmed.startsWith("/")) {
+      this.handleCommand(trimmed);
+      return;
+    }
     if (this.multiplayer) {
-      this.multiplayer.sendChat(text, "chat");
+      this.multiplayer.sendChat(trimmed, "chat");
       return;
     }
     // Solo fallback: append directly so the chat feed still works
-    const trimmed = text.trim().slice(0, 256);
-    if (!trimmed) return;
     useChatStore.getState().appendMessage({
       id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       playerId: "local",
@@ -498,6 +536,137 @@ export class Engine {
       kind: "chat",
       createdAt: Date.now(),
     });
+  }
+
+  /** Append a local system line to the chat feed (never broadcast). */
+  private systemMessage(text: string): void {
+    useChatStore.getState().appendMessage({
+      id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      playerId: "system",
+      name: "System",
+      text,
+      kind: "system",
+      createdAt: Date.now(),
+    });
+  }
+
+  /** Handle a "/" chat command locally. */
+  private handleCommand(raw: string): void {
+    const [cmd, ...args] = raw.slice(1).split(/\s+/);
+    switch (cmd.toLowerCase()) {
+      case "gamemode":
+      case "gm": {
+        const arg = (args[0] ?? "").toLowerCase();
+        const mode =
+          arg === "creative" || arg === "c" || arg === "1" ? "creative"
+          : arg === "survival" || arg === "s" || arg === "0" ? "survival"
+          : null;
+        if (!mode) {
+          this.systemMessage("Usage: /gamemode <survival|creative>");
+          return;
+        }
+        if (this.setGameMode(mode)) {
+          this.systemMessage(`Game mode set to ${mode}`);
+        } else {
+          this.systemMessage("Game mode is locked on hardcore worlds");
+        }
+        return;
+      }
+      case "setspawn": {
+        const spawn = this.setWorldSpawn();
+        if (spawn) {
+          this.systemMessage(
+            `World spawn set to ${Math.floor(spawn.x)}, ${Math.floor(spawn.y)}, ${Math.floor(spawn.z)}`
+          );
+        }
+        return;
+      }
+      default:
+        this.systemMessage(`Unknown command: /${cmd}`);
+    }
+  }
+
+  /**
+   * Switch between survival and creative. Returns false on hardcore worlds,
+   * where the mode is locked. Persists with the world save.
+   */
+  setGameMode(mode: "survival" | "creative"): boolean {
+    if (this.gameMode === "hardcore") return false;
+    if (this.gameMode === mode) return true;
+    this.gameMode = mode;
+    useGameStore.getState().setGameMode(mode);
+    // Leaving creative mid-air shouldn't leave the player hovering
+    if (mode === "survival" && this.player) {
+      this.player.isFlying = false;
+    }
+    void this.save();
+    return true;
+  }
+
+  /**
+   * Set the world spawn to the player's current position. Persists with the
+   * world save; respawn() re-derives a safe Y from the spawn column.
+   */
+  setWorldSpawn(): { x: number; y: number; z: number } | null {
+    if (!this.player) return null;
+    this.spawn = {
+      x: Math.floor(this.player.position.x) + 0.5,
+      y: this.player.position.y,
+      z: Math.floor(this.player.position.z) + 0.5,
+    };
+    void this.save();
+    return { ...this.spawn };
+  }
+
+  /** Current game mode (UI reads this to label the pause-menu toggle). */
+  getGameMode(): "survival" | "creative" | "hardcore" {
+    return this.gameMode;
+  }
+
+  /**
+   * Snapshot of everything the minimap overlay needs for one marker redraw.
+   * Returns null until the world has finished loading.
+   */
+  getMinimapData(): {
+    player: { x: number; z: number; yaw: number };
+    worldType: WorldType;
+    islandSize: number;
+    hostiles: Array<{ type: MobType; x: number; z: number }>;
+    deathPos: { x: number; z: number } | null;
+    timeOfDay: number;
+  } | null {
+    if (!this.player || !this.chunkManager || !this.mobManager || !this.dayNight) {
+      return null;
+    }
+    return {
+      player: {
+        x: this.player.position.x,
+        z: this.player.position.z,
+        yaw: this.camera.yaw,
+      },
+      worldType: this.worldType,
+      islandSize: this.islandSize,
+      hostiles: this.mobManager.getHostilePositions(),
+      deathPos: this.lastDeathPos ? { ...this.lastDeathPos } : null,
+      timeOfDay: this.dayNight.timeOfDay,
+    };
+  }
+
+  /**
+   * Terrain column info for minimap sampling. blockId is read from loaded
+   * chunks at the surface height so player modifications show (0/air means
+   * the caller should fall back to a biome/height-derived color); biome is
+   * only meaningful for infinite worlds (null elsewhere).
+   */
+  getTerrainInfo(wx: number, wz: number): { surfaceY: number; blockId: number; biome: Biome | null } {
+    if (!this.chunkManager) return { surfaceY: 0, blockId: 0, biome: null };
+    const terrainGen = this.chunkManager.getTerrainGenerator();
+    const surfaceY = terrainGen.getSurfaceHeight(wx, wz);
+    return {
+      surfaceY,
+      blockId: this.chunkManager.getBlock(wx, surfaceY, wz),
+      biome: this.worldType === "infinite" ? terrainGen.getBiome(wx, wz) : null,
+    };
   }
 
   private gameLoop = (): void => {
@@ -511,10 +680,29 @@ export class Engine {
     }
   };
 
+  /**
+   * Hold-V zoom: smoothly lerp the camera FOV toward the zoom target.
+   * Runs before the pause/inventory early-returns so the zoom always
+   * animates back out, whatever state the player releases V in.
+   */
+  private updateZoom(dt: number): void {
+    const target = this.input.isKeyDown("KeyV") ? ZOOM_FOV : DEFAULT_FOV;
+    if (Math.abs(this.currentFov - target) < 0.01) return;
+    const t = Math.min(1, dt * ZOOM_LERP_SPEED);
+    this.currentFov += (target - this.currentFov) * t;
+    if (Math.abs(this.currentFov - target) < 0.01) this.currentFov = target;
+    if (this.renderer) {
+      const cam = this.renderer.getCamera();
+      cam.fov = this.currentFov;
+      cam.updateProjectionMatrix();
+    }
+  }
+
   private gameLoopInner(): void {
     const dt = this.clock.getDelta();
     if (dt === 0) return;
 
+    this.updateZoom(dt);
     this.frameCount++;
     if (this.frameCount % 60 === 0) {
       const settings = useSettingsStore.getState();
@@ -531,6 +719,9 @@ export class Engine {
     // Detect fresh death transitions — broadcast chat + drop inventory
     if (state.isDead && !this.wasDead) {
       this.wasDead = true;
+      if (this.player) {
+        this.lastDeathPos = { x: this.player.position.x, z: this.player.position.z };
+      }
       this.broadcastDeathMessage(state.deathMessage);
       this.dropInventoryAtPlayer();
     } else if (!state.isDead && this.wasDead) {
@@ -690,10 +881,10 @@ export class Engine {
     }
     this.qWasDown = qDown;
 
-    // Camera rotation
+    // Camera rotation — sensitivity scales with FOV so zoomed aiming stays steady
     if (this.input.isPointerLocked()) {
       const { dx, dy } = this.input.getMouseDelta();
-      this.camera.update(dx, dy, MOUSE_SENSITIVITY);
+      this.camera.update(dx, dy, MOUSE_SENSITIVITY * (this.currentFov / DEFAULT_FOV));
     } else {
       this.input.getMouseDelta();
     }

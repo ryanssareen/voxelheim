@@ -5,13 +5,20 @@ export const CHUNK_SIZE = 16;
 export const CHUNK_VOLUME = 4096;
 
 /** Number of chunks along each horizontal axis of the world. */
-export const WORLD_SIZE_CHUNKS = 4;
+export const WORLD_SIZE_CHUNKS = 8;
 
 /** Number of chunks along the vertical axis of the world. */
 export const WORLD_HEIGHT_CHUNKS = 4;
 
 /** Total blocks along each horizontal axis (WORLD_SIZE_CHUNKS * CHUNK_SIZE). */
-export const WORLD_SIZE_BLOCKS = 64;
+export const WORLD_SIZE_BLOCKS = 128;
+
+/**
+ * Island size (blocks) for worlds saved before the size was persisted.
+ * Old saves regenerate terrain from seed, so they must keep the original
+ * 64-block footprint (falloff center 32, radius 38) forever.
+ */
+export const LEGACY_ISLAND_SIZE_BLOCKS = 64;
 
 /** Total blocks along the vertical axis (WORLD_HEIGHT_CHUNKS * CHUNK_SIZE). */
 export const WORLD_HEIGHT_BLOCKS = 64;

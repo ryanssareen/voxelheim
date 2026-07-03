@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@store/useAuthStore";
+import { WORLD_SIZE_BLOCKS } from "@engine/world/constants";
 
 const MC_BTN =
   "block text-center py-2.5 text-white font-mono tracking-wide hover:brightness-125 active:brightness-90 transition-all select-none";
@@ -19,7 +20,7 @@ const MC_BTN_STYLE: React.CSSProperties = {
 const GAME_MODES = ["Survival", "Creative", "Hardcore"] as const;
 
 const WORLD_TYPES = [
-  { name: "Island", desc: "A small island surrounded by ocean", color: "#4a8a3a" },
+  { name: "Island", desc: "A large island surrounded by ocean", color: "#4a8a3a" },
   { name: "Flat", desc: "Flat terrain stretching endlessly in all directions", color: "#8a7a3a" },
   { name: "Infinite", desc: "Endless procedural terrain in all directions", color: "#3a6a8a" },
 ] as const;
@@ -50,11 +51,13 @@ export default function CreateWorldPage() {
         "@systems/persistence/WorldStorage"
       );
       const id = generateWorldId();
+      // New island worlds use the full-size footprint; spawn at the island center
+      const islandSize = actualWorldType === "island" ? WORLD_SIZE_BLOCKS : undefined;
       const spawnPos = actualWorldType === "infinite"
         ? { x: 8, y: 80, z: 8 }
         : actualWorldType === "flat"
           ? { x: 32, y: 35, z: 32 }
-          : { x: 32, y: 50, z: 32 };
+          : { x: WORLD_SIZE_BLOCKS / 2, y: 50, z: WORLD_SIZE_BLOCKS / 2 };
 
       const actualGameMode = GAME_MODES[gameMode].toLowerCase() as "survival" | "creative" | "hardcore";
 
@@ -72,13 +75,14 @@ export default function CreateWorldPage() {
           hotbarSlots: Array.from({ length: 8 }, () => ({ blockId: 0, count: 0 })),
           worldType: actualWorldType,
           gameMode: actualGameMode,
+          islandSize,
         },
         new Map()
       );
 
       sessionStorage.setItem(
         "voxelheim-world-config",
-        JSON.stringify({ seed: actualSeed, worldType: actualWorldType, gameMode: actualGameMode })
+        JSON.stringify({ seed: actualSeed, worldType: actualWorldType, gameMode: actualGameMode, islandSize })
       );
 
       if (startMultiplayer) {
@@ -88,6 +92,7 @@ export default function CreateWorldPage() {
         const session = await createMultiplayerSession({
           seed: actualSeed,
           worldType: actualWorldType,
+          islandSize,
           worldName,
           hostName: user?.email?.split("@")[0] ?? "Host",
         });

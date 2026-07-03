@@ -1,1 +1,1 @@
-// TODO: implement
+export { MinimapUI } from "./MinimapUI";

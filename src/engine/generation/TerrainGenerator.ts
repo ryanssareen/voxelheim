@@ -6,9 +6,10 @@ import {
   SEA_LEVEL,
   CRYSTAL_SHARD_COUNT,
   CRYSTAL_MIN_DEPTH,
+  WORLD_SIZE_BLOCKS,
   type WorldType,
 } from "@engine/world/constants";
-import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
+import { chunkKey } from "@lib/coords";
 
 /** Biome types for infinite world generation. */
 export type Biome = "plains" | "forest" | "desert" | "mountains" | "snowy";
@@ -43,12 +44,22 @@ export class TerrainGenerator {
   private readonly seed: string;
   private readonly seedHash: number;
   private readonly worldType: WorldType;
+  private readonly islandCenter: number;
+  private readonly islandRadius: number;
 
-  constructor(seed: string, worldType: WorldType = "island") {
+  constructor(
+    seed: string,
+    worldType: WorldType = "island",
+    islandSize: number = WORLD_SIZE_BLOCKS
+  ) {
     this.seed = seed;
     this.seedHash = hashString(seed);
     this.worldType = worldType;
     this.noise = new SeededNoise(this.seedHash);
+    // Island falloff: center at islandSize/2, radius preserving the
+    // original 38/64 ratio (a 64-block island keeps center 32, radius 38).
+    this.islandCenter = islandSize / 2;
+    this.islandRadius = islandSize * 0.59375;
   }
 
   /**
@@ -91,13 +102,18 @@ export class TerrainGenerator {
     }
 
     // island
+    return this.getIslandSurfaceHeight(wx, wz);
+  }
+
+  /** Island surface height: noise with a smooth cubic falloff from the island center. */
+  private getIslandSurfaceHeight(wx: number, wz: number): number {
     const baseHeight = 30;
     const noiseValue = this.noise.octaveNoise2D(wx, wz, 4, 0.5, 2.0, 50);
     let surfaceY = Math.floor(baseHeight + noiseValue * 14);
-    const dx = wx - 32;
-    const dz = wz - 32;
+    const dx = wx - this.islandCenter;
+    const dz = wz - this.islandCenter;
     const distFromCenter = Math.sqrt(dx * dx + dz * dz);
-    const normalizedDist = clamp(distFromCenter / 38, 0, 1);
+    const normalizedDist = clamp(distFromCenter / this.islandRadius, 0, 1);
     const falloff = 1 - normalizedDist * normalizedDist * normalizedDist;
     surfaceY = Math.floor(surfaceY * falloff);
     if (surfaceY < 1) surfaceY = 0;
@@ -133,19 +149,8 @@ export class TerrainGenerator {
         } else if (this.worldType === "infinite") {
           surfaceY = this.getSurfaceHeight(wx, wz);
         } else {
-          // "island" (default)
-          const baseHeight = 30;
-          const noiseValue = this.noise.octaveNoise2D(wx, wz, 4, 0.5, 2.0, 50);
-          surfaceY = Math.floor(baseHeight + noiseValue * 14);
-
-          // Island shaping: smooth falloff from center (32, 32)
-          const dx = wx - 32;
-          const dz = wz - 32;
-          const distFromCenter = Math.sqrt(dx * dx + dz * dz);
-          const normalizedDist = clamp(distFromCenter / 38, 0, 1);
-          const falloff = 1 - normalizedDist * normalizedDist * normalizedDist;
-          surfaceY = Math.floor(surfaceY * falloff);
-          if (surfaceY < 1) surfaceY = 0;
+          // "island" (default) — noise shaped by falloff from the island center
+          surfaceY = this.getIslandSurfaceHeight(wx, wz);
         }
 
         if (surfaceMap) {
@@ -300,7 +305,7 @@ export class TerrainGenerator {
       lz: number;
     }> = [];
 
-    for (const [key, chunk] of chunks) {
+    for (const chunk of chunks.values()) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let y = 0; y < CHUNK_SIZE; y++) {
           for (let z = 0; z < CHUNK_SIZE; z++) {

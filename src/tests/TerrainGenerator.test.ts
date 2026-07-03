@@ -7,9 +7,11 @@ import {
   CHUNK_SIZE,
   SEA_LEVEL,
   WORLD_SIZE_CHUNKS,
+  WORLD_SIZE_BLOCKS,
   WORLD_HEIGHT_CHUNKS,
   CRYSTAL_SHARD_COUNT,
   CRYSTAL_MIN_DEPTH,
+  LEGACY_ISLAND_SIZE_BLOCKS,
 } from "@engine/world/constants";
 import { chunkKey } from "@lib/coords";
 
@@ -112,11 +114,34 @@ describe("TerrainGenerator", () => {
   it("produces zero terrain height at island edges (falloff)", () => {
     const gen = new TerrainGenerator("edge-test");
     const surfaceMap = new Map<string, number>();
-    // Generate chunk at far corner (chunk 3,0,3 covers world x=48-63, z=48-63)
-    gen.generateChunk(3, 0, 3, surfaceMap);
+    // Generate the far-corner chunk of the island
+    const edgeChunk = WORLD_SIZE_CHUNKS - 1;
+    gen.generateChunk(edgeChunk, 0, edgeChunk, surfaceMap);
     // Far corner positions should have surfaceY = 0
-    const edgeSurface = surfaceMap.get("63,63");
+    const corner = WORLD_SIZE_BLOCKS - 1;
+    const edgeSurface = surfaceMap.get(`${corner},${corner}`);
     expect(edgeSurface).toBe(0);
+  });
+
+  it("legacy 64-block islands keep the original falloff (center 32, radius 38)", () => {
+    const gen = new TerrainGenerator("edge-test", "island", LEGACY_ISLAND_SIZE_BLOCKS);
+    const surfaceMap = new Map<string, number>();
+    // Chunk (3,0,3) is the far corner of a 64-block island (world x=48-63, z=48-63)
+    gen.generateChunk(3, 0, 3, surfaceMap);
+    expect(surfaceMap.get("63,63")).toBe(0);
+    // At the legacy center the falloff is 1, so the island has solid ground
+    gen.generateChunk(2, 1, 2, surfaceMap);
+    expect(surfaceMap.get("32,32")).toBeGreaterThan(0);
+  });
+
+  it("getSurfaceHeight matches generateChunk's surface map for island worlds", () => {
+    const gen = new TerrainGenerator("dedup-test");
+    const surfaceMap = new Map<string, number>();
+    gen.generateChunk(2, 0, 2, surfaceMap);
+    for (const [key, surfaceY] of surfaceMap) {
+      const [wx, wz] = key.split(",").map(Number);
+      expect(gen.getSurfaceHeight(wx, wz)).toBe(surfaceY);
+    }
   });
 });
 

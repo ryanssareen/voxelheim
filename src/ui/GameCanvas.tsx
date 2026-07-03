@@ -6,6 +6,7 @@ import { useChatStore } from "@store/useChatStore";
 import { useGameStore } from "@store/useGameStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { HUD } from "@ui/HUD";
+import { MinimapUI } from "@ui/MinimapUI";
 import { HotbarUI } from "@ui/HotbarUI";
 import { PauseMenu } from "@ui/PauseMenu";
 import { DeathScreen } from "@ui/DeathScreen";
@@ -103,8 +104,9 @@ export function GameCanvas({
       {isReady && (
         <>
           <HUD />
+          <MinimapUI engineRef={engineRef} />
           <HotbarUI />
-          <PauseMenu canvasRef={canvasRef} />
+          <PauseMenu canvasRef={canvasRef} engineRef={engineRef} />
           <DeathScreen onRespawn={handleRespawn} />
           <InventoryUI />
           <CraftingTableUI />

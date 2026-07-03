@@ -79,12 +79,16 @@ export default function WorldsPage() {
       const { createMultiplayerSession } = await import(
         "@lib/multiplayer/sessionClient"
       );
+      const worldType =
+        world.worldType === "flat" || world.worldType === "infinite"
+          ? world.worldType
+          : "island";
       const session = await createMultiplayerSession({
         seed: world.seed,
-        worldType:
-          world.worldType === "flat" || world.worldType === "infinite"
-            ? world.worldType
-            : "island",
+        worldType,
+        // Legacy island saves have no islandSize — they were 64 blocks
+        islandSize:
+          worldType === "island" ? world.islandSize ?? 64 : undefined,
         worldName: world.name,
         hostName: user?.email?.split("@")[0] ?? "Host",
       });
@@ -140,6 +144,7 @@ export default function WorldsPage() {
         JSON.stringify({
           seed: session.seed,
           worldType: session.worldType,
+          islandSize: session.islandSize,
         })
       );
 

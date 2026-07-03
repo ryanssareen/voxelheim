@@ -51,7 +51,10 @@ export class MobManager {
     const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
     const isStreaming = chunkManager.worldType !== "island";
     const simDist = useSettingsStore.getState().simulationDistance;
-    const despawnDist = isStreaming ? simDist * CHUNK_SIZE + 16 : 50;
+    // Island despawn distance scales with the island (50 on a legacy 64-block island)
+    const despawnDist = isStreaming
+      ? simDist * CHUNK_SIZE + 16
+      : chunkManager.getIslandSize() * 0.78125;
 
     // Spawn timer
     this.spawnTimer -= dt;
@@ -152,6 +155,7 @@ export class MobManager {
   private trySpawnPassive(chunkManager: ChunkManager, playerPos?: { x: number; y: number; z: number }): void {
     const isStreaming = chunkManager.worldType !== "island";
     const simDist = useSettingsStore.getState().simulationDistance;
+    const islandSize = chunkManager.getIslandSize();
     const maxScanY = isStreaming ? 120 : 60;
 
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -161,8 +165,9 @@ export class MobManager {
         wx = Math.floor(playerPos.x + (Math.random() * 2 - 1) * range);
         wz = Math.floor(playerPos.z + (Math.random() * 2 - 1) * range);
       } else {
-        wx = 8 + Math.floor(Math.random() * 48);
-        wz = 8 + Math.floor(Math.random() * 48);
+        // Anywhere on the island, 8 blocks in from the edges
+        wx = 8 + Math.floor(Math.random() * (islandSize - 16));
+        wz = 8 + Math.floor(Math.random() * (islandSize - 16));
       }
 
       for (let y = maxScanY; y >= 0; y--) {
@@ -176,7 +181,7 @@ export class MobManager {
           const type = PASSIVE_TYPES[Math.floor(Math.random() * PASSIVE_TYPES.length)];
           const mob = new Mob(type, wx + 0.5, y + 1, wz + 0.5);
           if (!isStreaming) {
-            mob.worldBounds = { min: 4, max: 60, center: 32 };
+            mob.worldBounds = { min: 4, max: islandSize - 4, center: islandSize / 2 };
           }
           this.scene.add(mob.group);
           this.mobs.push(mob);
@@ -191,6 +196,7 @@ export class MobManager {
     playerPos: { x: number; y: number; z: number }
   ): void {
     const isStreaming = chunkManager.worldType !== "island";
+    const islandSize = chunkManager.getIslandSize();
     const maxScanY = isStreaming ? 120 : 60;
 
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -199,7 +205,8 @@ export class MobManager {
       const wx = Math.floor(playerPos.x + Math.cos(angle) * dist);
       const wz = Math.floor(playerPos.z + Math.sin(angle) * dist);
 
-      if (!isStreaming && (wx < 1 || wx > 62 || wz < 1 || wz > 62)) continue;
+      const edgeMax = islandSize - 2;
+      if (!isStreaming && (wx < 1 || wx > edgeMax || wz < 1 || wz > edgeMax)) continue;
 
       for (let y = maxScanY; y >= 0; y--) {
         if (this.registry.isSolid(chunkManager.getBlock(wx, y, wz))) {
@@ -208,7 +215,7 @@ export class MobManager {
             const type = HOSTILE_TYPES[Math.floor(Math.random() * HOSTILE_TYPES.length)];
             const mob = new Mob(type, wx + 0.5, y + 1, wz + 0.5);
             if (!isStreaming) {
-              mob.worldBounds = { min: 4, max: 60, center: 32 };
+              mob.worldBounds = { min: 4, max: islandSize - 4, center: islandSize / 2 };
             }
             this.scene.add(mob.group);
             this.mobs.push(mob);
@@ -265,6 +272,17 @@ export class MobManager {
       }
     }
     return null;
+  }
+
+  /** XZ positions of all living hostile mobs — consumed by the minimap. */
+  getHostilePositions(): Array<{ type: MobType; x: number; z: number }> {
+    const result: Array<{ type: MobType; x: number; z: number }> = [];
+    for (const mob of this.mobs) {
+      if (!mob.dead && mob.config.hostile) {
+        result.push({ type: mob.type, x: mob.position.x, z: mob.position.z });
+      }
+    }
+    return result;
   }
 
   getMobCount(): { passive: number; hostile: number } {

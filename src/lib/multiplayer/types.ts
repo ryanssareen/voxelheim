@@ -6,6 +6,8 @@ export interface MultiplayerSessionMeta {
   code: string;
   seed: string;
   worldType: WorldType;
+  /** Island footprint in blocks. Absent on legacy sessions, which are 64. */
+  islandSize?: number;
   worldName: string;
   hostName: string;
   createdAt: number;
@@ -82,6 +84,8 @@ export interface MultiplayerIdentity {
 export interface CreateSessionInput {
   seed: string;
   worldType: WorldType;
+  /** Island footprint in blocks — required so joiners generate matching terrain. */
+  islandSize?: number;
   worldName: string;
   hostName: string;
 }

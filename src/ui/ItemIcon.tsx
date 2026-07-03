@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { BLOCK_ID } from "@data/blocks";
 import { ITEM_COLORS, getToolDef, type ToolType } from "@data/items";
 
@@ -184,6 +185,49 @@ export function InventorySlot({
       )}
       {label && !hasItem && (
         <span className="text-[10px] text-[#666] font-mono">{label}</span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Floating item stack that follows the mouse while an inventory screen is
+ * open. Mount only while the screen is open; renders nothing when the
+ * cursor is empty.
+ */
+export function CursorItemOverlay({
+  item,
+}: {
+  item: { blockId: number; count: number; durability?: number };
+}) {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY });
+    window.addEventListener("mousemove", handler);
+    return () => window.removeEventListener("mousemove", handler);
+  }, []);
+
+  if (item.count === 0) return null;
+
+  return (
+    <div
+      className="fixed pointer-events-none z-50 flex items-center justify-center"
+      style={{
+        left: mousePos.x + 8,
+        top: mousePos.y + 8,
+        width: 40,
+        height: 40,
+      }}
+    >
+      <ItemIcon blockId={item.blockId} size={40} />
+      {item.count > 1 && (
+        <span
+          className="absolute bottom-0 right-0 text-[11px] font-mono font-bold text-white"
+          style={{ textShadow: "1px 1px 0 #000" }}
+        >
+          {item.count}
+        </span>
       )}
     </div>
   );

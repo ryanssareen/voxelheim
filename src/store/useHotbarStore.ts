@@ -177,4 +177,4 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
     set({ slots: emptySlots(), armor: emptyArmor(), offhand: { blockId: BLOCK_ID.AIR, count: 0 }, selectedIndex: 0 }),
 }));
 
-export { HOTBAR_SLOTS, INVENTORY_SLOTS, TOTAL_SLOTS, ARMOR_SLOTS };
+export { MAX_STACK, HOTBAR_SLOTS, INVENTORY_SLOTS, TOTAL_SLOTS, ARMOR_SLOTS };

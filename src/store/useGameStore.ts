@@ -30,7 +30,10 @@ interface GameState {
   maxHunger: number;
   lastDamageTime: number;
   lastDamageCause: DeathCause | null;
+  /** Whether the minimap overlay is shown (M key toggles). */
+  minimapVisible: boolean;
   setGameMode: (mode: GameMode) => void;
+  toggleMinimap: () => void;
   setHardcoreLocked: (locked: boolean) => void;
   collectShard: () => void;
   resetObjective: () => void;
@@ -120,8 +123,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   maxHunger: 20,
   lastDamageTime: 0,
   lastDamageCause: null,
+  minimapVisible: true,
 
   setGameMode: (mode: GameMode) => set({ gameMode: mode }),
+  toggleMinimap: () => set((s) => ({ minimapVisible: !s.minimapVisible })),
   setHardcoreLocked: (locked: boolean) => set({ hardcoreLocked: locked }),
 
   collectShard: () => {

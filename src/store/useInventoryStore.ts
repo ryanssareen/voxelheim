@@ -134,6 +134,8 @@ export const useInventoryStore = create<InventoryState>((set) => ({
       return { furnaceSlots: slots };
     }),
 
-  openCreative: () => set({ creativeOpen: true }),
-  closeCreative: () => set({ creativeOpen: false }),
+  // Creative has infinite items, so any cursor item is simply discarded on
+  // open/close (Minecraft-style creative trash) instead of returned.
+  openCreative: () => set({ creativeOpen: true, cursorItem: { blockId: 0, count: 0 } }),
+  closeCreative: () => set({ creativeOpen: false, cursorItem: { blockId: 0, count: 0 } }),
 }));
