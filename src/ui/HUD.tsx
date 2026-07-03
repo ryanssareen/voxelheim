@@ -123,7 +123,6 @@ function HungerBar({ hunger, maxHunger }: { hunger: number; maxHunger: number })
 export function HUD() {
   const shardsCollected = useGameStore((s) => s.shardsCollected);
   const shardsTotal = useGameStore((s) => s.shardsTotal);
-  const isComplete = useGameStore((s) => s.isComplete);
   const breakProgress = useGameStore((s) => s.breakProgress);
   const timeOfDay = useGameStore((s) => s.timeOfDay);
   const gameMode = useGameStore((s) => s.gameMode);
@@ -134,17 +133,7 @@ export function HUD() {
   const multiplayerSession = useMultiplayerStore((s) => s.session);
   const multiplayerPlayers = useMultiplayerStore((s) => s.players);
   const multiplayerStatus = useMultiplayerStore((s) => s.status);
-  const [showContinue, setShowContinue] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-
-  useEffect(() => {
-    if (!isComplete) return;
-    const timer = setTimeout(() => setShowContinue(true), 4000);
-    return () => {
-      clearTimeout(timer);
-      setShowContinue(false);
-    };
-  }, [isComplete]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -248,30 +237,6 @@ export function HUD() {
         </div>
       )}
 
-      {/* Completion Overlay */}
-      {isComplete && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-          <h1
-            className="text-5xl font-mono font-bold text-cyan-300 mb-8"
-            style={{
-              textShadow: "0 0 30px #00e5ff, 0 0 60px #00e5ff, 3px 3px 0 #0a3040",
-            }}
-          >
-            ISLAND CLEARED!
-          </h1>
-          <p
-            className="text-white/60 font-mono text-sm mb-4"
-            style={{ textShadow: "1px 1px 0 #000" }}
-          >
-            All {shardsTotal} crystal shards collected
-          </p>
-          {showContinue && (
-            <p className="text-white/40 font-mono text-xs animate-pulse">
-              Press ESC to continue
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }
