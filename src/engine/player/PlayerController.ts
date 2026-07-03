@@ -98,10 +98,10 @@ export class PlayerController {
     let moveX = 0;
     let moveZ = 0;
 
-    if (input.isKeyDown("KeyW")) { moveX += forward.x; moveZ += forward.z; }
-    if (input.isKeyDown("KeyS")) { moveX -= forward.x; moveZ -= forward.z; }
-    if (input.isKeyDown("KeyA")) { moveX -= right.x; moveZ -= right.z; }
-    if (input.isKeyDown("KeyD")) { moveX += right.x; moveZ += right.z; }
+    if (input.isKeyDown("KeyW") || input.isKeyDown("ArrowUp")) { moveX += forward.x; moveZ += forward.z; }
+    if (input.isKeyDown("KeyS") || input.isKeyDown("ArrowDown")) { moveX -= forward.x; moveZ -= forward.z; }
+    if (input.isKeyDown("KeyA") || input.isKeyDown("ArrowLeft")) { moveX -= right.x; moveZ -= right.z; }
+    if (input.isKeyDown("KeyD") || input.isKeyDown("ArrowRight")) { moveX += right.x; moveZ += right.z; }
 
     const speed = this.isFlying
       ? (this.isSprinting ? FLY_SPRINT_SPEED : FLY_SPEED)

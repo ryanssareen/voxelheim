@@ -29,6 +29,12 @@ export class InputManager {
     this.canvas = canvas;
 
     this.onKeyDown = (e: KeyboardEvent) => {
+      // Ignore keys while typing in a text field (e.g. chat), so movement
+      // keys like WASD / arrows don't drive the player during composition.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
       this.keys.add(e.code);
     };
     this.onKeyUp = (e: KeyboardEvent) => {
