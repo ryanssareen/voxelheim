@@ -16,16 +16,16 @@ interface TextureDef {
 }
 
 const TEXTURES: TextureDef[] = [
-  { name: "grass_top", color: "#4CAF50" },
-  { name: "grass_side", color: "", split: { topColor: "#4CAF50", bottomColor: "#8D6E63" } },
-  { name: "dirt", color: "#8D6E63" },
-  { name: "stone", color: "#9E9E9E" },
-  { name: "sand", color: "#FDD835" },
-  { name: "log_side", color: "#5D4037" },
-  { name: "log_top", color: "#D7CCC8" },
-  { name: "leaves", color: "#2E7D32" },
-  { name: "crystal_shard", color: "#00E5FF" },
-  { name: "planks", color: "#C8A55A" },
+  { name: "grass_top", color: "", custom: grassTop },
+  { name: "grass_side", color: "", custom: grassSide },
+  { name: "dirt", color: "", custom: dirtTexture },
+  { name: "stone", color: "", custom: stoneTexture },
+  { name: "sand", color: "", custom: sandTexture },
+  { name: "log_side", color: "", custom: logSide },
+  { name: "log_top", color: "", custom: logTop },
+  { name: "leaves", color: "", custom: leavesTexture },
+  { name: "crystal_shard", color: "", custom: crystalShard },
+  { name: "planks", color: "", custom: planksTexture },
   { name: "crafting_table_top", color: "", custom: craftingTableTop },
   { name: "crafting_table_side", color: "", custom: craftingTableSide },
   { name: "furnace_top", color: "", custom: furnaceTop },
@@ -52,6 +52,206 @@ function fillRect(buf: Buffer, x0: number, y0: number, w: number, h: number, c: 
   for (let y = y0; y < y0 + h; y++)
     for (let x = x0; x < x0 + w; x++)
       setPixel(buf, x, y, c);
+}
+
+function grassTop(buf: Buffer): void {
+  const base: RGB = { r: 76, g: 175, b: 80 };
+  const light: RGB = { r: 108, g: 198, b: 110 };
+  const dark: RGB = { r: 58, g: 142, b: 64 };
+  fillRect(buf, 0, 0, 16, 16, base);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const n = (x * 7 + y * 13) % 9;
+      if (n === 0) setPixel(buf, x, y, light);
+      else if (n === 4) setPixel(buf, x, y, dark);
+    }
+  }
+  const blades = [[2, 3], [6, 1], [11, 4], [14, 9], [4, 12], [9, 14], [13, 13]];
+  for (const [x, y] of blades) setPixel(buf, x, y, light);
+}
+
+function grassSide(buf: Buffer): void {
+  const dirt: RGB = { r: 141, g: 110, b: 99 };
+  const dirtDark: RGB = { r: 110, g: 82, b: 72 };
+  const dirtLight: RGB = { r: 162, g: 130, b: 112 };
+  const grass: RGB = { r: 76, g: 175, b: 80 };
+  const grassDark: RGB = { r: 58, g: 142, b: 64 };
+  const grassLight: RGB = { r: 108, g: 198, b: 110 };
+  // Dirt base with speckle
+  fillRect(buf, 0, 0, 16, 16, dirt);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const n = (x * 5 + y * 11) % 8;
+      if (n === 0) setPixel(buf, x, y, dirtDark);
+      else if (n === 3) setPixel(buf, x, y, dirtLight);
+    }
+  }
+  // Grass strip on top with a jagged bottom edge (classic grass_side look)
+  const depths = [4, 5, 3, 4, 5, 4, 3, 5, 4, 4, 5, 3, 4, 5, 4, 3];
+  for (let x = 0; x < 16; x++) {
+    const depth = depths[x];
+    for (let y = 0; y < depth; y++) {
+      setPixel(buf, x, y, y === depth - 1 ? grassDark : grass);
+    }
+    setPixel(buf, x, 0, grassLight);
+  }
+}
+
+function dirtTexture(buf: Buffer): void {
+  const base: RGB = { r: 141, g: 110, b: 99 };
+  const dark: RGB = { r: 110, g: 82, b: 72 };
+  const light: RGB = { r: 162, g: 130, b: 114 };
+  const pebble: RGB = { r: 92, g: 68, b: 58 };
+  fillRect(buf, 0, 0, 16, 16, base);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const n = (x * 7 + y * 5) % 9;
+      if (n === 0) setPixel(buf, x, y, dark);
+      else if (n === 5) setPixel(buf, x, y, light);
+    }
+  }
+  const pebbles = [[3, 4], [10, 2], [6, 9], [13, 11], [2, 13], [9, 13]];
+  for (const [x, y] of pebbles) {
+    setPixel(buf, x, y, pebble);
+    if (x + 1 < 16) setPixel(buf, x + 1, y, pebble);
+  }
+}
+
+function stoneTexture(buf: Buffer): void {
+  const base: RGB = { r: 158, g: 158, b: 158 };
+  const dark: RGB = { r: 132, g: 132, b: 132 };
+  const darker: RGB = { r: 108, g: 108, b: 108 };
+  const light: RGB = { r: 182, g: 182, b: 182 };
+  fillRect(buf, 0, 0, 16, 16, base);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const n = (x * 3 + y * 7) % 11;
+      if (n === 0) setPixel(buf, x, y, dark);
+      else if (n === 6) setPixel(buf, x, y, light);
+    }
+  }
+  // A couple of cracks
+  const crack = [[4, 3], [5, 4], [6, 4], [7, 5], [11, 9], [12, 10], [10, 12], [11, 12]];
+  for (const [x, y] of crack) setPixel(buf, x, y, darker);
+}
+
+function sandTexture(buf: Buffer): void {
+  const base: RGB = { r: 232, g: 210, b: 150 };
+  const dark: RGB = { r: 210, g: 186, b: 124 };
+  const light: RGB = { r: 245, g: 228, b: 176 };
+  fillRect(buf, 0, 0, 16, 16, base);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const n = (x * 11 + y * 3) % 7;
+      if (n === 0) setPixel(buf, x, y, dark);
+      else if (n === 3) setPixel(buf, x, y, light);
+    }
+  }
+}
+
+function logSide(buf: Buffer): void {
+  const bark: RGB = { r: 93, g: 64, b: 55 };
+  const barkDark: RGB = { r: 72, g: 48, b: 40 };
+  const barkLight: RGB = { r: 114, g: 82, b: 68 };
+  fillRect(buf, 0, 0, 16, 16, bark);
+  // Vertical bark grooves, slightly offset every 4 rows
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const groove = (x + ((y >> 2) & 1)) % 4;
+      if (groove === 0) setPixel(buf, x, y, barkDark);
+      else if (groove === 2) setPixel(buf, x, y, barkLight);
+    }
+  }
+  setPixel(buf, 5, 6, barkDark);
+  setPixel(buf, 10, 11, barkDark);
+}
+
+function logTop(buf: Buffer): void {
+  const wood: RGB = { r: 215, g: 204, b: 200 };
+  const ringMed: RGB = { r: 190, g: 170, b: 150 };
+  const ringDark: RGB = { r: 150, g: 120, b: 95 };
+  const center: RGB = { r: 120, g: 92, b: 70 };
+  fillRect(buf, 0, 0, 16, 16, wood);
+  // Concentric tree rings around the center
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const dx = x - 7.5;
+      const dy = y - 7.5;
+      const d = Math.round(Math.sqrt(dx * dx + dy * dy));
+      if (d % 3 === 0) setPixel(buf, x, y, ringDark);
+      else if (d % 3 === 1) setPixel(buf, x, y, ringMed);
+    }
+  }
+  fillRect(buf, 7, 7, 2, 2, center);
+}
+
+function leavesTexture(buf: Buffer): void {
+  const base: RGB = { r: 46, g: 125, b: 50 };
+  const dark: RGB = { r: 34, g: 96, b: 40 };
+  const light: RGB = { r: 74, g: 156, b: 72 };
+  const deep: RGB = { r: 24, g: 74, b: 34 };
+  fillRect(buf, 0, 0, 16, 16, base);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const n = (x * 5 + y * 9 + ((x * y) % 5)) % 6;
+      if (n === 0) setPixel(buf, x, y, light);
+      else if (n === 2) setPixel(buf, x, y, dark);
+      else if (n === 4) setPixel(buf, x, y, deep);
+    }
+  }
+  // Dark gaps suggesting foliage clusters
+  const gaps = [[3, 2], [12, 4], [7, 8], [2, 11], [13, 12], [9, 13]];
+  for (const [x, y] of gaps) setPixel(buf, x, y, deep);
+}
+
+function crystalShard(buf: Buffer): void {
+  const gem: RGB = { r: 0, g: 210, b: 235 };
+  const gemDark: RGB = { r: 0, g: 150, b: 180 };
+  const gemLight: RGB = { r: 150, g: 245, b: 255 };
+  const white: RGB = { r: 230, g: 255, b: 255 };
+  const bg: RGB = { r: 0, g: 118, b: 148 };
+  fillRect(buf, 0, 0, 16, 16, bg);
+  // Central faceted diamond
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const d = Math.abs(x - 8) + Math.abs(y - 8);
+      if (d <= 6) setPixel(buf, x, y, gem);
+      if (d <= 4 && x < 8) setPixel(buf, x, y, gemLight);
+      if (d <= 6 && x > 9) setPixel(buf, x, y, gemDark);
+    }
+  }
+  setPixel(buf, 8, 3, white);
+  setPixel(buf, 6, 6, white);
+  setPixel(buf, 10, 10, gemDark);
+}
+
+function planksTexture(buf: Buffer): void {
+  const base: RGB = { r: 200, g: 165, b: 90 };
+  const dark: RGB = { r: 168, g: 134, b: 70 };
+  const light: RGB = { r: 216, g: 184, b: 112 };
+  const seam: RGB = { r: 120, g: 92, b: 48 };
+  // Four horizontal plank bands with wood-grain speckle
+  for (let y = 0; y < 16; y++) {
+    const band = Math.floor(y / 4);
+    for (let x = 0; x < 16; x++) {
+      let c = base;
+      if ((x * 3 + band * 7) % 11 === 0) c = dark;
+      else if ((x * 5 + band * 3) % 13 === 0) c = light;
+      setPixel(buf, x, y, c);
+    }
+  }
+  // Horizontal seams between planks
+  for (let x = 0; x < 16; x++) {
+    setPixel(buf, x, 3, seam);
+    setPixel(buf, x, 7, seam);
+    setPixel(buf, x, 11, seam);
+    setPixel(buf, x, 15, seam);
+  }
+  // Offset vertical joints per band
+  for (let y = 0; y < 3; y++) setPixel(buf, 8, y, seam);
+  for (let y = 4; y < 7; y++) setPixel(buf, 3, y, seam);
+  for (let y = 8; y < 11; y++) setPixel(buf, 11, y, seam);
+  for (let y = 12; y < 15; y++) setPixel(buf, 6, y, seam);
 }
 
 function craftingTableTop(buf: Buffer): void {

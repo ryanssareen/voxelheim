@@ -214,6 +214,18 @@ export class PlayerModel {
     }
   }
 
+  /**
+   * Drive armor visuals from an external source (remote players, whose armor
+   * arrives over the network rather than from the local hotbar store). Diffed
+   * so it only rebuilds when the worn set actually changes.
+   */
+  setArmor(armorSlots: ItemStack[]): void {
+    const armorHash = armorSlots.map((s) => `${s.blockId}:${s.count}`).join(",");
+    if (armorHash === this.lastArmorHash) return;
+    this.lastArmorHash = armorHash;
+    this.updateArmor(armorSlots);
+  }
+
   private updateArmor(armorSlots: ItemStack[]): void {
     const setSlot = (mesh: THREE.Mesh, slot: ItemStack) => {
       if (slot.count > 0 && slot.blockId !== BLOCK_ID.AIR) {

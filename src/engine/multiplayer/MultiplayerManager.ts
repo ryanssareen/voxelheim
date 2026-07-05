@@ -13,6 +13,8 @@ import type {
 import { useAuthStore } from "@store/useAuthStore";
 import { useChatStore } from "@store/useChatStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
+import { useSkinStore } from "@store/useSkinStore";
+import { useHotbarStore } from "@store/useHotbarStore";
 
 const PLAYER_SEND_INTERVAL_MS = 120;
 const PLAYER_STALE_AFTER_MS = 15_000;
@@ -238,6 +240,9 @@ export class MultiplayerManager {
     if (this.sendTimer < PLAYER_SEND_INTERVAL_MS) return;
     this.sendTimer = 0;
 
+    const skin = useSkinStore.getState();
+    const armorSlots = useHotbarStore.getState().armor;
+
     void this.connection.setPlayerState({
       playerId: this.playerId,
       name: this.playerName,
@@ -247,6 +252,15 @@ export class MultiplayerManager {
       yaw: localPlayer.yaw,
       pitch: localPlayer.pitch,
       isCrouching: localPlayer.isCrouching,
+      // Always populated (never undefined) so Firestore accepts the write
+      skin: {
+        skinColor: skin.skinColor,
+        hairColor: skin.hairColor,
+        shirtColor: skin.shirtColor,
+        pantsColor: skin.pantsColor,
+        shoeColor: skin.shoeColor,
+      },
+      armor: armorSlots.map((s) => (s.count > 0 ? s.blockId : 0)),
     });
   }
 

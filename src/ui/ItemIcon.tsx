@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BLOCK_ID } from "@data/blocks";
-import { ITEM_COLORS, getToolDef, type ToolType } from "@data/items";
+import { ITEM_COLORS, getToolDef, getArmorDef, type ToolType, type ArmorSlot } from "@data/items";
 
 const FOOD_IDS: Set<number> = new Set([BLOCK_ID.RAW_PORK, BLOCK_ID.RAW_BEEF, BLOCK_ID.RAW_MUTTON]);
 
@@ -99,6 +99,55 @@ function FoodSVG({ blockId, size }: { blockId: number; size: number }) {
   );
 }
 
+/** Pixel-art silhouette per armor slot so pieces are distinguishable in the inventory. */
+function ArmorSVG({ slot, color, size }: { slot: ArmorSlot; color: string; size: number }) {
+  const s = size * 0.72;
+  const shade = "rgba(0,0,0,0.28)";
+  const shine = "rgba(255,255,255,0.28)";
+
+  if (slot === "helmet") {
+    return (
+      <svg width={s} height={s} viewBox="0 0 16 16">
+        <path d="M3 8 A5 5 0 0 1 13 8 L13 11 L11 11 L11 9 L5 9 L5 11 L3 11 Z" fill={color} />
+        <rect x="5" y="9" width="6" height="2" fill={shade} />
+        <path d="M4 8 A4 4 0 0 1 12 8" fill="none" stroke={shine} strokeWidth="1" />
+      </svg>
+    );
+  }
+  if (slot === "chestplate") {
+    return (
+      <svg width={s} height={s} viewBox="0 0 16 16">
+        <path d="M3 4 L6 4 L8 6 L10 4 L13 4 L13 13 L3 13 Z" fill={color} />
+        <rect x="3" y="4" width="2" height="7" fill={shine} opacity="0.5" />
+        <rect x="7" y="7" width="2" height="5" fill={shade} />
+      </svg>
+    );
+  }
+  if (slot === "leggings") {
+    return (
+      <svg width={s} height={s} viewBox="0 0 16 16">
+        <rect x="4" y="2" width="8" height="3" fill={color} />
+        <rect x="4" y="5" width="3" height="9" fill={color} />
+        <rect x="9" y="5" width="3" height="9" fill={color} />
+        <rect x="7" y="5" width="2" height="6" fill={shade} />
+        <rect x="4" y="2" width="8" height="1" fill={shine} />
+      </svg>
+    );
+  }
+  // boots
+  return (
+    <svg width={s} height={s} viewBox="0 0 16 16">
+      <rect x="4" y="5" width="3" height="5" fill={color} />
+      <rect x="9" y="5" width="3" height="5" fill={color} />
+      <path d="M3 10 L7 10 L7 13 L3 13 Z" fill={color} />
+      <path d="M9 10 L13 10 L13 13 L9 13 Z" fill={color} />
+      <rect x="3" y="12" width="10" height="1" fill={shade} />
+      <rect x="4" y="5" width="1" height="5" fill={shine} />
+      <rect x="9" y="5" width="1" height="5" fill={shine} />
+    </svg>
+  );
+}
+
 export function ItemIcon({ blockId, size }: { blockId: number; size: number }) {
   if (blockId === BLOCK_ID.STICK) {
     return <StickSVG size={size} />;
@@ -112,6 +161,12 @@ export function ItemIcon({ blockId, size }: { blockId: number; size: number }) {
   if (toolDef) {
     const color = ITEM_COLORS[blockId] ?? "#888";
     return <ToolSVG toolType={toolDef.toolType} color={color} size={size} />;
+  }
+
+  const armorDef = getArmorDef(blockId);
+  if (armorDef) {
+    const color = ITEM_COLORS[blockId] ?? "#888";
+    return <ArmorSVG slot={armorDef.slot} color={color} size={size} />;
   }
 
   // Default: colored block square

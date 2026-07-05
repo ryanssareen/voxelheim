@@ -1,4 +1,5 @@
 import type { WorldType } from "@engine/world/constants";
+import type { SkinColors } from "@store/useSkinStore";
 
 export type MultiplayerTransport = "cloud" | "rtdb" | "local";
 
@@ -23,6 +24,10 @@ export interface MultiplayerPlayerState {
   yaw: number;
   pitch: number;
   isCrouching: boolean;
+  /** Player's chosen skin colors. Absent on legacy states (falls back to a hashed skin). */
+  skin?: SkinColors;
+  /** Worn armor as 4 block ids [helmet, chestplate, leggings, boots]; 0 = empty. Absent on legacy states. */
+  armor?: number[];
   updatedAt: number;
 }
 

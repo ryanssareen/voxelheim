@@ -1,9 +1,20 @@
 import * as THREE from "three";
 import { PlayerModel } from "@engine/player/PlayerModel";
+import { BLOCK_ID } from "@data/blocks";
+import type { ItemStack } from "@store/useHotbarStore";
 import type { MultiplayerPlayerState } from "@lib/multiplayer/types";
 
 const POSITION_LERP = 12;
 const ROTATION_LERP = 14;
+
+/** Reconstruct armor slot stacks from the transmitted [helmet,chest,legs,boots] block ids. */
+function armorStacksFrom(ids: number[] | undefined): ItemStack[] | null {
+  if (!ids) return null;
+  return Array.from({ length: 4 }, (_, i) => {
+    const blockId = ids[i] ?? BLOCK_ID.AIR;
+    return { blockId, count: blockId === BLOCK_ID.AIR ? 0 : 1 };
+  });
+}
 
 function hashColor(input: string, offset: number): number {
   let hash = 0;
@@ -75,14 +86,19 @@ export class RemotePlayerAvatar {
 
   constructor(initialState: MultiplayerPlayerState) {
     this.state = initialState;
+    const skin = initialState.skin;
+    // Use the player's real skin when transmitted; otherwise fall back to a
+    // deterministic per-id color so pre-skin/legacy clients still look distinct.
     this.model = new PlayerModel({
       syncArmor: false,
-      shirtColor: hashColor(initialState.playerId, 11),
-      pantsColor: hashColor(initialState.playerId, 53),
-      skinColor: 0xc8a882,
-      hairColor: hashColor(initialState.playerId, 101),
-      shoeColor: 0x343434,
+      shirtColor: skin?.shirtColor ?? hashColor(initialState.playerId, 11),
+      pantsColor: skin?.pantsColor ?? hashColor(initialState.playerId, 53),
+      skinColor: skin?.skinColor ?? 0xc8a882,
+      hairColor: skin?.hairColor ?? hashColor(initialState.playerId, 101),
+      shoeColor: skin?.shoeColor ?? 0x343434,
     });
+    const initialArmor = armorStacksFrom(initialState.armor);
+    if (initialArmor) this.model.setArmor(initialArmor);
     this.nameTag = createNameTag(initialState.name);
 
     this.currentPosition.set(initialState.x, initialState.y, initialState.z);
@@ -98,6 +114,10 @@ export class RemotePlayerAvatar {
     this.state = next;
     this.targetPosition.set(next.x, next.y, next.z);
     this.targetYaw = next.yaw;
+    // A player can restyle or re-armor mid-session — keep the avatar in sync.
+    if (next.skin) this.model.updateColors(next.skin);
+    const armor = armorStacksFrom(next.armor);
+    if (armor) this.model.setArmor(armor);
   }
 
   update(dt: number): void {
