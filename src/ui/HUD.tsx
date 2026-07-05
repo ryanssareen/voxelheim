@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Engine } from "@engine/Engine";
 import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
+
+type DebugInfo = NonNullable<ReturnType<Engine["getDebugInfo"]>>;
 
 const HEART_PATH = "M6.5 11.5L1.5 6.5C0.2 5.2 0.2 3.1 1.5 1.8C2.8 0.5 4.9 0.5 6.2 1.8L6.5 2.1L6.8 1.8C8.1 0.5 10.2 0.5 11.5 1.8C12.8 3.1 12.8 5.2 11.5 6.5L6.5 11.5Z";
 
@@ -120,7 +123,7 @@ function HungerBar({ hunger, maxHunger }: { hunger: number; maxHunger: number })
 /**
  * Minecraft-style HUD: crosshair, shard counter, health/hunger bars, completion overlay, F3 debug.
  */
-export function HUD() {
+export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> }) {
   const shardsCollected = useGameStore((s) => s.shardsCollected);
   const shardsTotal = useGameStore((s) => s.shardsTotal);
   const breakProgress = useGameStore((s) => s.breakProgress);
@@ -135,6 +138,7 @@ export function HUD() {
   const multiplayerPlayers = useMultiplayerStore((s) => s.players);
   const multiplayerStatus = useMultiplayerStore((s) => s.status);
   const [showDebug, setShowDebug] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -146,6 +150,14 @@ export function HUD() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  useEffect(() => {
+    if (!showDebug || !engineRef) return;
+    const tick = () => setDebugInfo(engineRef.current?.getDebugInfo() ?? null);
+    tick();
+    const id = setInterval(tick, 100);
+    return () => clearInterval(id);
+  }, [showDebug, engineRef]);
 
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
@@ -220,6 +232,28 @@ export function HUD() {
         >
           <p>Voxelheim v0.1.0</p>
           <p>F3 — Debug</p>
+          {debugInfo && (
+            <>
+              <p>
+                XYZ: {debugInfo.position.x.toFixed(2)} / {debugInfo.position.y.toFixed(2)} /{" "}
+                {debugInfo.position.z.toFixed(2)}
+              </p>
+              <p>
+                Vel: {debugInfo.velocity.x.toFixed(2)} / {debugInfo.velocity.y.toFixed(2)} /{" "}
+                {debugInfo.velocity.z.toFixed(2)}
+              </p>
+              <p>
+                onGround: {String(debugInfo.onGround)} | flying: {String(debugInfo.isFlying)} | mode:{" "}
+                {debugInfo.gameMode}
+              </p>
+              <p>
+                Feet block: id={debugInfo.feetBlockId} solid={String(debugInfo.feetBlockSolid)}
+              </p>
+              <p>
+                Below block: id={debugInfo.belowBlockId} solid={String(debugInfo.belowBlockSolid)}
+              </p>
+            </>
+          )}
         </div>
       )}
 

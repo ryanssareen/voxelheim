@@ -103,7 +103,7 @@ export function GameCanvas({
       )}
       {isReady && (
         <>
-          <HUD />
+          <HUD engineRef={engineRef} />
           <MinimapUI engineRef={engineRef} />
           <HotbarUI />
           <PauseMenu canvasRef={canvasRef} engineRef={engineRef} />

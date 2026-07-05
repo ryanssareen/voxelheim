@@ -669,6 +669,41 @@ export class Engine {
     };
   }
 
+  /**
+   * Snapshot of player physics state for the F3 debug overlay — lets a
+   * collision bug be diagnosed live instead of guessed at from source.
+   */
+  getDebugInfo(): {
+    position: { x: number; y: number; z: number };
+    velocity: { x: number; y: number; z: number };
+    onGround: boolean;
+    isFlying: boolean;
+    gameMode: string;
+    feetBlockId: number;
+    belowBlockId: number;
+    feetBlockSolid: boolean;
+    belowBlockSolid: boolean;
+  } | null {
+    if (!this.player || !this.chunkManager) return null;
+    const p = this.player.position;
+    const fx = Math.floor(p.x);
+    const fy = Math.floor(p.y);
+    const fz = Math.floor(p.z);
+    const feetBlockId = this.chunkManager.getBlock(fx, fy, fz);
+    const belowBlockId = this.chunkManager.getBlock(fx, fy - 1, fz);
+    return {
+      position: { ...p },
+      velocity: { ...this.player.velocity },
+      onGround: this.player.onGround,
+      isFlying: this.player.isFlying,
+      gameMode: this.gameMode,
+      feetBlockId,
+      belowBlockId,
+      feetBlockSolid: this.registry.isSolid(feetBlockId),
+      belowBlockSolid: this.registry.isSolid(belowBlockId),
+    };
+  }
+
   private gameLoop = (): void => {
     if (!this.running) return;
     this.animationFrameId = requestAnimationFrame(this.gameLoop);
