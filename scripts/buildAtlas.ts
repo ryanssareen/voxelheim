@@ -54,191 +54,163 @@ function fillRect(buf: Buffer, x0: number, y0: number, w: number, h: number, c: 
       setPixel(buf, x, y, c);
 }
 
+function clampByte(v: number): number {
+  return Math.max(0, Math.min(255, Math.round(v)));
+}
+
+/**
+ * Non-directional per-pixel hash in [0,1). Linear `(x*a + y*b) % c` patterns
+ * are constant along diagonals, so they read as diagonal stripes / moire when
+ * a 16px tile repeats across a wall of blocks. A hash avoids that.
+ */
+function hash2(x: number, y: number, seed: number): number {
+  let h = Math.imul(x + 1, 374761393) ^ Math.imul(y + 1, 668265263) ^ Math.imul(seed + 1, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 4294967296;
+}
+
+/** Write one pixel of `base` nudged by ±amount of hash-driven brightness. */
+function grainPixel(buf: Buffer, x: number, y: number, base: RGB, seed: number, amount: number): void {
+  const d = (hash2(x, y, seed) - 0.5) * 2 * amount;
+  setPixel(buf, x, y, { r: clampByte(base.r + d), g: clampByte(base.g + d), b: clampByte(base.b + d) });
+}
+
+/** Fill the whole tile with subtle non-directional grain around `base`. */
+function grainFill(buf: Buffer, base: RGB, seed: number, amount: number): void {
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++)
+      grainPixel(buf, x, y, base, seed, amount);
+}
+
 function grassTop(buf: Buffer): void {
-  const base: RGB = { r: 76, g: 175, b: 80 };
-  const light: RGB = { r: 108, g: 198, b: 110 };
-  const dark: RGB = { r: 58, g: 142, b: 64 };
-  fillRect(buf, 0, 0, 16, 16, base);
+  grainFill(buf, { r: 86, g: 158, b: 74 }, 1, 12);
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
-      const n = (x * 7 + y * 13) % 9;
-      if (n === 0) setPixel(buf, x, y, light);
-      else if (n === 4) setPixel(buf, x, y, dark);
+      if (hash2(x, y, 7) > 0.90) setPixel(buf, x, y, { r: 116, g: 186, b: 96 });
+      else if (hash2(x, y, 9) > 0.94) setPixel(buf, x, y, { r: 62, g: 128, b: 56 });
     }
   }
-  const blades = [[2, 3], [6, 1], [11, 4], [14, 9], [4, 12], [9, 14], [13, 13]];
-  for (const [x, y] of blades) setPixel(buf, x, y, light);
 }
 
 function grassSide(buf: Buffer): void {
-  const dirt: RGB = { r: 141, g: 110, b: 99 };
-  const dirtDark: RGB = { r: 110, g: 82, b: 72 };
-  const dirtLight: RGB = { r: 162, g: 130, b: 112 };
-  const grass: RGB = { r: 76, g: 175, b: 80 };
-  const grassDark: RGB = { r: 58, g: 142, b: 64 };
-  const grassLight: RGB = { r: 108, g: 198, b: 110 };
-  // Dirt base with speckle
-  fillRect(buf, 0, 0, 16, 16, dirt);
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const n = (x * 5 + y * 11) % 8;
-      if (n === 0) setPixel(buf, x, y, dirtDark);
-      else if (n === 3) setPixel(buf, x, y, dirtLight);
-    }
-  }
-  // Grass strip on top with a jagged bottom edge (classic grass_side look)
-  const depths = [4, 5, 3, 4, 5, 4, 3, 5, 4, 4, 5, 3, 4, 5, 4, 3];
+  const dirt: RGB = { r: 138, g: 108, b: 96 };
+  const grass: RGB = { r: 86, g: 158, b: 74 };
+  const grassDk: RGB = { r: 66, g: 130, b: 58 };
+  grainFill(buf, dirt, 2, 12);
+  // sparse dirt pebbles below the grass line
+  for (let y = 5; y < 16; y++)
+    for (let x = 0; x < 16; x++)
+      if (hash2(x, y, 5) > 0.93) setPixel(buf, x, y, { r: 108, g: 82, b: 70 });
+  // grass band on top with a soft ±1px edge (not a harsh sawtooth)
   for (let x = 0; x < 16; x++) {
-    const depth = depths[x];
+    const depth = 3 + (hash2(x, 0, 3) > 0.55 ? 1 : 0);
     for (let y = 0; y < depth; y++) {
-      setPixel(buf, x, y, y === depth - 1 ? grassDark : grass);
+      grainPixel(buf, x, y, y === depth - 1 ? grassDk : grass, 3, 8);
     }
-    setPixel(buf, x, 0, grassLight);
+    if (hash2(x, 0, 4) > 0.72) setPixel(buf, x, depth, grassDk);
   }
 }
 
 function dirtTexture(buf: Buffer): void {
-  const base: RGB = { r: 141, g: 110, b: 99 };
-  const dark: RGB = { r: 110, g: 82, b: 72 };
-  const light: RGB = { r: 162, g: 130, b: 114 };
-  const pebble: RGB = { r: 92, g: 68, b: 58 };
-  fillRect(buf, 0, 0, 16, 16, base);
+  grainFill(buf, { r: 138, g: 108, b: 96 }, 2, 13);
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
-      const n = (x * 7 + y * 5) % 9;
-      if (n === 0) setPixel(buf, x, y, dark);
-      else if (n === 5) setPixel(buf, x, y, light);
+      const n = hash2(x, y, 6);
+      if (n > 0.93) setPixel(buf, x, y, { r: 104, g: 78, b: 66 });
+      else if (n < 0.05) setPixel(buf, x, y, { r: 158, g: 128, b: 112 });
     }
-  }
-  const pebbles = [[3, 4], [10, 2], [6, 9], [13, 11], [2, 13], [9, 13]];
-  for (const [x, y] of pebbles) {
-    setPixel(buf, x, y, pebble);
-    if (x + 1 < 16) setPixel(buf, x + 1, y, pebble);
   }
 }
 
 function stoneTexture(buf: Buffer): void {
-  const base: RGB = { r: 158, g: 158, b: 158 };
-  const dark: RGB = { r: 132, g: 132, b: 132 };
-  const darker: RGB = { r: 108, g: 108, b: 108 };
-  const light: RGB = { r: 182, g: 182, b: 182 };
-  fillRect(buf, 0, 0, 16, 16, base);
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const n = (x * 3 + y * 7) % 11;
-      if (n === 0) setPixel(buf, x, y, dark);
-      else if (n === 6) setPixel(buf, x, y, light);
-    }
-  }
-  // A couple of cracks
-  const crack = [[4, 3], [5, 4], [6, 4], [7, 5], [11, 9], [12, 10], [10, 12], [11, 12]];
-  for (const [x, y] of crack) setPixel(buf, x, y, darker);
+  grainFill(buf, { r: 148, g: 148, b: 150 }, 3, 8);
+  // a few short faint cracks (fixed positions, low contrast)
+  const cracks = [[4, 3], [5, 4], [6, 4], [10, 9], [11, 10], [11, 11], [3, 12], [12, 6]];
+  for (const [x, y] of cracks) setPixel(buf, x, y, { r: 122, g: 122, b: 126 });
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++)
+      if (hash2(x, y, 11) > 0.96) setPixel(buf, x, y, { r: 176, g: 176, b: 180 });
 }
 
 function sandTexture(buf: Buffer): void {
-  const base: RGB = { r: 232, g: 210, b: 150 };
-  const dark: RGB = { r: 210, g: 186, b: 124 };
-  const light: RGB = { r: 245, g: 228, b: 176 };
-  fillRect(buf, 0, 0, 16, 16, base);
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const n = (x * 11 + y * 3) % 7;
-      if (n === 0) setPixel(buf, x, y, dark);
-      else if (n === 3) setPixel(buf, x, y, light);
-    }
-  }
+  grainFill(buf, { r: 226, g: 205, b: 150 }, 4, 10);
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++)
+      if (hash2(x, y, 12) > 0.95) setPixel(buf, x, y, { r: 244, g: 228, b: 180 });
 }
 
 function logSide(buf: Buffer): void {
-  const bark: RGB = { r: 93, g: 64, b: 55 };
-  const barkDark: RGB = { r: 72, g: 48, b: 40 };
-  const barkLight: RGB = { r: 114, g: 82, b: 68 };
-  fillRect(buf, 0, 0, 16, 16, bark);
-  // Vertical bark grooves, slightly offset every 4 rows
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const groove = (x + ((y >> 2) & 1)) % 4;
-      if (groove === 0) setPixel(buf, x, y, barkDark);
-      else if (groove === 2) setPixel(buf, x, y, barkLight);
+  const bark: RGB = { r: 102, g: 72, b: 58 };
+  // Vertical bark: a per-column brightness streak (no diagonals) + light grain
+  for (let x = 0; x < 16; x++) {
+    const streak = (hash2(x, 0, 20) - 0.5) * 2 * 20;
+    for (let y = 0; y < 16; y++) {
+      const g = (hash2(x, y, 21) - 0.5) * 2 * 5;
+      setPixel(buf, x, y, {
+        r: clampByte(bark.r + streak + g),
+        g: clampByte(bark.g + streak * 0.8 + g),
+        b: clampByte(bark.b + streak * 0.7 + g),
+      });
     }
   }
-  setPixel(buf, 5, 6, barkDark);
-  setPixel(buf, 10, 11, barkDark);
+  setPixel(buf, 5, 6, { r: 70, g: 48, b: 38 });
+  setPixel(buf, 10, 11, { r: 70, g: 48, b: 38 });
 }
 
 function logTop(buf: Buffer): void {
-  const wood: RGB = { r: 215, g: 204, b: 200 };
-  const ringMed: RGB = { r: 190, g: 170, b: 150 };
-  const ringDark: RGB = { r: 150, g: 120, b: 95 };
-  const center: RGB = { r: 120, g: 92, b: 70 };
-  fillRect(buf, 0, 0, 16, 16, wood);
-  // Concentric tree rings around the center
+  const wood: RGB = { r: 196, g: 176, b: 148 };
+  const ring: RGB = { r: 184, g: 164, b: 136 };
+  grainFill(buf, wood, 22, 7);
+  // Two faint rings + a soft center — reads as cut wood without a busy bullseye grid
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
       const dx = x - 7.5;
       const dy = y - 7.5;
-      const d = Math.round(Math.sqrt(dx * dx + dy * dy));
-      if (d % 3 === 0) setPixel(buf, x, y, ringDark);
-      else if (d % 3 === 1) setPixel(buf, x, y, ringMed);
+      const rd = Math.round(Math.sqrt(dx * dx + dy * dy));
+      if (rd === 3 || rd === 6) grainPixel(buf, x, y, ring, 23, 5);
     }
   }
-  fillRect(buf, 7, 7, 2, 2, center);
+  setPixel(buf, 7, 8, { r: 172, g: 150, b: 122 });
+  setPixel(buf, 8, 8, { r: 172, g: 150, b: 122 });
 }
 
 function leavesTexture(buf: Buffer): void {
-  const base: RGB = { r: 46, g: 125, b: 50 };
-  const dark: RGB = { r: 34, g: 96, b: 40 };
-  const light: RGB = { r: 74, g: 156, b: 72 };
-  const deep: RGB = { r: 24, g: 74, b: 34 };
-  fillRect(buf, 0, 0, 16, 16, base);
+  grainFill(buf, { r: 56, g: 118, b: 52 }, 30, 20);
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
-      const n = (x * 5 + y * 9 + ((x * y) % 5)) % 6;
-      if (n === 0) setPixel(buf, x, y, light);
-      else if (n === 2) setPixel(buf, x, y, dark);
-      else if (n === 4) setPixel(buf, x, y, deep);
+      const n = hash2(x, y, 31);
+      if (n > 0.88) setPixel(buf, x, y, { r: 82, g: 150, b: 70 });
+      else if (n < 0.12) setPixel(buf, x, y, { r: 34, g: 84, b: 40 });
     }
   }
-  // Dark gaps suggesting foliage clusters
-  const gaps = [[3, 2], [12, 4], [7, 8], [2, 11], [13, 12], [9, 13]];
-  for (const [x, y] of gaps) setPixel(buf, x, y, deep);
 }
 
 function crystalShard(buf: Buffer): void {
-  const gem: RGB = { r: 0, g: 210, b: 235 };
-  const gemDark: RGB = { r: 0, g: 150, b: 180 };
-  const gemLight: RGB = { r: 150, g: 245, b: 255 };
-  const white: RGB = { r: 230, g: 255, b: 255 };
-  const bg: RGB = { r: 0, g: 118, b: 148 };
-  fillRect(buf, 0, 0, 16, 16, bg);
-  // Central faceted diamond
+  // A shimmering crystalline surface that tiles (no centered diamond-on-dark)
+  grainFill(buf, { r: 40, g: 190, b: 214 }, 40, 16);
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
-      const d = Math.abs(x - 8) + Math.abs(y - 8);
-      if (d <= 6) setPixel(buf, x, y, gem);
-      if (d <= 4 && x < 8) setPixel(buf, x, y, gemLight);
-      if (d <= 6 && x > 9) setPixel(buf, x, y, gemDark);
+      const n = hash2(x, y, 41);
+      if (n > 0.90) setPixel(buf, x, y, { r: 150, g: 240, b: 252 });
+      else if (n < 0.10) setPixel(buf, x, y, { r: 12, g: 138, b: 168 });
     }
   }
-  setPixel(buf, 8, 3, white);
-  setPixel(buf, 6, 6, white);
-  setPixel(buf, 10, 10, gemDark);
+  const sparks = [[3, 4], [11, 6], [7, 11], [13, 13], [5, 9]];
+  for (const [x, y] of sparks) setPixel(buf, x, y, { r: 235, g: 255, b: 255 });
 }
 
 function planksTexture(buf: Buffer): void {
-  const base: RGB = { r: 200, g: 165, b: 90 };
-  const dark: RGB = { r: 168, g: 134, b: 70 };
-  const light: RGB = { r: 216, g: 184, b: 112 };
-  const seam: RGB = { r: 120, g: 92, b: 48 };
-  // Four horizontal plank bands with wood-grain speckle
+  const plankBases: RGB[] = [
+    { r: 202, g: 166, b: 96 },
+    { r: 190, g: 154, b: 86 },
+    { r: 208, g: 172, b: 102 },
+    { r: 196, g: 160, b: 90 },
+  ];
+  const seam: RGB = { r: 128, g: 96, b: 52 };
   for (let y = 0; y < 16; y++) {
     const band = Math.floor(y / 4);
-    for (let x = 0; x < 16; x++) {
-      let c = base;
-      if ((x * 3 + band * 7) % 11 === 0) c = dark;
-      else if ((x * 5 + band * 3) % 13 === 0) c = light;
-      setPixel(buf, x, y, c);
-    }
+    for (let x = 0; x < 16; x++) grainPixel(buf, x, y, plankBases[band], 50 + band, 7);
   }
   // Horizontal seams between planks
   for (let x = 0; x < 16; x++) {
@@ -250,7 +222,7 @@ function planksTexture(buf: Buffer): void {
   // Offset vertical joints per band
   for (let y = 0; y < 3; y++) setPixel(buf, 8, y, seam);
   for (let y = 4; y < 7; y++) setPixel(buf, 3, y, seam);
-  for (let y = 8; y < 11; y++) setPixel(buf, 11, y, seam);
+  for (let y = 8; y < 11; y++) setPixel(buf, 12, y, seam);
   for (let y = 12; y < 15; y++) setPixel(buf, 6, y, seam);
 }
 
