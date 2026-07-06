@@ -1,4 +1,4 @@
-# Pages (generated 2026-07-03)
+# Pages (generated 2026-08-05)
 # 8 pages. [client]=client component, [server]=server component.
 
 [client]   /                                                  Home
