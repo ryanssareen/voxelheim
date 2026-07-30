@@ -15,6 +15,7 @@ import { InventoryUI } from "@ui/InventoryUI";
 import { CraftingTableUI } from "@ui/CraftingTableUI";
 import { FurnaceUI } from "@ui/FurnaceUI";
 import { CreativeInventoryUI } from "@ui/CreativeInventoryUI";
+import { Walkthrough } from "@ui/Walkthrough";
 import { ChatUI } from "@ui/ChatUI";
 
 export function GameCanvas({
@@ -113,6 +114,7 @@ export function GameCanvas({
           <FurnaceUI />
           <CreativeInventoryUI />
           <ChatUI onSend={handleSendChat} openRequest={chatOpenRequest} />
+          <Walkthrough />
         </>
       )}
     </div>
