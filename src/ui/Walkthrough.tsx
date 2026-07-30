@@ -7,7 +7,11 @@ import {
 } from "@store/useWalkthroughStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 
-const MOVE_KEYS = new Set(["KeyW", "KeyA", "KeyS", "KeyD"]);
+// Mirrors PlayerController, which also accepts the arrow keys.
+const MOVE_KEYS = new Set([
+  "KeyW", "KeyA", "KeyS", "KeyD",
+  "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight",
+]);
 
 export function Walkthrough() {
   const isOpen = useWalkthroughStore((s) => s.isOpen);
