@@ -50,11 +50,18 @@ export default function WorldsPage() {
   const playerName = useIdentityStore((state) => state.playerName);
 
   useEffect(() => {
-    import("@systems/persistence/WorldStorage").then(async (mod) => {
-      const list = await mod.listWorlds();
-      setWorlds(list);
-      setLoading(false);
-    });
+    import("@systems/persistence/WorldStorage")
+      .then(async (mod) => {
+        const list = await mod.listWorlds();
+        setWorlds(list);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+        setJoinError(
+          "Couldn't read saved worlds — this browser's storage is unavailable."
+        );
+      });
   }, []);
 
   const handleDelete = async (worldId: string) => {

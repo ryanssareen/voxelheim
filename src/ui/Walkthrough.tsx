@@ -6,6 +6,7 @@ import {
   useWalkthroughStore,
 } from "@store/useWalkthroughStore";
 import { useInventoryStore } from "@store/useInventoryStore";
+import { DEMO_WORLD_ID } from "@lib/demoWorld";
 
 // Mirrors PlayerController, which also accepts the arrow keys.
 const MOVE_KEYS = new Set([
@@ -13,16 +14,18 @@ const MOVE_KEYS = new Set([
   "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight",
 ]);
 
-export function Walkthrough() {
+export function Walkthrough({ worldId }: { worldId?: string }) {
   const isOpen = useWalkthroughStore((s) => s.isOpen);
   const activeIndex = useWalkthroughStore((s) => s.activeIndex);
   const notify = useWalkthroughStore((s) => s.notify);
   const dismiss = useWalkthroughStore((s) => s.dismiss);
   const startIfUnseen = useWalkthroughStore((s) => s.startIfUnseen);
 
+  // R9 scopes auto-start to the demo world. Existing players loading their own
+  // worlds must not have the overlay appear unasked; they reach it from pause.
   useEffect(() => {
-    startIfUnseen();
-  }, [startIfUnseen]);
+    if (worldId === DEMO_WORLD_ID) startIfUnseen();
+  }, [worldId, startIfUnseen]);
 
   // Movement is observed here; break/place are notified from BlockInteraction.
   useEffect(() => {

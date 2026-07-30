@@ -47,15 +47,8 @@ export async function ensureDemoWorld(): Promise<string> {
     );
   }
 
-  // GameCanvas reads the seed from this key, same as the create-world flow.
-  if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage.setItem(
-        "voxelheim-world-config",
-        JSON.stringify(DEMO_WORLD_CONFIG)
-      );
-    } catch {}
-  }
-
+  // No sessionStorage write: Engine.init only reads the world-config key on the
+  // worldId-less path, and the demo always routes with worldId, so the seed
+  // comes from the saved meta above.
   return DEMO_WORLD_ID;
 }

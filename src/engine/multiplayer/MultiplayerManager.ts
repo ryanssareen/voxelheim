@@ -32,8 +32,9 @@ export class MultiplayerManager {
   private readonly scene: THREE.Scene;
   private readonly chunkManager: ChunkManager;
   private readonly itemDrops: ItemDropManager;
-  private readonly playerId = resolvePlayerId();
-  private readonly playerName = resolvePlayerName();
+  // Joining a session is a durable action, so the guest id is persisted here.
+  private readonly playerId = resolvePlayerId(true);
+  private readonly playerName = resolvePlayerName(true);
   private readonly avatars = new Map<string, RemotePlayerAvatar>();
   private readonly appliedBlockTimestamps = new Map<string, number>();
   private readonly cleanup: Array<() => void> = [];

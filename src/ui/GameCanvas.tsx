@@ -114,7 +114,7 @@ export function GameCanvas({
           <FurnaceUI />
           <CreativeInventoryUI />
           <ChatUI onSend={handleSendChat} openRequest={chatOpenRequest} />
-          <Walkthrough />
+          <Walkthrough worldId={worldId} />
         </>
       )}
     </div>

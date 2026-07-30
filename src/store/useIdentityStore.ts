@@ -6,6 +6,7 @@ import {
   resolvePlayerName,
   writePlayerNameOverride,
 } from "@lib/identity";
+import { useAuthStore } from "@store/useAuthStore";
 
 interface IdentityState {
   playerId: string;
@@ -19,16 +20,29 @@ interface IdentityState {
   setPlayerName: (name: string) => void;
 }
 
-export const useIdentityStore = create<IdentityState>((set) => {
+function snapshot() {
   const playerId = resolvePlayerId();
   return {
     playerId,
     playerName: resolvePlayerName(),
     generatedName: generateName(playerId),
     nameOverride: readPlayerNameOverride(),
-    setPlayerName: (name: string) => {
-      const override = writePlayerNameOverride(name);
-      set({ nameOverride: override, playerName: resolvePlayerName() });
-    },
   };
+}
+
+export const useIdentityStore = create<IdentityState>((set) => ({
+  ...snapshot(),
+  setPlayerName: (name: string) => {
+    writePlayerNameOverride(name);
+    set(snapshot());
+  },
+}));
+
+// Auth hydrates in an effect, after this module is evaluated. Without this the
+// store would keep a guest id for a signed-in player while MultiplayerManager
+// (constructed later) resolves the auth uid -- two names for one player.
+useAuthStore.subscribe((state, prev) => {
+  if (state.user?.uid !== prev.user?.uid) {
+    useIdentityStore.setState(snapshot());
+  }
 });

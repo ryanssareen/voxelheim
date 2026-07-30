@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
+  __resetIdentityCache,
   MAX_PLAYER_NAME_LENGTH,
   PLAYER_ID_STORAGE_KEY,
   generateName,
@@ -25,6 +26,7 @@ function installWindow() {
 
 function removeWindow() {
   delete (globalThis as { window?: unknown }).window;
+  __resetIdentityCache();
 }
 
 describe("resolvePlayerId", () => {
@@ -42,9 +44,9 @@ describe("resolvePlayerId", () => {
     expect(resolvePlayerId()).toBe("uid-123");
   });
 
-  it("mints and persists a guest id when signed out", () => {
+  it("mints and persists a guest id when signed out and persist is requested", () => {
     const store = installWindow();
-    const id = resolvePlayerId();
+    const id = resolvePlayerId(true);
     expect(id).toMatch(/^guest-/);
     expect(store.get(PLAYER_ID_STORAGE_KEY)).toBe(id);
   });
@@ -58,6 +60,59 @@ describe("resolvePlayerId", () => {
     removeWindow();
     expect(() => resolvePlayerId()).not.toThrow();
     expect(resolvePlayerId()).toBe("offline-player");
+  });
+});
+
+describe("storage denial", () => {
+  afterEach(removeWindow);
+
+  it("does not throw when localStorage access itself throws", () => {
+    (globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: () => {
+          throw new Error("SecurityError: site data blocked");
+        },
+        setItem: () => {
+          throw new Error("SecurityError: site data blocked");
+        },
+        removeItem: () => {},
+      },
+    };
+    useAuthStore.setState({ user: null });
+
+    expect(() => resolvePlayerId()).not.toThrow();
+    expect(() => resolvePlayerName()).not.toThrow();
+  });
+
+  it("returns a stable id across calls when the write fails", () => {
+    (globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error("QuotaExceededError");
+        },
+        removeItem: () => {},
+      },
+    };
+    useAuthStore.setState({ user: null });
+
+    expect(resolvePlayerId(true)).toBe(resolvePlayerId(true));
+  });
+});
+
+describe("lazy minting", () => {
+  afterEach(removeWindow);
+
+  // R5: loading a page must not write a durable identifier.
+  it("does not persist an id until persist is requested", () => {
+    const store = installWindow();
+    useAuthStore.setState({ user: null });
+
+    resolvePlayerId();
+    expect(store.has(PLAYER_ID_STORAGE_KEY)).toBe(false);
+
+    resolvePlayerId(true);
+    expect(store.has(PLAYER_ID_STORAGE_KEY)).toBe(true);
   });
 });
 

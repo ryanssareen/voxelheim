@@ -195,16 +195,25 @@ export default function Home() {
   const [showOptions, setShowOptions] = useState(false);
   const [showQuit, setShowQuit] = useState(false);
   const [startingDemo, setStartingDemo] = useState(false);
+  const [playError, setPlayError] = useState("");
   const { user, loading: authLoading, signOut } = useAuthStore();
   const playerName = useIdentityStore((state) => state.playerName);
 
   const handlePlayDemo = async () => {
     setStartingDemo(true);
+    setPlayError("");
     try {
-      const { ensureDemoWorld } = await import("@lib/demoWorld");
-      const worldId = await ensureDemoWorld();
-      router.push(`/game?worldId=${worldId}`);
+      const { ensureDemoWorld, DEMO_WORLD_ID } = await import("@lib/demoWorld");
+      try {
+        router.push(`/game?worldId=${await ensureDemoWorld()}`);
+      } catch {
+        // Storage is blocked or full. The island is deterministic from its seed,
+        // so the game still runs — the visitor only loses persistence.
+        setPlayError("Progress won't save — this browser's storage is blocked.");
+        router.push(`/game?worldId=${DEMO_WORLD_ID}`);
+      }
     } catch {
+      setPlayError("Couldn't start the game. Try reloading the page.");
       setStartingDemo(false);
     }
   };
@@ -293,6 +302,11 @@ export default function Home() {
           <button onClick={() => setShowOptions(true)} className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
             Options...
           </button>
+          {playError && (
+            <p className="text-[11px] text-red-300 font-mono text-center" style={{ textShadow: "1px 1px 0 #000" }}>
+              {playError}
+            </p>
+          )}
         </div>
 
         {/* Accounts are optional — sign-in is a secondary link, never a gate. */}

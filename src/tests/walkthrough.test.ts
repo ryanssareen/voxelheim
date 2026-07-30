@@ -3,6 +3,7 @@ import {
   WALKTHROUGH_STEPS,
   useWalkthroughStore,
 } from "@store/useWalkthroughStore";
+import { DEMO_WORLD_ID } from "@lib/demoWorld";
 
 function installWindow() {
   const store = new Map<string, string>();
@@ -91,6 +92,25 @@ describe("dismissal and revisiting", () => {
 
   it("auto-starts on first entry when never seen", () => {
     useWalkthroughStore.getState().startIfUnseen();
+    expect(useWalkthroughStore.getState().isOpen).toBe(true);
+  });
+});
+
+describe("auto-start scoping", () => {
+  // R9 scopes auto-start to the demo world. Mounting it unconditionally would
+  // hijack every existing player's own world on upgrade.
+  const shouldAutoStart = (worldId: string | undefined) =>
+    worldId === DEMO_WORLD_ID;
+
+  it("auto-starts only in the demo world", () => {
+    expect(shouldAutoStart(DEMO_WORLD_ID)).toBe(true);
+    expect(shouldAutoStart("world-abc123")).toBe(false);
+    expect(shouldAutoStart(undefined)).toBe(false);
+  });
+
+  it("still reopens on demand in a non-demo world", () => {
+    useWalkthroughStore.setState({ completed: true });
+    useWalkthroughStore.getState().reopen();
     expect(useWalkthroughStore.getState().isOpen).toBe(true);
   });
 });

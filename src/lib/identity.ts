@@ -27,23 +27,55 @@ function hashString(value: string): number {
 }
 
 /**
- * Stable identifier for this player. Prefers the auth uid when signed in, and
- * otherwise mints a local-only `guest-` id that never leaves the device.
+ * Per-tab fallback so a denied or failing localStorage degrades to a stable id
+ * for the session instead of minting a new one on every call.
  */
-export function resolvePlayerId(): string {
+let cachedGuestId: string | null = null;
+
+/** Test-only: clears the per-tab cache so cases start from a known state. */
+export function __resetIdentityCache() {
+  cachedGuestId = null;
+}
+
+function readStoredGuestId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(PLAYER_ID_STORAGE_KEY);
+  } catch {
+    // Blocked site data or a sandboxed iframe throws on mere access.
+    return null;
+  }
+}
+
+/**
+ * Stable identifier for this player. Prefers the auth uid when signed in, and
+ * otherwise uses a local-only `guest-` id that never leaves the device.
+ *
+ * Pass `persist` on the first action that needs a durable identity (creating a
+ * world, hosting or joining a session). Display-only callers leave it false so
+ * merely loading the page writes nothing.
+ */
+export function resolvePlayerId(persist = false): string {
   const authUser = useAuthStore.getState().user;
   if (authUser?.uid) return authUser.uid;
 
   if (typeof window === "undefined") return OFFLINE_PLAYER_ID;
 
-  const existing = window.localStorage.getItem(PLAYER_ID_STORAGE_KEY);
-  if (existing) return existing;
+  const stored = readStoredGuestId();
+  if (stored) {
+    cachedGuestId = stored;
+    return stored;
+  }
 
-  const next = `guest-${Math.random().toString(36).slice(2, 10)}`;
-  try {
-    window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, next);
-  } catch {}
-  return next;
+  if (!cachedGuestId) {
+    cachedGuestId = `guest-${Math.random().toString(36).slice(2, 10)}`;
+  }
+  if (persist) {
+    try {
+      window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, cachedGuestId);
+    } catch {}
+  }
+  return cachedGuestId;
 }
 
 /**
@@ -86,6 +118,6 @@ export function writePlayerNameOverride(name: string): string | null {
 }
 
 /** Display name for this player: the override when set, otherwise generated. */
-export function resolvePlayerName(): string {
-  return readPlayerNameOverride() ?? generateName(resolvePlayerId());
+export function resolvePlayerName(persist = false): string {
+  return readPlayerNameOverride() ?? generateName(resolvePlayerId(persist));
 }

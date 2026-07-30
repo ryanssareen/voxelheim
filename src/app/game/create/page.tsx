@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useIdentityStore } from "@store/useIdentityStore";
+import { resolvePlayerId } from "@lib/identity";
 import { WORLD_SIZE_BLOCKS } from "@engine/world/constants";
 
 const MC_BTN =
@@ -41,6 +42,8 @@ export default function CreateWorldPage() {
     setError("");
 
     try {
+      // R5: creating a world is the first action that earns a durable identity.
+      resolvePlayerId(true);
       const actualSeed = seed || Math.random().toString(36).slice(2, 10);
       const actualWorldType = WORLD_TYPES[worldType].name.toLowerCase() as
         | "island"
