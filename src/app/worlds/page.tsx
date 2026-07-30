@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { WorldMeta } from "@systems/persistence/WorldStorage";
-import { useAuthStore } from "@store/useAuthStore";
+import { useIdentityStore } from "@store/useIdentityStore";
 
 const MC_BTN =
   "block text-center py-2.5 text-white font-mono tracking-wide hover:brightness-125 active:brightness-90 transition-all select-none";
@@ -47,22 +47,15 @@ export default function WorldsPage() {
   const [joinError, setJoinError] = useState("");
   const [busyWorldId, setBusyWorldId] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
-  const { user, loading: authLoading } = useAuthStore();
+  const playerName = useIdentityStore((state) => state.playerName);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace("/login");
-    }
-  }, [authLoading, user, router]);
-
-  useEffect(() => {
-    if (!user) return;
     import("@systems/persistence/WorldStorage").then(async (mod) => {
       const list = await mod.listWorlds();
       setWorlds(list);
       setLoading(false);
     });
-  }, [user]);
+  }, []);
 
   const handleDelete = async (worldId: string) => {
     if (!confirm("Delete this world? This cannot be undone.")) return;
@@ -90,7 +83,7 @@ export default function WorldsPage() {
         islandSize:
           worldType === "island" ? world.islandSize ?? 64 : undefined,
         worldName: world.name,
-        hostName: user?.email?.split("@")[0] ?? "Host",
+        hostName: playerName,
       });
 
       if (session.transport === "local") {

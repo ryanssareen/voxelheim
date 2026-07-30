@@ -10,7 +10,7 @@ import type {
   MultiplayerPlayerState,
   MultiplayerSessionMeta,
 } from "@lib/multiplayer/types";
-import { useAuthStore } from "@store/useAuthStore";
+import { resolvePlayerId, resolvePlayerName } from "@lib/identity";
 import { useChatStore } from "@store/useChatStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 import { useSkinStore } from "@store/useSkinStore";
@@ -18,7 +18,6 @@ import { useHotbarStore } from "@store/useHotbarStore";
 
 const PLAYER_SEND_INTERVAL_MS = 120;
 const PLAYER_STALE_AFTER_MS = 15_000;
-const LOCAL_PLAYER_STORAGE_KEY = "voxelheim-multiplayer-player-id";
 
 interface LocalPlayerSnapshot {
   x: number;
@@ -29,35 +28,12 @@ interface LocalPlayerSnapshot {
   isCrouching: boolean;
 }
 
-function getStablePlayerId(): string {
-  const authUser = useAuthStore.getState().user;
-  if (authUser?.uid) return authUser.uid;
-
-  if (typeof window === "undefined") {
-    return "offline-player";
-  }
-
-  const existing = window.localStorage.getItem(LOCAL_PLAYER_STORAGE_KEY);
-  if (existing) return existing;
-
-  const next = `guest-${Math.random().toString(36).slice(2, 10)}`;
-  window.localStorage.setItem(LOCAL_PLAYER_STORAGE_KEY, next);
-  return next;
-}
-
-function getPlayerName(): string {
-  const authUser = useAuthStore.getState().user;
-  const emailName = authUser?.email?.split("@")[0]?.trim();
-  if (emailName) return emailName.slice(0, 16);
-  return "Guest";
-}
-
 export class MultiplayerManager {
   private readonly scene: THREE.Scene;
   private readonly chunkManager: ChunkManager;
   private readonly itemDrops: ItemDropManager;
-  private readonly playerId = getStablePlayerId();
-  private readonly playerName = getPlayerName();
+  private readonly playerId = resolvePlayerId();
+  private readonly playerName = resolvePlayerName();
   private readonly avatars = new Map<string, RemotePlayerAvatar>();
   private readonly appliedBlockTimestamps = new Map<string, number>();
   private readonly cleanup: Array<() => void> = [];

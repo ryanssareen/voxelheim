@@ -117,4 +117,15 @@ describe("player name override", () => {
     installWindow();
     expect(resolvePlayerName()).not.toBe("Guest");
   });
+
+  // R8: the email must not reach session data even for signed-in users.
+  it("never derives the name from a signed-in user's email", () => {
+    installWindow();
+    useAuthStore.setState({
+      user: { uid: "uid-9", email: "ryansareen@example.com", idToken: "", refreshToken: "" },
+    });
+    const name = resolvePlayerName();
+    expect(name).not.toContain("ryansareen");
+    expect(name).toBe(generateName("uid-9"));
+  });
 });
