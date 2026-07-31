@@ -127,3 +127,51 @@ describe("Camera third-person obstruction", () => {
     expect(three.position.z).toBeCloseTo(5, 6);
   });
 });
+
+/**
+ * Once the boom can shorten, the camera can end up close enough that the player
+ * model fills the view or clips through the near plane. It has to hide itself.
+ */
+describe("Camera player-model visibility", () => {
+  const EYE_H = 1.6;
+  const FEET = { x: 0, y: 65, z: 0 };
+
+  function visibilityWith(
+    mode: "first-person" | "third-person-back",
+    isSolidAt?: (x: number, y: number, z: number) => boolean
+  ) {
+    const cam = new Camera();
+    cam.mode = mode;
+    const three = new THREE.PerspectiveCamera(75, 1, 0.1, 300);
+    cam.applyToThreeCamera(three, FEET, EYE_H, isSolidAt);
+    return cam.isPlayerModelVisible();
+  }
+
+  it("hides the model in first person", () => {
+    expect(visibilityWith("first-person", () => false)).toBe(false);
+  });
+
+  it("shows the model when the boom has room", () => {
+    expect(visibilityWith("third-person-back", () => false)).toBe(true);
+  });
+
+  it("hides the model when a wall squeezes the boom in close", () => {
+    // Solid from z=1 outward leaves well under a block of boom.
+    expect(visibilityWith("third-person-back", (_x, _y, z) => z >= 1)).toBe(false);
+  });
+
+  it("hides the model when fully enclosed", () => {
+    expect(visibilityWith("third-person-back", () => true)).toBe(false);
+  });
+
+  it("still shows the model at a moderate pull-in", () => {
+    // Solid from z=4 leaves ~3.7 of boom — plenty to see the body.
+    expect(visibilityWith("third-person-back", (_x, _y, z) => z >= 4)).toBe(true);
+  });
+
+  it("defaults to visible in third person before any frame is applied", () => {
+    const cam = new Camera();
+    cam.mode = "third-person-back";
+    expect(cam.isPlayerModelVisible()).toBe(true);
+  });
+});

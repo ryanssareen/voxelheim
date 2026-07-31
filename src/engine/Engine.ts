@@ -1276,8 +1276,6 @@ export class Engine {
       this.player!.isCrouching,
       dt
     );
-    this.playerModel!.setVisible(this.camera.mode !== "first-person");
-
     this.multiplayer?.update(dt, {
       x: this.player!.position.x,
       y: this.player!.position.y,
@@ -1287,7 +1285,8 @@ export class Engine {
       isCrouching: this.player!.isCrouching,
     });
 
-    // Camera
+    // Camera. Must run before the model visibility check below — the boom can
+    // shorten against terrain, and a close boom hides the model.
     const eyeH = this.player!.isCrouching ? 1.2 : 1.6;
     this.camera.applyToThreeCamera(
       this.renderer!.getCamera(),
@@ -1295,6 +1294,7 @@ export class Engine {
       eyeH,
       this.isSolidAt
     );
+    this.playerModel!.setVisible(this.camera.isPlayerModelVisible());
 
     this.renderer!.render();
   }

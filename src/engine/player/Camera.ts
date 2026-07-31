@@ -13,6 +13,12 @@ const THIRD_PERSON_MIN_DISTANCE = 0.35;
 const THIRD_PERSON_SURFACE_MARGIN = 0.3;
 /** Probe granularity along the boom. Finer than the margin so no block is skipped. */
 const THIRD_PERSON_PROBE_STEP = 0.15;
+/**
+ * Boom length below which the player model is hidden. The body is ~1.8 tall and
+ * centred on the eye axis, so closer than this it fills the view long before it
+ * actually reaches the near plane.
+ */
+const MODEL_HIDE_DISTANCE = 1.5;
 
 /** Reports whether the block containing a world position is solid. */
 export type SolidityProbe = (x: number, y: number, z: number) => boolean;
@@ -24,6 +30,19 @@ export class Camera {
   public yaw = 0;
   public pitch = 0;
   public mode: CameraMode = "first-person";
+
+  /** Boom length the last applyToThreeCamera settled on. */
+  private lastBoomDistance = THIRD_PERSON_DISTANCE;
+
+  /**
+   * Whether the player model should be drawn this frame. False in first person,
+   * and false in third person once the boom has been squeezed close enough that
+   * the model would fill the view.
+   */
+  isPlayerModelVisible(): boolean {
+    if (this.mode === "first-person") return false;
+    return this.lastBoomDistance >= MODEL_HIDE_DISTANCE;
+  }
 
   /** Cycles through camera modes: 1st → 3rd back → 3rd front → 1st. */
   cycleMode(): void {
@@ -118,6 +137,7 @@ export class Camera {
     const eyeZ = position.z;
 
     if (this.mode === "first-person") {
+      this.lastBoomDistance = 0;
       camera.position.set(eyeX, eyeY, eyeZ);
       camera.rotation.set(this.pitch, this.yaw, 0, "YXZ");
     } else {
@@ -133,6 +153,7 @@ export class Camera {
       const dist = isSolidAt
         ? this.clearBoomDistance(eyeX, eyeY, eyeZ, boomX, boomY, boomZ, isSolidAt)
         : THIRD_PERSON_DISTANCE;
+      this.lastBoomDistance = dist;
 
       camera.position.set(
         eyeX + boomX * dist,
