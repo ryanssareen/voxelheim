@@ -4,6 +4,24 @@ import { CHUNK_SIZE } from "@engine/world/constants";
 import type { ChunkMeshData } from "@engine/renderer/ChunkMeshBuilder";
 
 /**
+ * Whether a measured viewport is worth handing to the renderer.
+ *
+ * A container measures 0 whenever layout has not settled — a background tab, a
+ * hidden parent, the frame before first paint. Applying that size would set the
+ * camera aspect to `0 / 0` (NaN, which corrupts the projection matrix) and
+ * collapse the drawing buffer, so degenerate measurements are dropped and the
+ * last good size is kept until a real one arrives.
+ */
+export function shouldApplyResize(width: number, height: number): boolean {
+  return (
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+  );
+}
+
+/**
  * Manages the Three.js scene, camera, lighting, materials, and chunk mesh objects.
  */
 export class Renderer {
@@ -145,11 +163,19 @@ export class Renderer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** Resizes the renderer and updates camera aspect ratio. */
+  /**
+   * Resizes the drawing buffer and updates the camera aspect ratio.
+   *
+   * Passes `updateStyle: false` so three.js never writes an inline width/height
+   * onto the canvas. The canvas is sized by CSS (`w-full h-full`); letting
+   * three.js override that made the element's own measurements a function of the
+   * last resize, so a single bad measurement could never be recovered from.
+   */
   resize(width: number, height: number): void {
+    if (!shouldApplyResize(width, height)) return;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, false);
   }
 
   /** Disposes all GPU resources. */

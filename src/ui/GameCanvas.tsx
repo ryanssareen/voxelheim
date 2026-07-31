@@ -27,6 +27,7 @@ export function GameCanvas({
   sessionId?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { isLoading, isReady, error, start, engineRef } = useEngine(canvasRef);
   const startedRef = useRef(false);
 
@@ -48,16 +49,27 @@ export function GameCanvas({
   // Counter bump to signal ChatUI to open on T keypress
   const [chatOpenRequest, setChatOpenRequest] = useState(0);
 
+  // Measure the container, never the canvas. three.js used to write an inline
+  // width/height onto the canvas, so measuring the canvas fed its own last
+  // resize back in — one zero measurement (background tab, pre-layout mount)
+  // locked it at 0x0 forever. A ResizeObserver also recovers from a zero-sized
+  // mount, which a window "resize" listener never sees.
   useEffect(() => {
-    const handleResize = () => {
-      const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const applySize = () => {
       const engine = engineRef.current;
-      if (!canvas || !engine) return;
-      engine.renderer?.resize(canvas.clientWidth, canvas.clientHeight);
+      if (!engine) return;
+      engine.renderer?.resize(container.clientWidth, container.clientHeight);
     };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [engineRef]);
+
+    const observer = new ResizeObserver(applySize);
+    observer.observe(container);
+    applySize();
+
+    return () => observer.disconnect();
+  }, [engineRef, isReady]);
 
   // T-key opens chat (only when game is active and no modal UI is open)
   useEffect(() => {
@@ -91,7 +103,7 @@ export function GameCanvas({
   );
 
   return (
-    <div className="relative w-full h-full">
+    <div ref={containerRef} className="relative w-full h-full">
       <canvas
         ref={canvasRef}
         className="w-full h-full block bg-black cursor-pointer"
