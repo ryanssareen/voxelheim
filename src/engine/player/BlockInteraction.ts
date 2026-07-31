@@ -6,6 +6,7 @@ import { getToolDef } from "@data/items";
 import { useGameStore } from "@store/useGameStore";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useInventoryStore } from "@store/useInventoryStore";
+import { notifyWalkthrough } from "@store/useWalkthroughStore";
 
 const MAX_DISTANCE = 6;
 const STEP_SIZE = 0.1;
@@ -109,6 +110,7 @@ export class BlockInteraction {
       const blockDef = this.registry.getBlock(target.blockId!);
       if (blockDef && blockDef.breakable) {
         this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
+        notifyWalkthrough("break");
         if (target.blockId === BLOCK_ID.CRYSTAL) {
           useGameStore.getState().collectShard();
         }
@@ -151,6 +153,7 @@ export class BlockInteraction {
         // Block broken!
         if (this.breakProgress >= 1.0) {
           this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
+          notifyWalkthrough("break");
 
           // Only drop if the correct tool is used (or no tool required)
           const needsTool = blockDef.requiresTool;
@@ -236,6 +239,7 @@ export class BlockInteraction {
         if (!overlaps) {
           const placed = this.chunkManager.setBlock(px, py, pz, placeId);
           if (placed && !creative) hotbar.removeSelectedItem();
+          if (placed) notifyWalkthrough("place");
         }
       }
     }

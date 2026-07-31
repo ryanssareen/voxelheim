@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuthStore } from "@store/useAuthStore";
+import { useIdentityStore } from "@store/useIdentityStore";
+import { resolvePlayerId } from "@lib/identity";
 import { WORLD_SIZE_BLOCKS } from "@engine/world/constants";
 
 const MC_BTN =
@@ -34,13 +35,15 @@ export default function CreateWorldPage() {
   const [startMultiplayer, setStartMultiplayer] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const user = useAuthStore((state) => state.user);
+  const playerName = useIdentityStore((state) => state.playerName);
 
   const handleCreate = async () => {
     setCreating(true);
     setError("");
 
     try {
+      // R5: creating a world is the first action that earns a durable identity.
+      resolvePlayerId(true);
       const actualSeed = seed || Math.random().toString(36).slice(2, 10);
       const actualWorldType = WORLD_TYPES[worldType].name.toLowerCase() as
         | "island"
@@ -94,7 +97,7 @@ export default function CreateWorldPage() {
           worldType: actualWorldType,
           islandSize,
           worldName,
-          hostName: user?.email?.split("@")[0] ?? "Host",
+          hostName: playerName,
         });
         router.push(`/game?worldId=${id}&session=${session.code}`);
         return;

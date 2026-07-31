@@ -75,6 +75,7 @@ export class Engine {
   private pWasDown = false;
   private eWasDown = false;
   private worldId: string | null = null;
+  private worldName = "World";
   private seed = "voxelheim-mvp";
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private playerAttackCooldown = 0;
@@ -121,6 +122,7 @@ export class Engine {
       savedMeta = await loadWorldMeta(worldId);
       if (savedMeta) {
         this.seed = savedMeta.seed;
+        this.worldName = savedMeta.name;
         if (savedMeta.worldType === "flat" || savedMeta.worldType === "infinite") {
           worldType = savedMeta.worldType;
         }
@@ -367,7 +369,7 @@ export class Engine {
 
     const meta: WorldMeta = {
       id: this.worldId,
-      name: "World", // TODO: store name
+      name: this.worldName,
       seed: this.seed,
       createdAt: Date.now(),
       lastPlayedAt: Date.now(),

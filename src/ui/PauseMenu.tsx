@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Engine } from "@engine/Engine";
 import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
+import { useWalkthroughStore } from "@store/useWalkthroughStore";
 
 /**
  * Pause menu overlay. Shown when isPaused is true.
@@ -38,6 +39,7 @@ function PausePanel({
   const multiplayerPlayers = useMultiplayerStore((s) => s.players);
   const [spawnSet, setSpawnSet] = useState(false);
   const router = useRouter();
+  const reopenWalkthrough = useWalkthroughStore((s) => s.reopen);
 
   const handleResume = () => {
     canvasRef.current?.requestPointerLock();
@@ -46,6 +48,13 @@ function PausePanel({
 
   const handleQuit = () => {
     router.push("/");
+  };
+
+  // R11: replays from step one in any world, even once completed.
+  const handleShowWalkthrough = () => {
+    reopenWalkthrough();
+    canvasRef.current?.requestPointerLock();
+    setPaused(false);
   };
 
   const handleToggleGameMode = () => {
@@ -114,6 +123,13 @@ function PausePanel({
           className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
         >
           {spawnSet ? "Spawn set!" : "Set Spawn Here"}
+        </button>
+
+        <button
+          onClick={handleShowWalkthrough}
+          className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
+        >
+          How to Play
         </button>
 
         <button

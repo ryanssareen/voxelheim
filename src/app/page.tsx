@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useIdentityStore } from "@/store/useIdentityStore";
+import { MAX_PLAYER_NAME_LENGTH } from "@/lib/identity";
 
 function SliderOption({
   label,
@@ -74,6 +77,9 @@ function SliderOption({
 function OptionsModal({ onClose }: { onClose: () => void }) {
   const { musicEnabled, musicVolume, renderDistance, simulationDistance, fov, setMusicEnabled, setMusicVolume, setRenderDistance, setSimulationDistance, setFov } =
     useSettingsStore();
+  const nameOverride = useIdentityStore((state) => state.nameOverride);
+  const generatedName = useIdentityStore((state) => state.generatedName);
+  const setPlayerName = useIdentityStore((state) => state.setPlayerName);
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
@@ -82,6 +88,23 @@ function OptionsModal({ onClose }: { onClose: () => void }) {
           Options
         </h2>
         <div className="w-full flex flex-col gap-3">
+          <div className="w-full">
+            <div className="text-white font-mono text-sm mb-1 text-center" style={{ textShadow: "2px 2px 0 #2a2a2a" }}>
+              Player Name
+            </div>
+            <input
+              value={nameOverride ?? ""}
+              maxLength={MAX_PLAYER_NAME_LENGTH}
+              placeholder={generatedName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              className="w-full h-[30px] px-2 text-white font-mono text-sm text-center outline-none focus:brightness-125"
+              style={{
+                background: "linear-gradient(to bottom, #2a2a2a 0%, #1e1e1e 100%)",
+                border: "3px solid #1a1a1a",
+                boxShadow: "inset 0 2px 0 rgba(0,0,0,0.4)",
+              }}
+            />
+          </div>
           <div className="flex gap-2 w-full">
             <button
               onClick={() => setMusicEnabled(!musicEnabled)}
@@ -168,9 +191,32 @@ const DISABLED_STYLE: React.CSSProperties = {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [showOptions, setShowOptions] = useState(false);
   const [showQuit, setShowQuit] = useState(false);
+  const [startingDemo, setStartingDemo] = useState(false);
+  const [playError, setPlayError] = useState("");
   const { user, loading: authLoading, signOut } = useAuthStore();
+  const playerName = useIdentityStore((state) => state.playerName);
+
+  const handlePlayDemo = async () => {
+    setStartingDemo(true);
+    setPlayError("");
+    try {
+      const { ensureDemoWorld, DEMO_WORLD_ID } = await import("@lib/demoWorld");
+      try {
+        router.push(`/game?worldId=${await ensureDemoWorld()}`);
+      } catch {
+        // Storage is blocked or full. The island is deterministic from its seed,
+        // so the game still runs — the visitor only loses persistence.
+        setPlayError("Progress won't save — this browser's storage is blocked.");
+        router.push(`/game?worldId=${DEMO_WORLD_ID}`);
+      }
+    } catch {
+      setPlayError("Couldn't start the game. Try reloading the page.");
+      setStartingDemo(false);
+    }
+  };
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden select-none">
@@ -239,55 +285,48 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col items-center gap-2.5 mt-10 w-[300px] sm:w-[380px] animate-slideUp" style={{ animationDelay: "0.15s" }}>
-          {authLoading ? (
-            <div className="flex items-center gap-3 py-3">
-              <div className="w-5 h-5 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
-              <span className="text-white/40 font-mono text-sm">Loading...</span>
-            </div>
-          ) : user ? (
-            <>
-              <Link href="/worlds" className={MC_BTN + " w-full text-lg"} style={{
-                ...BTN_STYLE,
-                background: "linear-gradient(to bottom, #5a9a4a 0%, #3a7a2a 40%, #2a6a1a 60%, #1a5a0a 100%)",
-              }}>
-                Play Game
-              </Link>
-              <div className="flex gap-2.5 w-full">
-                <button onClick={() => setShowOptions(true)} className={MC_BTN + " flex-1 text-sm"} style={BTN_STYLE}>
-                  Options...
-                </button>
-                <button
-                  onClick={() => signOut()}
-                  className={MC_BTN + " flex-1 text-sm"}
-                  style={BTN_STYLE}
-                >
-                  Sign Out
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className={MC_BTN + " w-full text-lg"} style={{
-                ...BTN_STYLE,
-                background: "linear-gradient(to bottom, #5a9a4a 0%, #3a7a2a 40%, #2a6a1a 60%, #1a5a0a 100%)",
-              }}>
-                Sign In
-              </Link>
-              <Link href="/signup" className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
-                Create Account
-              </Link>
-              <button onClick={() => setShowOptions(true)} className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
-                Options...
-              </button>
-            </>
+          <button
+            onClick={() => void handlePlayDemo()}
+            disabled={startingDemo}
+            className={MC_BTN + " w-full text-lg disabled:opacity-60"}
+            style={{
+              ...BTN_STYLE,
+              background: "linear-gradient(to bottom, #5a9a4a 0%, #3a7a2a 40%, #2a6a1a 60%, #1a5a0a 100%)",
+            }}
+          >
+            {startingDemo ? "Loading..." : "Play"}
+          </button>
+          <Link href="/worlds" className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
+            My Worlds
+          </Link>
+          <button onClick={() => setShowOptions(true)} className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
+            Options...
+          </button>
+          {playError && (
+            <p className="text-[11px] text-red-300 font-mono text-center" style={{ textShadow: "1px 1px 0 #000" }}>
+              {playError}
+            </p>
           )}
         </div>
 
-        {user && (
-          <p className="mt-4 text-[11px] text-white/50 font-mono" style={{ textShadow: "1px 1px 0 #000" }}>
-            Signed in as {user.email}
-          </p>
-        )}
+        {/* Accounts are optional — sign-in is a secondary link, never a gate. */}
+        <div className="mt-4 flex items-center gap-3 text-[11px] font-mono text-white/40" style={{ textShadow: "1px 1px 0 #000" }}>
+          {authLoading ? null : user ? (
+            <>
+              <span>Signed in as {user.email}</span>
+              <button onClick={() => signOut()} className="underline hover:text-white/70">
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <span>Playing as {playerName}</span>
+              <Link href="/login" className="underline hover:text-white/70">
+                Sign in
+              </Link>
+            </>
+          )}
+        </div>
 
         <p className="mt-6 text-[11px] text-white/25 font-mono" style={{ textShadow: "1px 1px 0 #000" }}>
           Voxelheim v0.1.0
