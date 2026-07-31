@@ -1,5 +1,6 @@
 import { InputManager } from "@engine/InputManager";
 import { Camera } from "@engine/player/Camera";
+import { maxBlock } from "@engine/physics";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 
 const WALK_SPEED = 5;
@@ -152,9 +153,9 @@ export class PlayerController {
       if (this.onGround && this.velocity.y === 0) {
         const belowY = Math.floor(this.position.y) - 1;
         const bMinX = Math.floor(this.position.x - HALF_WIDTH);
-        const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
+        const bMaxX = maxBlock(this.position.x + HALF_WIDTH);
         const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
-        const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+        const bMaxZ = maxBlock(this.position.z + HALF_WIDTH);
 
         let hasGround = false;
         for (let bx = bMinX; bx <= bMaxX && !hasGround; bx++) {
@@ -201,9 +202,9 @@ export class PlayerController {
   ): boolean {
     const belowY = Math.floor(this.position.y) - 1;
     const bMinX = Math.floor(this.position.x - HALF_WIDTH);
-    const bMaxX = Math.floor(this.position.x + HALF_WIDTH);
+    const bMaxX = maxBlock(this.position.x + HALF_WIDTH);
     const bMinZ = Math.floor(this.position.z - HALF_WIDTH);
-    const bMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+    const bMaxZ = maxBlock(this.position.z + HALF_WIDTH);
 
     for (let bx = bMinX; bx <= bMaxX; bx++) {
       for (let bz = bMinZ; bz <= bMaxZ; bz++) {
@@ -257,13 +258,15 @@ export class PlayerController {
     const maxZ = this.position.z + HALF_WIDTH;
 
     // Scan all blocks the AABB overlaps — no EPS shrinkage here so we
-    // never miss a block the player is genuinely inside.
+    // never miss a block the player is genuinely inside. maxBlock() drops the
+    // block a flush edge merely touches: its overlap is zero-width on that axis,
+    // but the other axes would still report a large penetration and push us.
     const bMinX = Math.floor(minX);
-    const bMaxX = Math.floor(maxX);
+    const bMaxX = maxBlock(maxX);
     const bMinY = Math.floor(minY);
-    const bMaxY = Math.floor(maxY);
+    const bMaxY = maxBlock(maxY);
     const bMinZ = Math.floor(minZ);
-    const bMaxZ = Math.floor(maxZ);
+    const bMaxZ = maxBlock(maxZ);
 
     let bestPen = Infinity;
     let bestAxis: "x" | "y" | "z" | null = null;
@@ -313,9 +316,9 @@ export class PlayerController {
       // Floor safety: if the push placed feet inside a solid block, snap up
       const footY = Math.floor(this.position.y);
       const footMinX = Math.floor(this.position.x - HALF_WIDTH);
-      const footMaxX = Math.floor(this.position.x + HALF_WIDTH);
+      const footMaxX = maxBlock(this.position.x + HALF_WIDTH);
       const footMinZ = Math.floor(this.position.z - HALF_WIDTH);
-      const footMaxZ = Math.floor(this.position.z + HALF_WIDTH);
+      const footMaxZ = maxBlock(this.position.z + HALF_WIDTH);
       for (let fx = footMinX; fx <= footMaxX; fx++) {
         for (let fz = footMinZ; fz <= footMaxZ; fz++) {
           if (registry.isSolid(getBlock(fx, footY, fz))) {
@@ -348,11 +351,11 @@ export class PlayerController {
     const maxZ = this.position.z + HALF_WIDTH;
 
     const bMinX = Math.floor(minX);
-    const bMaxX = Math.floor(maxX);
+    const bMaxX = maxBlock(maxX);
     const bMinY = Math.floor(minY);
-    const bMaxY = Math.floor(maxY);
+    const bMaxY = maxBlock(maxY);
     const bMinZ = Math.floor(minZ);
-    const bMaxZ = Math.floor(maxZ);
+    const bMaxZ = maxBlock(maxZ);
 
     for (let bx = bMinX; bx <= bMaxX; bx++) {
       for (let by = bMinY; by <= bMaxY; by++) {

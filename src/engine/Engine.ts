@@ -7,6 +7,7 @@ import { PlayerModel } from "@engine/player/PlayerModel";
 import { HandRenderer } from "@engine/player/HandRenderer";
 import { OffhandRenderer } from "@engine/player/OffhandRenderer";
 import { MultiplayerManager } from "@engine/multiplayer/MultiplayerManager";
+import { maxBlock } from "@engine/physics";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
@@ -788,11 +789,11 @@ export class Engine {
           const h = this.player.height;
           const hw = 0.3;
           const minX = Math.floor(this.player.position.x - hw);
-          const maxX = Math.floor(this.player.position.x + hw);
+          const maxX = maxBlock(this.player.position.x + hw);
           const minY = Math.floor(this.player.position.y);
-          const maxY = Math.floor(this.player.position.y + h);
+          const maxY = maxBlock(this.player.position.y + h);
           const minZ = Math.floor(this.player.position.z - hw);
-          const maxZ = Math.floor(this.player.position.z + hw);
+          const maxZ = maxBlock(this.player.position.z + hw);
           for (let bx = minX; bx <= maxX; bx++) {
             for (let by = minY; by <= maxY; by++) {
               for (let bz = minZ; bz <= maxZ; bz++) {

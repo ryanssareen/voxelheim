@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { createMobModel, type MobType, type MobModelData } from "@engine/entities/MobModel";
+import { maxBlock } from "@engine/physics";
 import { BLOCK_ID } from "@data/blocks";
 import { findPath, findNearestCover, type PathPoint } from "@engine/entities/MobPathfinder";
 
@@ -801,6 +802,11 @@ export class Mob {
     getBlock: (x: number, y: number, z: number) => number,
     registry: BlockRegistry
   ): void {
+    // A zero-length move can't collide with anything. Without this guard the
+    // `delta < 0` checks below treat it as upward motion and resolve it as a
+    // ceiling hit, dropping the mob by its own height every frame.
+    if (delta === 0) return;
+
     this.position[axis] += delta;
 
     const hw = this.config.halfWidth;
@@ -812,9 +818,13 @@ export class Mob {
     const minZ = this.position.z - hw;
     const maxZ = this.position.z + hw;
 
-    for (let bx = Math.floor(minX); bx <= Math.floor(maxX); bx++) {
-      for (let by = Math.floor(minY); by <= Math.floor(maxY); by++) {
-        for (let bz = Math.floor(minZ); bz <= Math.floor(maxZ); bz++) {
+    const bMaxX = maxBlock(maxX);
+    const bMaxY = maxBlock(maxY);
+    const bMaxZ = maxBlock(maxZ);
+
+    for (let bx = Math.floor(minX); bx <= bMaxX; bx++) {
+      for (let by = Math.floor(minY); by <= bMaxY; by++) {
+        for (let bz = Math.floor(minZ); bz <= bMaxZ; bz++) {
           if (!registry.isSolid(getBlock(bx, by, bz))) continue;
 
           if (axis === "y") {
