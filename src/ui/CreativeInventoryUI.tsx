@@ -13,6 +13,7 @@ import { BLOCK_DEFINITIONS, BLOCK_ID } from "@data/blocks";
 import { getToolDef, getArmorDef } from "@data/items";
 import { ItemIcon, InventorySlot, CursorItemOverlay } from "@ui/ItemIcon";
 import { useSlotInteractions, ARMOR_LABELS } from "@ui/useSlotInteractions";
+import { usePanelMetrics } from "@ui/usePanelMetrics";
 
 /**
  * Every obtainable item for the creative grid: all definitions except AIR.
@@ -50,6 +51,7 @@ function CreativePanel() {
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const metrics = usePanelMetrics();
 
   const { handleSlotClick, handleArmorClick, handleOffhandClick } =
     useSlotInteractions();
@@ -149,19 +151,23 @@ function CreativePanel() {
 
   const hotbarSlots = slots.slice(0, HOTBAR_SLOTS);
   const mainSlots = slots.slice(HOTBAR_SLOTS, TOTAL_SLOTS);
-  const S = 44;
+  const S = metrics.slot;
   const q = query.trim().toLowerCase();
   const visibleItems = q
     ? CREATIVE_ITEMS.filter((b) => b.name.toLowerCase().includes(q))
     : CREATIVE_ITEMS;
-  // ~6 rows of slots visible before scrolling
-  const gridMaxHeight = 6 * (S + 4);
+  // ~6 rows of slots, but never more than the panel can actually show.
+  const gridMaxHeight = Math.min(6 * (S + 4), Math.round(metrics.panelMaxHeight * 0.42));
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60">
+    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60 p-2">
       <div
-        className="flex flex-col gap-3 p-6 rounded max-h-[92vh] overflow-y-auto"
+        className="flex flex-col rounded overflow-y-auto"
         style={{
+          gap: metrics.sectionGap,
+          padding: metrics.pad,
+          maxHeight: metrics.panelMaxHeight,
+          maxWidth: "100%",
           background: "#c6c6c6",
           border: "4px solid #555",
           boxShadow:
@@ -169,7 +175,7 @@ function CreativePanel() {
         }}
       >
         {/* Title + search */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[13px] font-mono text-[#404040] font-bold">
             Creative Inventory
           </p>
@@ -180,7 +186,7 @@ function CreativePanel() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
             placeholder="Search items..."
-            className="px-2 py-1 text-[12px] font-mono text-white placeholder-[#c0c0c0] outline-none w-48"
+            className="px-2 py-1 text-[12px] font-mono text-white placeholder-[#c0c0c0] outline-none flex-1 min-w-0 max-w-48"
             style={{
               background: "#8b8b8b",
               border: "2px solid #373737",
@@ -235,7 +241,10 @@ function CreativePanel() {
         <div className="w-full h-px bg-[#999]" />
 
         {/* Storage: armor + offhand | main inventory + hotbar */}
-        <div className="flex gap-4">
+        <div
+          className="flex gap-4"
+          style={{ flexWrap: metrics.wrapTopRow ? "wrap" : "nowrap" }}
+        >
           <div className="flex flex-col gap-1">
             <p className="text-[11px] font-mono text-[#606060] mb-0.5">Armor</p>
             {armor.map((slot, i) => (

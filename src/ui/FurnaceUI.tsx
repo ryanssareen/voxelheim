@@ -11,6 +11,7 @@ import { BLOCK_ID } from "@data/blocks";
 import { getToolDef } from "@data/items";
 import { findSmeltingRecipe, isFuel } from "@systems/crafting/smelting";
 import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
+import { usePanelMetrics } from "@ui/usePanelMetrics";
 
 export function FurnaceUI() {
   const furnaceOpen = useInventoryStore((s) => s.furnaceOpen);
@@ -19,6 +20,7 @@ export function FurnaceUI() {
   const slots = useHotbarStore((s) => s.slots);
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const metrics = usePanelMetrics();
 
   useEffect(() => {
     if (!furnaceOpen) return;
@@ -126,14 +128,18 @@ export function FurnaceUI() {
 
   const hotbarSlots = slots.slice(0, HOTBAR_SLOTS);
   const mainSlots = slots.slice(HOTBAR_SLOTS, TOTAL_SLOTS);
-  const S = 44;
-  const RS = 52;
+  const S = metrics.slot;
+  const RS = metrics.resultSlot;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60">
+    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60 p-2">
       <div
-        className="flex flex-col gap-3 p-6 rounded"
+        className="flex flex-col rounded overflow-y-auto"
         style={{
+          gap: metrics.sectionGap,
+          padding: metrics.pad,
+          maxHeight: metrics.panelMaxHeight,
+          maxWidth: "100%",
           background: "#c6c6c6",
           border: "4px solid #555",
           boxShadow:
