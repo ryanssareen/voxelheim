@@ -7,6 +7,7 @@ import {
 } from "@store/useWalkthroughStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { DEMO_WORLD_ID } from "@lib/demoWorld";
+import { useKeybindsStore } from "@store/useKeybindsStore";
 
 // Mirrors PlayerController, which also accepts the arrow keys.
 const MOVE_KEYS = new Set([
@@ -20,12 +21,19 @@ export function Walkthrough({ worldId }: { worldId?: string }) {
   const notify = useWalkthroughStore((s) => s.notify);
   const dismiss = useWalkthroughStore((s) => s.dismiss);
   const startIfUnseen = useWalkthroughStore((s) => s.startIfUnseen);
+  const keybindsOpen = useKeybindsStore((s) => s.isOpen);
+  const keybindsSeen = useKeybindsStore((s) => s.seen);
 
   // R9 scopes auto-start to the demo world. Existing players loading their own
   // worlds must not have the overlay appear unasked; they reach it from pause.
+  // Gated on the controls popup being seen and closed, so the two never stack
+  // on first entry. Keyed on state rather than mount order, which is why it
+  // checks `seen` too -- this effect can run before the popup's own.
   useEffect(() => {
-    if (worldId === DEMO_WORLD_ID) startIfUnseen();
-  }, [worldId, startIfUnseen]);
+    if (worldId === DEMO_WORLD_ID && keybindsSeen && !keybindsOpen) {
+      startIfUnseen();
+    }
+  }, [worldId, keybindsSeen, keybindsOpen, startIfUnseen]);
 
   // Movement is observed here; break/place are notified from BlockInteraction.
   useEffect(() => {
