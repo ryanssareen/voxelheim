@@ -40,6 +40,13 @@ export interface HudMetrics {
   sunW: number;
   sunH: number;
   shardFont: number;
+  /**
+   * Displayed edge of the minimap, px. The canvas keeps its own fixed render
+   * resolution; this only scales how large it is drawn, so a fixed 176px map
+   * stops eating well over half a phone's width and colliding with the
+   * shard counter.
+   */
+  minimapSize: number;
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
@@ -49,6 +56,9 @@ const STAT_ICON_COUNT = 20;
 
 /** Hotbar cells: 9 numbered slots plus the offhand. */
 const HOTBAR_CELLS = 10;
+
+/** Authored minimap edge, px. Also the canvas's fixed render resolution. */
+const MINIMAP_BASE = 176;
 
 /**
  * Resolves every HUD pixel size for a viewport.
@@ -107,6 +117,9 @@ export function hudMetrics(viewportW: number, viewportH: number): HudMetrics {
     sunW: Math.round(clamp(52 * scale, 34, 62)),
     sunH: Math.round(clamp(29 * scale, 19, 34)),
     shardFont: Math.round(clamp(21 * scale, 13, 25)),
+    // Never larger than authored, so desktop is untouched; on a narrow screen
+    // the width budget is what shrinks it.
+    minimapSize: Math.round(clamp(Math.min(MINIMAP_BASE, vw * 0.38), 88, MINIMAP_BASE)),
   };
 }
 

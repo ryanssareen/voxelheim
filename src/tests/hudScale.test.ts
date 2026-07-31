@@ -80,3 +80,36 @@ describe("hudMetrics", () => {
     expect(hudMetrics(-100, -100).stat).toBeGreaterThan(0);
   });
 });
+
+describe("minimap sizing", () => {
+  // A fixed 176px map plus its legend took 58% of a 320px-wide screen and
+  // reached far enough left to sit under the centred shard counter.
+  const VIEWPORTS: Array<[number, number]> = [
+    [320, 568], [375, 812], [414, 896], [768, 1024], [1280, 800], [1920, 1080],
+  ];
+
+  it("never exceeds the authored size", () => {
+    for (const [vw, vh] of VIEWPORTS) {
+      expect(hudMetrics(vw, vh).minimapSize, `at ${vw}`).toBeLessThanOrEqual(176);
+    }
+  });
+
+  it("leaves the desktop map untouched", () => {
+    expect(hudMetrics(1280, 800).minimapSize).toBe(176);
+    expect(hudMetrics(1920, 1080).minimapSize).toBe(176);
+  });
+
+  it("keeps the map and its legend clear of the screen centre", () => {
+    // Legend is the widest part: map + 10px of padding and border. It sits
+    // 12px from the right edge, and must not reach the horizontal midpoint
+    // where the shard counter lives.
+    for (const [vw, vh] of VIEWPORTS) {
+      const left = vw - (hudMetrics(vw, vh).minimapSize + 10) - 12;
+      expect(left, `minimap left edge at ${vw}`).toBeGreaterThan(vw / 2);
+    }
+  });
+
+  it("stays readable rather than shrinking without bound", () => {
+    expect(hudMetrics(240, 400).minimapSize).toBeGreaterThanOrEqual(88);
+  });
+});

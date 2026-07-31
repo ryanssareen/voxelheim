@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { Engine } from "@engine/Engine";
 import { useChatStore } from "@store/useChatStore";
 import { useGameStore } from "@store/useGameStore";
+import { useHudMetrics } from "@ui/useHudScale";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { SEA_LEVEL } from "@engine/world/constants";
 import { BLOCK_ID } from "@data/blocks";
@@ -144,6 +145,7 @@ export function MinimapUI({
   engineRef: React.RefObject<Engine | null>;
 }) {
   const visible = useGameStore((s) => s.minimapVisible);
+  const metrics = useHudMetrics();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const legendRef = useRef<HTMLDivElement>(null);
 
@@ -326,17 +328,28 @@ export function MinimapUI({
   return (
     <div className="absolute top-3 right-3 z-10 pointer-events-none flex flex-col items-end gap-1">
       <div className="p-1 bg-black/50 border border-white/10 rounded">
+        {/* Render resolution stays fixed so the drawing maths below is
+            unchanged; only the displayed size scales with the viewport. */}
         <canvas
           ref={canvasRef}
           width={MAP_SIZE}
           height={MAP_SIZE}
           className="block rounded-sm"
+          style={{
+            width: metrics.minimapSize,
+            height: metrics.minimapSize,
+            imageRendering: "pixelated",
+          }}
         />
       </div>
       <div
         ref={legendRef}
-        className="w-[186px] px-2 py-1 bg-black/50 border border-white/10 rounded font-mono text-[9px] text-white/80 leading-[13px]"
-        style={{ display: "none", textShadow: "1px 1px 0 #000" }}
+        className="px-2 py-1 bg-black/50 border border-white/10 rounded font-mono text-[9px] text-white/80 leading-[13px]"
+        style={{
+          width: metrics.minimapSize + 10,
+          display: "none",
+          textShadow: "1px 1px 0 #000",
+        }}
       />
     </div>
   );
