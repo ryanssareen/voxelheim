@@ -12,6 +12,7 @@ import { getToolDef } from "@data/items";
 import { findRecipe } from "@systems/crafting/recipes";
 import { InventorySlot, CursorItemOverlay } from "@ui/ItemIcon";
 import { RecipeBook, useRecipeFill } from "@ui/RecipeBook";
+import { usePanelMetrics } from "@ui/usePanelMetrics";
 import { useSlotInteractions, ARMOR_LABELS } from "@ui/useSlotInteractions";
 
 export function InventoryUI() {
@@ -26,6 +27,7 @@ export function InventoryUI() {
   const { handleSlotClick, handleArmorClick, handleOffhandClick } =
     useSlotInteractions();
   const fillFromRecipe = useRecipeFill(2);
+  const metrics = usePanelMetrics();
 
   const recipe = useMemo(() => {
     const grid = craftingGrid.map((s) =>
@@ -83,22 +85,30 @@ export function InventoryUI() {
 
   const hotbarSlots = slots.slice(0, HOTBAR_SLOTS);
   const mainSlots = slots.slice(HOTBAR_SLOTS, TOTAL_SLOTS);
-  const S = 48;
-  const SC = 52;
+  const S = metrics.slot;
+  const SC = metrics.resultSlot;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60">
+    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60 p-2">
       <div
-        className="flex flex-col gap-3 p-6 rounded"
+        className="flex flex-col rounded overflow-y-auto"
         style={{
+          gap: metrics.sectionGap,
+          padding: metrics.pad,
+          maxHeight: metrics.panelMaxHeight,
+          maxWidth: "100%",
           background: "#c6c6c6",
           border: "4px solid #555",
           boxShadow:
             "inset 2px 2px 0 #fafafa, inset -2px -2px 0 #8a8a8a, 0 8px 24px rgba(0,0,0,0.5)",
         }}
       >
-        {/* Top row: Armor + Offhand | Crafting */}
-        <div className="flex gap-6">
+        {/* Armor + Offhand | Crafting | Recipes. Wraps on a narrow viewport so
+            the recipe book drops to its own row instead of being clipped. */}
+        <div
+          className="flex items-start gap-x-6 gap-y-3"
+          style={{ flexWrap: metrics.wrapTopRow ? "wrap" : "nowrap" }}
+        >
           {/* Armor + Offhand (left) */}
           <div className="flex flex-col gap-1">
             <p className="text-[11px] font-mono text-[#606060] mb-0.5">Armor</p>
@@ -155,8 +165,13 @@ export function InventoryUI() {
             )}
           </div>
 
-          {/* Recipe book (right) */}
-          <RecipeBook gridSize={2} onFill={fillFromRecipe} />
+          {/* Recipe book (right, or its own row once the top row wraps) */}
+          <RecipeBook
+            gridSize={2}
+            onFill={fillFromRecipe}
+            width={metrics.recipeWidth}
+            maxHeight={metrics.recipeMaxHeight}
+          />
         </div>
 
         {/* Separator */}

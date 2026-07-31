@@ -12,6 +12,7 @@ import { getToolDef } from "@data/items";
 import { findRecipe3x3 } from "@systems/crafting/recipes";
 import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
 import { RecipeBook, useRecipeFill } from "@ui/RecipeBook";
+import { usePanelMetrics } from "@ui/usePanelMetrics";
 
 export function CraftingTableUI() {
   const tableOpen = useInventoryStore((s) => s.tableOpen);
@@ -29,6 +30,7 @@ export function CraftingTableUI() {
   }, [tableOpen]);
 
   const fillFromRecipe = useRecipeFill(3);
+  const metrics = usePanelMetrics();
 
   const recipe = useMemo(() => {
     const grid = tableGrid.map((s) =>
@@ -118,14 +120,18 @@ export function CraftingTableUI() {
 
   const hotbarSlots = slots.slice(0, HOTBAR_SLOTS);
   const mainSlots = slots.slice(HOTBAR_SLOTS, TOTAL_SLOTS);
-  const S = 44;
-  const RS = 52;
+  const S = metrics.slot;
+  const RS = metrics.resultSlot;
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60">
+    <div className="absolute inset-0 flex items-center justify-center z-30 bg-black/60 p-2">
       <div
-        className="flex flex-col gap-3 p-6 rounded"
+        className="flex flex-col rounded overflow-y-auto"
         style={{
+          gap: metrics.sectionGap,
+          padding: metrics.pad,
+          maxHeight: metrics.panelMaxHeight,
+          maxWidth: "100%",
           background: "#c6c6c6",
           border: "4px solid #555",
           boxShadow:
@@ -135,8 +141,11 @@ export function CraftingTableUI() {
         {/* Title */}
         <p className="text-[13px] font-mono text-[#404040] font-bold">Crafting</p>
 
-        {/* 3x3 grid + arrow + result + recipe book */}
-        <div className="flex items-center gap-5">
+        {/* 3x3 grid + arrow + result + recipe book. Wraps on a narrow viewport. */}
+        <div
+          className="flex items-center gap-x-5 gap-y-3"
+          style={{ flexWrap: metrics.wrapTopRow ? "wrap" : "nowrap" }}
+        >
           <div className="grid grid-cols-3 gap-1">
             {tableGrid.map((slot, i) => (
               <InventorySlot
@@ -158,7 +167,12 @@ export function CraftingTableUI() {
             size={RS}
             highlight={!!recipe}
           />
-          <RecipeBook gridSize={3} onFill={fillFromRecipe} />
+          <RecipeBook
+            gridSize={3}
+            onFill={fillFromRecipe}
+            width={metrics.recipeWidth}
+            maxHeight={metrics.recipeMaxHeight}
+          />
         </div>
 
         {recipe && (

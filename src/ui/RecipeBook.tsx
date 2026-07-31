@@ -53,10 +53,16 @@ export function useRecipeFill(gridSize: GridSize) {
 export function RecipeBook({
   gridSize,
   onFill,
+  width,
+  maxHeight,
 }: {
   gridSize: GridSize;
   /** Lay this recipe's ingredients into the crafting grid. */
   onFill: (entry: BookEntry) => void;
+  /** Preferred width, px. The book flexes and may wrap to its own row. */
+  width?: number;
+  /** Max list height before it scrolls, px. */
+  maxHeight?: number;
 }) {
   const slots = useHotbarStore((s) => s.slots);
   const [craftableOnly, setCraftableOnly] = useState(false);
@@ -75,7 +81,10 @@ export function RecipeBook({
   );
 
   return (
-    <div className="flex flex-col" style={{ width: 260 }}>
+    <div
+      className="flex flex-col min-w-0"
+      style={{ flex: `1 1 ${width ?? 260}px`, maxWidth: "100%" }}
+    >
       <div className="flex items-baseline justify-between mb-1">
         <p className="text-[11px] font-mono text-[#606060]">
           Recipes{" "}
@@ -100,7 +109,7 @@ export function RecipeBook({
       <div
         className="overflow-y-auto pr-1"
         style={{
-          maxHeight: 232,
+          maxHeight: maxHeight ?? 232,
           background: "#8a8a8a",
           border: "2px solid",
           borderColor: "#6a6a6a #fafafa #fafafa #6a6a6a",
