@@ -8,6 +8,7 @@ import {
   runTransaction,
   setDoc,
   writeBatch,
+  Timestamp,
   type Firestore,
 } from "firebase/firestore";
 import {
@@ -69,6 +70,18 @@ function makeChatId(playerId: string): string {
 
 function makeHitId(attackerId: string): string {
   return `${attackerId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Sessions end 10s after the host disconnects, so a day is already generous.
+ * Firestore's TTL policy reaps documents once `expiresAt` is in the past --
+ * which is why this is a separate field: pointing TTL at `createdAt` would
+ * make every session immediately eligible for deletion.
+ */
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+function sessionExpiry(): Timestamp {
+  return Timestamp.fromMillis(Date.now() + SESSION_TTL_MS);
 }
 
 function sessionStorageKey(code: string): string {
@@ -1049,7 +1062,15 @@ export async function createMultiplayerSession(
     const session: MultiplayerSessionMeta = { ...base, transport: "cloud" };
     try {
       console.log("[createSession] writing to firestore:", code);
-      await withTimeout(setDoc(doc(fsDb, "multiplayerSessions", code), session), 5000);
+      // expiresAt is Firestore-only: it drives the TTL policy that reaps stale
+      // sessions, and a Timestamp does not belong in the localStorage copy.
+      await withTimeout(
+        setDoc(doc(fsDb, "multiplayerSessions", code), {
+          ...session,
+          expiresAt: sessionExpiry(),
+        }),
+        5000
+      );
       console.log("[createSession] firestore write succeeded:", code);
       writeLocalSession(session);
       return session;
@@ -1103,9 +1124,19 @@ export async function readMultiplayerSession(
         5000
       );
       if (snapshot.exists()) {
-        const session = snapshot.data() as MultiplayerSessionMeta;
-        writeLocalSession(session);
-        return session;
+        const { expiresAt, ...session } = snapshot.data() as
+          MultiplayerSessionMeta & { expiresAt?: Timestamp };
+
+        // Stale sessions are unjoinable, and reaping them here keeps the
+        // collection bounded without a TTL policy (which needs the Blaze plan).
+        // The rules only permit deleting a session that has already expired.
+        if (expiresAt && expiresAt.toMillis() < Date.now()) {
+          void deleteDoc(doc(fsDb, "multiplayerSessions", code)).catch(() => {});
+          return null;
+        }
+
+        writeLocalSession(session as MultiplayerSessionMeta);
+        return session as MultiplayerSessionMeta;
       }
     } catch (err) {
       console.warn("[readSession] firestore failed:", err);
