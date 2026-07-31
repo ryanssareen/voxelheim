@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { createMobModel, type MobType, type MobModelData } from "@engine/entities/MobModel";
-import { maxBlock } from "@engine/physics";
+import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import { BLOCK_ID } from "@data/blocks";
 import { findPath, findNearestCover, type PathPoint } from "@engine/entities/MobPathfinder";
 
@@ -818,39 +818,34 @@ export class Mob {
     const minZ = this.position.z - hw;
     const maxZ = this.position.z + hw;
 
-    const bMaxX = maxBlock(maxX);
-    const bMaxY = maxBlock(maxY);
-    const bMaxZ = maxBlock(maxZ);
+    const layer = firstBlockingLayer(
+      axis, delta,
+      Math.floor(minX), maxBlock(maxX),
+      Math.floor(minY), maxBlock(maxY),
+      Math.floor(minZ), maxBlock(maxZ),
+      (bx, by, bz) => registry.isSolid(getBlock(bx, by, bz))
+    );
 
-    for (let bx = Math.floor(minX); bx <= bMaxX; bx++) {
-      for (let by = Math.floor(minY); by <= bMaxY; by++) {
-        for (let bz = Math.floor(minZ); bz <= bMaxZ; bz++) {
-          if (!registry.isSolid(getBlock(bx, by, bz))) continue;
-
-          if (axis === "y") {
-            if (delta < 0) {
-              this.position.y = by + 1;
-              this.velocity.y = 0;
-              this.onGround = true;
-            } else {
-              this.position.y = by - h;
-              this.velocity.y = 0;
-            }
-            return;
-          } else if (axis === "x") {
-            this.position.x = delta < 0 ? bx + 1 + hw : bx - hw;
-            this.velocity.x = 0;
-            return;
-          } else {
-            this.position.z = delta < 0 ? bz + 1 + hw : bz - hw;
-            this.velocity.z = 0;
-            return;
-          }
-        }
-      }
+    if (layer === null) {
+      if (axis === "y" && delta < 0) this.onGround = false;
+      return;
     }
 
-    if (axis === "y" && delta <= 0) this.onGround = false;
+    if (axis === "y") {
+      if (delta < 0) {
+        this.position.y = layer + 1;
+        this.onGround = true;
+      } else {
+        this.position.y = layer - h;
+      }
+      this.velocity.y = 0;
+    } else if (axis === "x") {
+      this.position.x = delta < 0 ? layer + 1 + hw : layer - hw;
+      this.velocity.x = 0;
+    } else {
+      this.position.z = delta < 0 ? layer + 1 + hw : layer - hw;
+      this.velocity.z = 0;
+    }
   }
 
   // ─── Cleanup ──────────────────────────────────────────

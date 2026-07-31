@@ -3,7 +3,7 @@ import { PlayerController } from "@engine/player/PlayerController";
 import { Mob } from "@engine/entities/Mob";
 import type { InputManager } from "@engine/InputManager";
 import type { Camera } from "@engine/player/Camera";
-import { maxBlock } from "@engine/physics";
+import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import type { BlockRegistry } from "@engine/world/BlockRegistry";
 
 const AIR = 0;
@@ -52,6 +52,50 @@ describe("maxBlock", () => {
   });
 });
 
+describe("firstBlockingLayer", () => {
+  /** Solid at the given indices along one axis; the other two axes are open. */
+  const solidAlong = (axis: "x" | "y" | "z", indices: number[]) =>
+    (x: number, y: number, z: number) =>
+      indices.includes(axis === "x" ? x : axis === "y" ? y : z);
+
+  it("returns the nearest face in the direction of travel", () => {
+    // Box straddles solid layers 9 and 10. Travelling + hits the low side
+    // first; travelling - hits the high side first. Picking the wrong one
+    // leaves the entity inside the other layer.
+    const solid = solidAlong("x", [9, 10]);
+    expect(firstBlockingLayer("x", +1, 9, 10, 0, 0, 0, 0, solid)).toBe(9);
+    expect(firstBlockingLayer("x", -1, 9, 10, 0, 0, 0, 0, solid)).toBe(10);
+  });
+
+  it("applies the same ordering on Y — a falling entity lands on the top layer", () => {
+    const solid = solidAlong("y", [64, 65]);
+    expect(firstBlockingLayer("y", -1, 0, 0, 64, 65, 0, 0, solid)).toBe(65);
+    expect(firstBlockingLayer("y", +1, 0, 0, 64, 65, 0, 0, solid)).toBe(64);
+  });
+
+  it("applies the same ordering on Z", () => {
+    const solid = solidAlong("z", [3, 4]);
+    expect(firstBlockingLayer("z", +1, 0, 0, 0, 0, 3, 4, solid)).toBe(3);
+    expect(firstBlockingLayer("z", -1, 0, 0, 0, 0, 3, 4, solid)).toBe(4);
+  });
+
+  it("scans the whole cross-section of a layer, not just one cell", () => {
+    // Only one cell in layer 5 is solid, and it is not the first one scanned.
+    const solid = (x: number, y: number, z: number) => x === 5 && y === 2 && z === 7;
+    expect(firstBlockingLayer("x", 1, 4, 6, 0, 3, 6, 8, solid)).toBe(5);
+  });
+
+  it("returns null when nothing blocks", () => {
+    expect(firstBlockingLayer("x", 1, 0, 4, 0, 4, 0, 4, () => false)).toBeNull();
+  });
+
+  it("is unaffected by direction when only one layer is solid", () => {
+    const solid = solidAlong("x", [10]);
+    expect(firstBlockingLayer("x", +1, 9, 10, 0, 0, 0, 0, solid)).toBe(10);
+    expect(firstBlockingLayer("x", -1, 9, 10, 0, 0, 0, 0, solid)).toBe(10);
+  });
+});
+
 describe("PlayerController wall collision", () => {
   // The wall plane sits at coordinate 10. The player walks into it from each
   // side. Approaching along +X or +Z used to leave the player's AABB edge
@@ -94,6 +138,37 @@ describe("PlayerController wall collision", () => {
       expect(player.position[crossAxis]).toBeCloseTo(startCross, 6);
     });
   }
+
+  it("ejects a player embedded in a 2-thick wall sideways, not up over it", () => {
+    // Straddling two solid columns is the case where scan order matters. Moving
+    // -X, the nearest blocking face is the HIGHEST solid index, but the scan
+    // returned the lowest, resolving the player to a spot still inside the far
+    // column. resolveOverlap's foot-safety then lifted them a block per frame
+    // until they popped out the top of the wall.
+    const twoThickWall = (x: number, y: number) =>
+      y <= 64 || ((x === 9 || x === 10) && y >= 65 && y <= 67) ? STONE : AIR;
+
+    // x = 10.0 spans [9.7, 10.3] — overlaps solid columns 9 and 10 at once.
+    // Hold W facing -X so update() actually drives a negative-delta move;
+    // velocity is recomputed from input every frame, so presetting it is moot.
+    const player = new PlayerController(10.0, GROUND_TOP, 20.5);
+    player.onGround = true;
+
+    for (let frame = 0; frame < 30; frame++) {
+      player.update(1 / 60, heldKeys("KeyW"), facing(-1, 0), twoThickWall, registry);
+      expect(
+        player.position.y,
+        `frame ${frame}: player was extruded up the wall instead of pushed out of it`
+      ).toBe(GROUND_TOP);
+    }
+
+    const spanLo = Math.floor(player.position.x - 0.3);
+    const spanHi = Math.floor(player.position.x + 0.3);
+    expect(
+      spanLo === 9 || spanLo === 10 || spanHi === 9 || spanHi === 10,
+      `player still overlaps a wall column (x=${player.position.x})`
+    ).toBe(false);
+  });
 
   it("still pushes the player out of a block they are genuinely inside", () => {
     // Guards the overlap resolver: tightening the scan range must not stop it

@@ -7,7 +7,7 @@ import { PlayerModel } from "@engine/player/PlayerModel";
 import { HandRenderer } from "@engine/player/HandRenderer";
 import { OffhandRenderer } from "@engine/player/OffhandRenderer";
 import { MultiplayerManager } from "@engine/multiplayer/MultiplayerManager";
-import { maxBlock } from "@engine/physics";
+import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
@@ -794,22 +794,15 @@ export class Engine {
           const maxY = maxBlock(this.player.position.y + h);
           const minZ = Math.floor(this.player.position.z - hw);
           const maxZ = maxBlock(this.player.position.z + hw);
-          for (let bx = minX; bx <= maxX; bx++) {
-            for (let by = minY; by <= maxY; by++) {
-              for (let bz = minZ; bz <= maxZ; bz++) {
-                if (!this.registry.isSolid(getBlock(bx, by, bz))) continue;
-                if (dy < 0) {
-                  this.player.position.y = by + 1;
-                  this.player.velocity.y = 0;
-                  this.player.onGround = true;
-                } else {
-                  this.player.position.y = by - h;
-                  this.player.velocity.y = 0;
-                }
-              }
-            }
-          }
-          if (dy < 0 && this.player.velocity.y !== 0) {
+          const layer = firstBlockingLayer(
+            "y", dy, minX, maxX, minY, maxY, minZ, maxZ,
+            (bx, by, bz) => this.registry.isSolid(getBlock(bx, by, bz))
+          );
+          if (layer !== null) {
+            this.player.position.y = dy < 0 ? layer + 1 : layer - h;
+            this.player.velocity.y = 0;
+            if (dy < 0) this.player.onGround = true;
+          } else if (dy < 0) {
             this.player.onGround = false;
           }
         }

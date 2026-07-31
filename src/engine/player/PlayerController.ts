@@ -1,6 +1,6 @@
 import { InputManager } from "@engine/InputManager";
 import { Camera } from "@engine/player/Camera";
-import { maxBlock } from "@engine/physics";
+import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 
 const WALK_SPEED = 5;
@@ -354,45 +354,32 @@ export class PlayerController {
     const bMinZ = Math.floor(minZ);
     const bMaxZ = maxBlock(maxZ);
 
-    for (let bx = bMinX; bx <= bMaxX; bx++) {
-      for (let by = bMinY; by <= bMaxY; by++) {
-        for (let bz = bMinZ; bz <= bMaxZ; bz++) {
-          const blockId = getBlock(bx, by, bz);
-          if (!registry.isSolid(blockId)) continue;
+    const layer = firstBlockingLayer(
+      axis, delta, bMinX, bMaxX, bMinY, bMaxY, bMinZ, bMaxZ,
+      (bx, by, bz) => registry.isSolid(getBlock(bx, by, bz))
+    );
 
-          if (axis === "y") {
-            if (delta < 0) {
-              this.position.y = by + 1;
-              this.velocity.y = 0;
-              this.onGround = true;
-            } else if (delta > 0) {
-              this.position.y = by - h;
-              this.velocity.y = 0;
-            }
-            return;
-          } else if (axis === "x") {
-            if (delta < 0) {
-              this.position.x = bx + 1 + HALF_WIDTH;
-            } else {
-              this.position.x = bx - HALF_WIDTH;
-            }
-            this.velocity.x = 0;
-            return;
-          } else {
-            if (delta < 0) {
-              this.position.z = bz + 1 + HALF_WIDTH;
-            } else {
-              this.position.z = bz - HALF_WIDTH;
-            }
-            this.velocity.z = 0;
-            return;
-          }
-        }
+    if (layer === null) {
+      if (axis === "y" && delta < 0) {
+        this.onGround = false;
       }
+      return;
     }
 
-    if (axis === "y" && delta <= 0) {
-      this.onGround = false;
+    if (axis === "y") {
+      if (delta < 0) {
+        this.position.y = layer + 1;
+        this.onGround = true;
+      } else {
+        this.position.y = layer - h;
+      }
+      this.velocity.y = 0;
+    } else if (axis === "x") {
+      this.position.x = delta < 0 ? layer + 1 + HALF_WIDTH : layer - HALF_WIDTH;
+      this.velocity.x = 0;
+    } else {
+      this.position.z = delta < 0 ? layer + 1 + HALF_WIDTH : layer - HALF_WIDTH;
+      this.velocity.z = 0;
     }
   }
 }
