@@ -9,34 +9,240 @@ export interface MobModelData {
   body: THREE.Mesh;
 }
 
-function mat(color: number): THREE.MeshLambertMaterial {
-  return new THREE.MeshLambertMaterial({ color });
+/**
+ * Two problems with the previous models:
+ *
+ *  1. Every surface was one flat MeshLambertMaterial colour, so a pig, a zombie
+ *     and a creeper differed only in hue — no hide, wool, bone or mottle.
+ *  2. Face and patch details were sub-boxes standing 0.01–0.02 off the parent
+ *     surface. At distance that z-fights and shimmers, and the details read as
+ *     stickers rather than markings.
+ *
+ * Fixes:
+ *  - Species surface textures generated as VALUE maps. A map can only darken
+ *    (white is its ceiling), so each map is measured and material.color is
+ *    brightened by 1/mean — the surface lands on the authored colour with real
+ *    variation either side of it. Mob.ts's damage flash is unaffected: it
+ *    captures whatever colour the material carries.
+ *  - Detail meshes get polygonOffset and a real standoff, so they stop
+ *    z-fighting at range.
+ *  - flatShading on, NearestFilter everywhere: facets stay crisp and blocky
+ *    instead of smoothing into plastic.
+ *
+ * The creeper face is left exactly as authored; only its body surface changed.
+ */
+
+// ────────────── value-map textures ──────────────
+
+interface SurfaceMap {
+  /** Null when no real 2D canvas is available (SSR, headless tests). */
+  tex: THREE.Texture | null;
+  mean: number;
 }
+
+/** A flat surface with no map — the fallback when canvas is unavailable. */
+const NO_MAP: SurfaceMap = { tex: null, mean: 1 };
+
+function hash(x: number, y: number, seed: number): number {
+  let h = (x * 73856093) ^ (y * 19349663) ^ (seed * 83492791);
+  h = (h ^ (h >>> 13)) >>> 0;
+  return (h % 1000) / 1000;
+}
+
+function makeTexture(draw: (g: CanvasRenderingContext2D) => void): SurfaceMap {
+  // Mobs are constructed in headless tests and could be constructed during SSR,
+  // where there is no canvas to paint into. Fall back to an unmapped surface
+  // rather than throwing — the mob still renders in its authored colour.
+  if (typeof document === "undefined") return NO_MAP;
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 16;
+  const g = canvas.getContext("2d");
+  if (!g) return NO_MAP;
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, 16, 16);
+  draw(g);
+
+  // White is the brightest a map can be, so the highlight levels ARE white and
+  // the rest of the field sits below it. That darkens the mean, so measure it
+  // and hand it back — surf() brightens material.color by 1/mean to land back
+  // on the authored colour.
+  let sum = 0;
+  try {
+    const data = g.getImageData(0, 0, 16, 16).data;
+    for (let i = 0; i < data.length; i += 4) sum += data[i];
+  } catch {
+    return NO_MAP;
+  }
+  const mean = sum / (16 * 16) / 255;
+  if (!(mean > 0)) return NO_MAP;
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  return { tex, mean };
+}
+
+/** Grey level as a css colour. 1 = white, the brightest a value map can be. */
+function lvl(v: number): string {
+  const n = Math.max(0, Math.min(255, Math.round(v * 255)));
+  const h = n.toString(16).padStart(2, "0");
+  return `#${h}${h}${h}`;
+}
+
+/** Clumped 2px hide grain — soft, irregular, no visible tiling seam. */
+function hideMap(seed: number, strength = 1): SurfaceMap {
+  return makeTexture((g) => {
+    for (let y = 0; y < 16; y += 2) {
+      for (let x = 0; x < 16; x += 2) {
+        const n = hash(x, y, seed);
+        const v = 1 + (n < 0.28 ? -0.17 : n < 0.52 ? -0.11 : n > 0.88 ? 0 : -0.06) * strength;
+        if (v === 1) continue;
+        g.fillStyle = lvl(v);
+        g.fillRect(x, y, 2, 2);
+      }
+    }
+  });
+}
+
+/** Wool: 2px curls with darker crevices between clumps. */
+function woolMap(seed: number): SurfaceMap {
+  return makeTexture((g) => {
+    for (let y = 0; y < 16; y += 2) {
+      for (let x = 0; x < 16; x += 2) {
+        const n = hash(x, y, seed);
+        g.fillStyle = lvl(n < 0.34 ? 0.78 : n < 0.6 ? 0.87 : 1);
+        g.fillRect(x, y, 2, 2);
+        // Crevices are gated, otherwise one per clump forms a regular grid.
+        const c = hash(x + 5, y + 9, seed);
+        if (c > 0.55) {
+          g.fillStyle = lvl(0.72);
+          g.fillRect(x + (c > 0.78 ? 0 : 1), y + 1, 1, 1);
+        }
+      }
+    }
+  });
+}
+
+/** Bone: vertical hairline cracks plus a few pits. */
+function boneMap(seed: number): SurfaceMap {
+  return makeTexture((g) => {
+    for (const x of [3, 7, 12]) {
+      g.fillStyle = lvl(0.76);
+      g.fillRect(x, 0, 1, 16);
+      g.fillStyle = lvl(1);
+      g.fillRect(x - 1, 0, 1, 16);
+    }
+    for (let i = 0; i < 6; i++) {
+      const n = hash(i, i * 5, seed);
+      g.fillStyle = lvl(0.72);
+      g.fillRect(Math.floor(n * 14) + 1, Math.floor(hash(i * 3, i, seed) * 14) + 1, 1, 1);
+    }
+  });
+}
+
+/** Large irregular mottle — rot blotches, creeper camouflage. */
+function mottleMap(seed: number): SurfaceMap {
+  return makeTexture((g) => {
+    for (let y = 0; y < 16; y += 4) {
+      for (let x = 0; x < 16; x += 4) {
+        const n = hash(x, y, seed);
+        g.fillStyle = lvl(n < 0.3 ? 0.74 : n < 0.55 ? 0.84 : n > 0.85 ? 1 : 0.92);
+        g.fillRect(x, y, 4, 4);
+        // ragged edge so the blotches do not read as a grid
+        const m = hash(x + 1, y + 2, seed);
+        g.fillStyle = lvl(m < 0.5 ? 0.8 : 1);
+        g.fillRect(x + (m < 0.5 ? 0 : 2), y + 2, 2, 2);
+      }
+    }
+  });
+}
+
+// ────────────── materials ──────────────
+
+const PIG_HIDE = () => hideMap(11, 0.8);
+const COW_HIDE = () => hideMap(23);
+const WOOL = () => woolMap(31);
+const SKIN = () => hideMap(43, 0.6);
+const ROT = () => mottleMap(53);
+const BONE = () => boneMap(61);
+const MOTTLE = () => mottleMap(71);
+
+/**
+ * Textured surface material. The map is a value map, so `color` still drives
+ * hue — and it is brightened by 1/mean so the textured surface lands on the
+ * authored colour rather than a darker version of it. Mob.ts captures this
+ * compensated colour into originalColors, so the damage flash is unaffected.
+ */
+function surf(color: number, map: SurfaceMap): THREE.MeshLambertMaterial {
+  if (!map.tex) return new THREE.MeshLambertMaterial({ color, flatShading: true });
+  const c = new THREE.Color(color).multiplyScalar(1 / map.mean);
+  c.r = Math.min(1, c.r);
+  c.g = Math.min(1, c.g);
+  c.b = Math.min(1, c.b);
+  return new THREE.MeshLambertMaterial({ color: c, map: map.tex, flatShading: true });
+}
+
+/**
+ * Detail material for markings that sit on top of a surface. polygonOffset
+ * pushes them toward the viewer in depth only, so they never z-fight with the
+ * face they lie on.
+ */
+function detail(color: number): THREE.MeshLambertMaterial {
+  return new THREE.MeshLambertMaterial({
+    color,
+    flatShading: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+}
+
+// ────────────── mobs ──────────────
 
 function createPig(): MobModelData {
   const group = new THREE.Group();
-  const pink = mat(0xf0a0a0);
-  const darkPink = mat(0xd08080);
+  const hide = PIG_HIDE();
+  const pink = surf(0xf0a0a0, hide);
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.3), pink);
   body.position.set(0, 0.35, 0);
   group.add(body);
 
-  // Head
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.28, 0.28), pink);
   head.position.set(0.3, 0.45, 0);
   group.add(head);
 
-  // Snout
-  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.15), darkPink);
-  snout.position.set(0.17, -0.02, 0);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.15), detail(0xd08080));
+  snout.position.set(0.18, -0.02, 0);
   head.add(snout);
+  // nostrils, so the snout reads as a snout
+  for (const z of [0.035, -0.035]) {
+    const nostril = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.03), detail(0x9a5a5a));
+    nostril.position.set(0.05, 0, z);
+    snout.add(nostril);
+  }
+  for (const z of [0.08, -0.08]) {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.03), detail(0x24201e));
+    eye.position.set(0.155, 0.06, z);
+    head.add(eye);
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.03), detail(0xd88f8f));
+    ear.position.set(-0.02, 0.15, z);
+    head.add(ear);
+  }
 
-  // Legs
   const legs: THREE.Mesh[] = [];
-  for (const [x, z] of [[0.15, 0.08], [0.15, -0.08], [-0.15, 0.08], [-0.15, -0.08]]) {
+  for (const [x, z] of [
+    [0.15, 0.08],
+    [0.15, -0.08],
+    [-0.15, 0.08],
+    [-0.15, -0.08],
+  ]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, 0.1), pink);
     leg.position.set(x, 0.09, z);
+    const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.11), detail(0x8a5252));
+    hoof.position.set(0, -0.08, 0);
+    leg.add(hoof);
     group.add(leg);
     legs.push(leg);
   }
@@ -46,34 +252,55 @@ function createPig(): MobModelData {
 
 function createCow(): MobModelData {
   const group = new THREE.Group();
-  const brown = mat(0x8b6914);
-  const white = mat(0xf5f5dc);
+  const hide = COW_HIDE();
+  const brown = surf(0x8b6914, hide);
+  const white = surf(0xf5f5dc, hide);
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.35), brown);
   body.position.set(0, 0.4, 0);
   group.add(body);
 
-  // White patch
-  const patch = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 0.36), white);
-  patch.position.set(0.05, 0.02, 0);
-  body.add(patch);
+  // Patches on both flanks rather than one slab through the middle.
+  for (const z of [0.181, -0.181]) {
+    const patch = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.01), white);
+    patch.position.set(0.06, 0.02, z);
+    body.add(patch);
+    const patch2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.01), white);
+    patch2.position.set(-0.18, -0.08, z);
+    body.add(patch2);
+  }
 
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), brown);
   head.position.set(0.38, 0.5, 0);
   group.add(head);
 
-  // Horns
-  const hornMat = mat(0xe0d8c0);
-  for (const z of [0.12, -0.12]) {
-    const horn = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04), hornMat);
+  const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.18), detail(0xd8c8a8));
+  muzzle.position.set(0.17, -0.06, 0);
+  head.add(muzzle);
+  for (const z of [0.09, -0.09]) {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.04), detail(0x24201e));
+    eye.position.set(0.155, 0.07, z);
+    head.add(eye);
+    const horn = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04), detail(0xe0d8c0));
     horn.position.set(0, 0.18, z);
     head.add(horn);
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.06), detail(0x7a5c12));
+    ear.position.set(-0.02, 0.1, z * 1.7);
+    head.add(ear);
   }
 
   const legs: THREE.Mesh[] = [];
-  for (const [x, z] of [[0.18, 0.1], [0.18, -0.1], [-0.18, 0.1], [-0.18, -0.1]]) {
+  for (const [x, z] of [
+    [0.18, 0.1],
+    [0.18, -0.1],
+    [-0.18, 0.1],
+    [-0.18, -0.1],
+  ]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.1), brown);
     leg.position.set(x, 0.11, z);
+    const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.05, 0.11), detail(0x3d3428));
+    hoof.position.set(0, -0.1, 0);
+    leg.add(hoof);
     group.add(leg);
     legs.push(leg);
   }
@@ -83,10 +310,9 @@ function createCow(): MobModelData {
 
 function createSheep(): MobModelData {
   const group = new THREE.Group();
-  const wool = mat(0xf0f0f0);
-  const skin = mat(0xc0b090);
+  const wool = surf(0xf0f0f0, WOOL());
+  const skin = surf(0xc0b090, SKIN());
 
-  // Woolly body
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.4, 0.4), wool);
   body.position.set(0, 0.4, 0);
   group.add(body);
@@ -95,8 +321,29 @@ function createSheep(): MobModelData {
   head.position.set(0.32, 0.48, 0);
   group.add(head);
 
+  // Wool cap over the crown, so the head is not a bare cube.
+  const fleece = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.27), wool);
+  fleece.position.set(-0.04, 0.11, 0);
+  head.add(fleece);
+  for (const z of [0.07, -0.07]) {
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.03), detail(0x24201e));
+    eye.position.set(0.13, 0.03, z);
+    head.add(eye);
+    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.06), detail(0xa8987a));
+    ear.position.set(0, 0.06, z * 1.9);
+    head.add(ear);
+  }
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.06), detail(0x8a7a5e));
+  nose.position.set(0.13, -0.06, 0);
+  head.add(nose);
+
   const legs: THREE.Mesh[] = [];
-  for (const [x, z] of [[0.15, 0.1], [0.15, -0.1], [-0.15, 0.1], [-0.15, -0.1]]) {
+  for (const [x, z] of [
+    [0.15, 0.1],
+    [0.15, -0.1],
+    [-0.15, 0.1],
+    [-0.15, -0.1],
+  ]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.08), skin);
     leg.position.set(x, 0.11, z);
     group.add(leg);
@@ -108,61 +355,59 @@ function createSheep(): MobModelData {
 
 function createZombie(): MobModelData {
   const group = new THREE.Group();
-  const skinGreen = mat(0x5a8a5a);
-  const shirtCyan = mat(0x3a9a8a);
-  const pantsPurple = mat(0x2e2e6e);
-  const darkGreen = mat(0x3a5a3a);
+  const rot = ROT();
+  const skinGreen = surf(0x5a8a5a, rot);
+  const shirtCyan = surf(0x3a9a8a, hideMap(53, 0.7));
+  const pantsPurple = surf(0x2e2e6e, hideMap(59, 0.7));
 
-  // Body (teal/cyan shirt)
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.25), shirtCyan);
   body.position.set(0, 0.95, 0);
   group.add(body);
+  // torn hem
+  const hem = new THREE.Mesh(new THREE.BoxGeometry(0.51, 0.06, 0.26), detail(0x2b7266));
+  hem.position.set(0, -0.32, 0);
+  body.add(hem);
 
-  // Head (8x8x8 proportional)
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinGreen);
   head.position.set(0, 1.52, 0);
   group.add(head);
 
-  // Face details - dark hollow eyes
-  const eyeMat = mat(0x1a1a1a);
+  // Sunken sockets: a dark recess with the eye set inside it.
   for (const z of [0.1, -0.1]) {
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.02), eyeMat);
-    eye.position.set(0.26, 0.06, z);
-    head.add(eye);
-  }
-  // Brow ridge (darker green above eyes)
-  const browMat = mat(0x2a4a2a);
-  for (const z of [0.1, -0.1]) {
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.02), browMat);
-    brow.position.set(0.26, 0.13, z);
+    const socket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.11, 0.04), detail(0x2c4630));
+    socket.position.set(0.255, 0.06, z);
+    head.add(socket);
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.02), detail(0x14180f));
+    eye.position.set(0.02, 0, 0);
+    socket.add(eye);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.04, 0.03), detail(0x3f6242));
+    brow.position.set(0.26, 0.14, z);
     head.add(brow);
   }
-  // Nose
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), darkGreen);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.04), detail(0x44693f));
   nose.position.set(0.26, 0.0, 0);
   head.add(nose);
-  // Mouth (dark frown)
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.02), eyeMat);
-  mouth.position.set(0.26, -0.1, 0);
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.03), detail(0x14180f));
+  mouth.position.set(0.258, -0.1, 0);
   head.add(mouth);
 
-  // Arms (stretched forward like classic zombie)
   for (const z of [0.2, -0.2]) {
-    // Upper arm (shirt color)
     const armPivot = new THREE.Group();
     armPivot.position.set(0, 1.15, z);
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), shirtCyan);
     arm.position.set(0.2, 0, 0);
     armPivot.add(arm);
-    // Hand (green skin)
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.15), skinGreen);
     hand.position.set(0, -0.36, 0);
     arm.add(hand);
+    // exposed forearm where the sleeve is torn
+    const tear = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.16), detail(0x4f7d4f));
+    tear.position.set(0, -0.24, 0);
+    arm.add(tear);
     armPivot.rotation.x = -Math.PI / 2.5;
     group.add(armPivot);
   }
 
-  // Legs (dark purple pants)
   const legs: THREE.Mesh[] = [];
   for (const z of [0.08, -0.08]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), pantsPurple);
@@ -176,75 +421,78 @@ function createZombie(): MobModelData {
 
 function createSkeleton(): MobModelData {
   const group = new THREE.Group();
-  const bone = mat(0xd4cfc4);
-  const boneDark = mat(0xb0a898);
-  const dark = mat(0x1a1a1a);
-  const gray = mat(0x555555);
+  const boneTex = BONE();
+  const bone = surf(0xd4cfc4, boneTex);
 
-  // Ribcage body (thinner than other humanoids)
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.18), bone);
   body.position.set(0, 0.95, 0);
   group.add(body);
 
-  // Rib lines (horizontal dark stripes)
+  // Ribs on both sides of the chest, recessed rather than stripes wrapped round.
   for (let i = 0; i < 3; i++) {
-    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.19), boneDark);
-    rib.position.set(0, 0.15 - i * 0.15, 0);
-    body.add(rib);
+    for (const z of [0.091, -0.091]) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, 0.01), detail(0x9d9484));
+      rib.position.set(0, 0.15 - i * 0.15, z);
+      body.add(rib);
+    }
   }
+  const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.42, 0.01), detail(0xe4dfd2));
+  sternum.position.set(0, 0.06, 0.091);
+  body.add(sternum);
 
-  // Skull head
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), bone);
   head.position.set(0, 1.52, 0);
   group.add(head);
 
-  // Deep dark eye sockets
   for (const z of [0.1, -0.1]) {
-    const socket = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), dark);
-    socket.position.set(0.23, 0.06, z);
+    const socket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.07), detail(0x121212));
+    socket.position.set(0.24, 0.06, z);
     head.add(socket);
   }
-  // Nose hole (triangle-ish)
-  const noseHole = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), dark);
-  noseHole.position.set(0.26, -0.02, 0);
+  const noseHole = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.04), detail(0x171717));
+  noseHole.position.set(0.255, -0.03, 0);
   head.add(noseHole);
-  // Jaw/teeth line
-  const jawLine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.02), gray);
-  jawLine.position.set(0.26, -0.12, 0);
-  head.add(jawLine);
-  // Individual teeth marks
-  for (const z of [0.04, -0.04]) {
-    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.02), bone);
-    tooth.position.set(0.26, -0.09, z);
+  // Jaw with gaps between the teeth instead of one grey bar.
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.03), detail(0x2a2a2a));
+  jaw.position.set(0.256, -0.13, 0);
+  head.add(jaw);
+  for (const z of [0.075, 0.025, -0.025, -0.075]) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.02), detail(0xece8dd));
+    tooth.position.set(0.259, -0.115, z);
     head.add(tooth);
   }
 
-  // Thin bony arms
   for (const z of [0.18, -0.18]) {
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.08), bone);
     arm.position.set(0, 0.95, z);
     group.add(arm);
-    // Bony hand
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.1), boneDark);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.1), detail(0xb0a898));
     hand.position.set(0, -0.3, 0);
     arm.add(hand);
+    // elbow knuckle, so the limb is not a featureless stick
+    const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.05, 0.095), detail(0xc2bbac));
+    elbow.position.set(0, 0.02, 0);
+    arm.add(elbow);
   }
 
-  // Bow (held in right hand area) — simple cross shape
-  const bowStick = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.04), mat(0x5D4037));
+  const bowStick = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.5, 0.04),
+    surf(0x5d4037, hideMap(83, 0.9))
+  );
   bowStick.position.set(0.08, 0.75, -0.28);
   bowStick.rotation.z = 0.2;
   group.add(bowStick);
-  // Bowstring
-  const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.4, 0.01), mat(0xcccccc));
+  const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.4, 0.01), detail(0xcccccc));
   bowString.position.set(0.04, 0, 0.03);
   bowStick.add(bowString);
 
-  // Thin legs
   const legs: THREE.Mesh[] = [];
   for (const z of [0.06, -0.06]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), bone);
     leg.position.set(0, 0.3, z);
+    const knee = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.05, 0.115), detail(0xc2bbac));
+    knee.position.set(0, 0.0, 0);
+    leg.add(knee);
     group.add(leg);
     legs.push(leg);
   }
@@ -254,17 +502,16 @@ function createSkeleton(): MobModelData {
 
 function createCreeper(): MobModelData {
   const group = new THREE.Group();
-  // Creeper uses mottled green - lighter and darker patches
-  const green = mat(0x5da85d);
-  const darkGreen = mat(0x3a7a3a);
-  const faceMat = mat(0x1a1a1a);
+  // Body surface refined to a camouflage mottle; the face is left as authored.
+  const mottle = MOTTLE();
+  const green = surf(0x5da85d, mottle);
+  const darkGreen = surf(0x3a7a3a, mottle);
+  const faceMat = detail(0x1a1a1a);
 
-  // Tall rectangular body
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.3), green);
   body.position.set(0, 0.75, 0);
   group.add(body);
 
-  // Darker mottled patches on body
   const patch1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.31), darkGreen);
   patch1.position.set(0.05, 0.1, 0);
   body.add(patch1);
@@ -272,52 +519,43 @@ function createCreeper(): MobModelData {
   patch2.position.set(-0.1, -0.2, 0);
   body.add(patch2);
 
-  // Head — same width as body, cube-shaped
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), green);
   head.position.set(0, 1.37, 0);
   group.add(head);
 
-  // Dark patches on head
   const headPatch = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.01), darkGreen);
   headPatch.position.set(0.26, 0.08, 0.08);
   head.add(headPatch);
 
-  // === ICONIC CREEPER FACE ===
-  // Eyes — two tall rectangles, wider apart
   for (const z of [0.1, -0.1]) {
-    // Each eye is a tall pixel shape
     const eyeOuter = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.02), faceMat);
     eyeOuter.position.set(0.26, 0.08, z);
     head.add(eyeOuter);
-    // Inner eye extension (going down-inward for the droopy look)
     const eyeInner = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), faceMat);
     eyeInner.position.set(0.26, 0.0, z * 0.5);
     head.add(eyeInner);
   }
 
-  // Mouth — the iconic frown: vertical line down from between eyes, then wider at bottom
-  // Vertical center strip
   const mouthCenter = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.02), faceMat);
   mouthCenter.position.set(0.26, -0.1, 0);
   head.add(mouthCenter);
-  // Bottom wider part (the frown extensions)
   for (const z of [0.06, -0.06]) {
     const mouthSide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), faceMat);
     mouthSide.position.set(0.26, -0.19, z);
     head.add(mouthSide);
   }
-  // Even wider bottom corners
   for (const z of [0.12, -0.12]) {
     const mouthCorner = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), faceMat);
     mouthCorner.position.set(0.26, -0.19, z);
     head.add(mouthCorner);
   }
 
-  // 4 short stubby legs (no arms — creepers have no arms!)
   const legs: THREE.Mesh[] = [];
   for (const [x, z] of [
-    [0.12, 0.12], [0.12, -0.12],
-    [-0.12, 0.12], [-0.12, -0.12],
+    [0.12, 0.12],
+    [0.12, -0.12],
+    [-0.12, 0.12],
+    [-0.12, -0.12],
   ] as const) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.38, 0.2), darkGreen);
     leg.position.set(x, 0.19, z);
@@ -346,12 +584,24 @@ function addShadow(group: THREE.Group, radius: number): void {
 export function createMobModel(type: MobType): MobModelData {
   let result: MobModelData;
   switch (type) {
-    case "pig": result = createPig(); break;
-    case "cow": result = createCow(); break;
-    case "sheep": result = createSheep(); break;
-    case "zombie": result = createZombie(); break;
-    case "skeleton": result = createSkeleton(); break;
-    case "creeper": result = createCreeper(); break;
+    case "pig":
+      result = createPig();
+      break;
+    case "cow":
+      result = createCow();
+      break;
+    case "sheep":
+      result = createSheep();
+      break;
+    case "zombie":
+      result = createZombie();
+      break;
+    case "skeleton":
+      result = createSkeleton();
+      break;
+    case "creeper":
+      result = createCreeper();
+      break;
   }
   const shadowRadius = type === "cow" ? 0.4 : type === "sheep" ? 0.35 : 0.3;
   addShadow(result.group, shadowRadius);
