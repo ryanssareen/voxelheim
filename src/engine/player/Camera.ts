@@ -7,6 +7,15 @@ const EYE_HEIGHT = 1.6;
 export type CameraMode = "first-person" | "third-person-back" | "third-person-front";
 
 const THIRD_PERSON_DISTANCE = 5;
+/** Closest the camera may sit to the eye before it is effectively first-person. */
+const THIRD_PERSON_MIN_DISTANCE = 0.35;
+/** Gap left between the camera and the blocking surface. Exceeds the 0.1 near plane. */
+const THIRD_PERSON_SURFACE_MARGIN = 0.3;
+/** Probe granularity along the boom. Finer than the margin so no block is skipped. */
+const THIRD_PERSON_PROBE_STEP = 0.15;
+
+/** Reports whether the block containing a world position is solid. */
+export type SolidityProbe = (x: number, y: number, z: number) => boolean;
 
 /**
  * First-person camera with yaw/pitch mouse-look and P perspective cycling.
@@ -62,11 +71,47 @@ export class Camera {
     };
   }
 
-  /** Applies position and rotation to a Three.js PerspectiveCamera. */
+  /**
+   * How far the third-person boom can extend from the eye before it would enter
+   * a solid block. Marches out from the eye and stops short of the first hit, so
+   * backing into a wall or standing in a tunnel pulls the camera in instead of
+   * burying it in terrain.
+   */
+  private clearBoomDistance(
+    eyeX: number,
+    eyeY: number,
+    eyeZ: number,
+    dirX: number,
+    dirY: number,
+    dirZ: number,
+    isSolidAt: SolidityProbe
+  ): number {
+    const steps = Math.ceil(THIRD_PERSON_DISTANCE / THIRD_PERSON_PROBE_STEP);
+    for (let i = 1; i <= steps; i++) {
+      const t = Math.min(i * THIRD_PERSON_PROBE_STEP, THIRD_PERSON_DISTANCE);
+      const solid = isSolidAt(
+        Math.floor(eyeX + dirX * t),
+        Math.floor(eyeY + dirY * t),
+        Math.floor(eyeZ + dirZ * t)
+      );
+      if (solid) {
+        return Math.max(THIRD_PERSON_MIN_DISTANCE, t - THIRD_PERSON_SURFACE_MARGIN);
+      }
+    }
+    return THIRD_PERSON_DISTANCE;
+  }
+
+  /**
+   * Applies position and rotation to a Three.js PerspectiveCamera.
+   *
+   * Pass `isSolidAt` so the third-person boom can shorten against terrain;
+   * without it the boom always extends its full length.
+   */
   applyToThreeCamera(
     camera: THREE.PerspectiveCamera,
     position: { x: number; y: number; z: number },
-    eyeHeight: number = EYE_HEIGHT
+    eyeHeight: number = EYE_HEIGHT,
+    isSolidAt?: SolidityProbe
   ): void {
     const eyeX = position.x;
     const eyeY = position.y + eyeHeight;
@@ -78,12 +123,21 @@ export class Camera {
     } else {
       const lookDir = this.getLookDirection();
       const sign = this.mode === "third-person-back" ? -1 : 1;
-      const dist = THIRD_PERSON_DISTANCE;
+
+      // Direction the boom swings out along — away from the look direction when
+      // behind the player, along it when in front.
+      const boomX = lookDir.x * sign;
+      const boomY = lookDir.y * sign;
+      const boomZ = lookDir.z * sign;
+
+      const dist = isSolidAt
+        ? this.clearBoomDistance(eyeX, eyeY, eyeZ, boomX, boomY, boomZ, isSolidAt)
+        : THIRD_PERSON_DISTANCE;
 
       camera.position.set(
-        eyeX + lookDir.x * dist * sign,
-        eyeY + lookDir.y * dist * sign,
-        eyeZ + lookDir.z * dist * sign
+        eyeX + boomX * dist,
+        eyeY + boomY * dist,
+        eyeZ + boomZ * dist
       );
 
       if (this.mode === "third-person-back") {

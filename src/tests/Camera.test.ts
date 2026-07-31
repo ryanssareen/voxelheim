@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import * as THREE from "three";
 import { Camera } from "@engine/player/Camera";
 
 describe("Camera", () => {
@@ -38,5 +39,91 @@ describe("Camera", () => {
     const dir = cam.getLookDirection();
     expect(dir.y).toBeGreaterThan(0);
     expect(Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z)).toBeCloseTo(1);
+  });
+});
+
+/**
+ * Third person used to sit a fixed 5 blocks behind the eye with no regard for
+ * what was in between, so standing underground or backed against a wall put the
+ * camera inside solid terrain — you saw block backfaces and the void beyond.
+ */
+describe("Camera third-person obstruction", () => {
+  const EYE_H = 1.6;
+  const FEET = { x: 0, y: 65, z: 0 };
+  const eyeY = FEET.y + EYE_H;
+  const openWorld = () => false;
+
+  /** With default yaw the eye looks -Z, so the back camera swings out toward +Z. */
+  const wallAtPositiveZ = (limit: number) => (_x: number, _y: number, z: number) =>
+    z >= limit;
+
+  function place(
+    mode: "third-person-back" | "third-person-front",
+    isSolidAt: (x: number, y: number, z: number) => boolean
+  ) {
+    const cam = new Camera();
+    cam.mode = mode;
+    const three = new THREE.PerspectiveCamera(75, 1, 0.1, 300);
+    cam.applyToThreeCamera(three, FEET, EYE_H, isSolidAt);
+    return three.position;
+  }
+
+  const voxelIsSolid = (
+    p: THREE.Vector3,
+    isSolidAt: (x: number, y: number, z: number) => boolean
+  ) => isSolidAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+
+  it("keeps the full distance when nothing is in the way", () => {
+    const p = place("third-person-back", openWorld);
+    expect(p.z).toBeCloseTo(5, 6);
+    expect(p.y).toBeCloseTo(eyeY, 6);
+  });
+
+  it("pulls in short of a wall behind the player", () => {
+    const solid = wallAtPositiveZ(2);
+    const p = place("third-person-back", solid);
+    expect(p.z).toBeLessThan(2);
+    expect(p.z).toBeGreaterThan(0);
+    expect(voxelIsSolid(p, solid), "camera ended up inside the wall").toBe(false);
+  });
+
+  it("never lands inside geometry at any pitch", () => {
+    // Sweep pitch through the full range against a box that encloses the player.
+    const box = (x: number, y: number, z: number) =>
+      x <= -3 || x >= 3 || y <= 62 || y >= 69 || z <= -3 || z >= 3;
+    for (let deg = -89; deg <= 89; deg += 7) {
+      const cam = new Camera();
+      cam.mode = "third-person-back";
+      cam.pitch = (deg * Math.PI) / 180;
+      const three = new THREE.PerspectiveCamera(75, 1, 0.1, 300);
+      cam.applyToThreeCamera(three, FEET, EYE_H, box);
+      expect(
+        voxelIsSolid(three.position, box),
+        `pitch ${deg}° put the camera inside a block`
+      ).toBe(false);
+    }
+  });
+
+  it("applies the same clamp to the front-facing camera", () => {
+    // Front mode swings the opposite way, toward -Z.
+    const solid = (_x: number, _y: number, z: number) => z <= -2;
+    const p = place("third-person-front", solid);
+    expect(p.z).toBeGreaterThan(-2);
+    expect(voxelIsSolid(p, solid), "front camera ended up inside the wall").toBe(false);
+  });
+
+  it("falls back to the eye position when fully enclosed", () => {
+    const p = place("third-person-back", () => true);
+    expect(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)).toBe(true);
+    const fromEye = Math.hypot(p.x - FEET.x, p.y - eyeY, p.z - FEET.z);
+    expect(fromEye).toBeLessThan(1);
+  });
+
+  it("still works without a solidity probe (first-person and legacy callers)", () => {
+    const cam = new Camera();
+    cam.mode = "third-person-back";
+    const three = new THREE.PerspectiveCamera(75, 1, 0.1, 300);
+    cam.applyToThreeCamera(three, FEET, EYE_H);
+    expect(three.position.z).toBeCloseTo(5, 6);
   });
 });

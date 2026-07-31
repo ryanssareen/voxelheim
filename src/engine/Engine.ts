@@ -103,6 +103,13 @@ export class Engine {
   private islandSize = LEGACY_ISLAND_SIZE_BLOCKS;
   private spawn = { x: LEGACY_ISLAND_SIZE_BLOCKS / 2, y: ISLAND_SPAWN_Y, z: LEGACY_ISLAND_SIZE_BLOCKS / 2 };
 
+  /**
+   * Solidity probe handed to the camera so the third-person boom shortens
+   * against terrain instead of burying itself in it.
+   */
+  private readonly isSolidAt = (x: number, y: number, z: number): boolean =>
+    !!this.chunkManager && this.registry.isSolid(this.chunkManager.getBlock(x, y, z));
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
   }
@@ -826,7 +833,8 @@ export class Engine {
       this.camera.applyToThreeCamera(
         this.renderer!.getCamera(),
         this.player!.position,
-        this.player!.isCrouching ? 1.2 : 1.6
+        this.player!.isCrouching ? 1.2 : 1.6,
+        this.isSolidAt
       );
       this.renderer!.render();
       return;
@@ -877,7 +885,8 @@ export class Engine {
       this.camera.applyToThreeCamera(
         this.renderer!.getCamera(),
         this.player!.position,
-        this.player!.isCrouching ? 1.2 : 1.6
+        this.player!.isCrouching ? 1.2 : 1.6,
+        this.isSolidAt
       );
       this.renderer!.render();
       return;
@@ -1283,7 +1292,8 @@ export class Engine {
     this.camera.applyToThreeCamera(
       this.renderer!.getCamera(),
       this.player!.position,
-      eyeH
+      eyeH,
+      this.isSolidAt
     );
 
     this.renderer!.render();
