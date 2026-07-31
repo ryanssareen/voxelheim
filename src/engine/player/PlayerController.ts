@@ -26,7 +26,6 @@ export class PlayerController {
   public isSprinting = false;
   public isFlying = false;
 
-  private hadHorizCollision = false;
   private lastSpacePressTime = 0;
   private spaceWasDown = false;
 
@@ -140,8 +139,6 @@ export class PlayerController {
         this.onGround = false;
       }
     }
-
-    this.hadHorizCollision = false;
 
     // Move and collide: Y first, then X, then Z
     // Use sub-stepping for large displacements to prevent clipping
@@ -380,7 +377,6 @@ export class PlayerController {
               this.position.x = bx - HALF_WIDTH;
             }
             this.velocity.x = 0;
-            this.hadHorizCollision = true;
             return;
           } else {
             if (delta < 0) {
@@ -389,7 +385,6 @@ export class PlayerController {
               this.position.z = bz - HALF_WIDTH;
             }
             this.velocity.z = 0;
-            this.hadHorizCollision = true;
             return;
           }
         }

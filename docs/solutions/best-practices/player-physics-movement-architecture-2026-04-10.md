@@ -84,7 +84,7 @@ If X/Z resolved first, the player could briefly register as on-ground during a l
 
 ### There Is No Player Auto-Jump
 
-The player has **no** auto-jump / step-up assist -- 1-block steps must be jumped manually. An earlier version of this doc described an auto-jump system with a cooldown; that system is gone. The only remnant is the write-only `hadHorizCollision` field on `PlayerController`, which is still assigned but read nowhere and should be deleted.
+The player has **no** auto-jump / step-up assist -- 1-block steps must be jumped manually. An earlier version of this doc described an auto-jump system with a cooldown; that system is gone, and the last piece of dead state it left behind (a write-only `hadHorizCollision` flag on `PlayerController`) has been removed too. Nothing in `PlayerController` tracks horizontal collisions across a frame any more -- if you add step-up assist, that plumbing has to come back.
 
 Note the inversion, because it is easy to get backwards: **mobs** do have step-up assist (`Mob.updateHostileAI` gives a vertical impulse when the next path waypoint is above the mob and it is grounded). The player does not.
 
