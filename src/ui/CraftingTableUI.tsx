@@ -11,6 +11,7 @@ import { BLOCK_ID } from "@data/blocks";
 import { getToolDef } from "@data/items";
 import { findRecipe3x3 } from "@systems/crafting/recipes";
 import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
+import { RecipeBook, useRecipeFill } from "@ui/RecipeBook";
 
 export function CraftingTableUI() {
   const tableOpen = useInventoryStore((s) => s.tableOpen);
@@ -26,6 +27,8 @@ export function CraftingTableUI() {
     window.addEventListener("mousemove", handler);
     return () => window.removeEventListener("mousemove", handler);
   }, [tableOpen]);
+
+  const fillFromRecipe = useRecipeFill(3);
 
   const recipe = useMemo(() => {
     const grid = tableGrid.map((s) =>
@@ -132,7 +135,7 @@ export function CraftingTableUI() {
         {/* Title */}
         <p className="text-[13px] font-mono text-[#404040] font-bold">Crafting</p>
 
-        {/* 3x3 grid + arrow + result */}
+        {/* 3x3 grid + arrow + result + recipe book */}
         <div className="flex items-center gap-5">
           <div className="grid grid-cols-3 gap-1">
             {tableGrid.map((slot, i) => (
@@ -155,6 +158,7 @@ export function CraftingTableUI() {
             size={RS}
             highlight={!!recipe}
           />
+          <RecipeBook gridSize={3} onFill={fillFromRecipe} />
         </div>
 
         {recipe && (

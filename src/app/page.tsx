@@ -296,6 +296,15 @@ export default function Home() {
           >
             {startingDemo ? "Loading..." : "Play"}
           </button>
+          {/* Creating a world has never needed an account — it was just buried
+              behind My Worlds, so a visitor who tried the demo never found it. */}
+          <Link
+            href="/game/create"
+            className={MC_BTN + " w-full text-sm"}
+            style={BTN_STYLE}
+          >
+            New World...
+          </Link>
           <Link href="/worlds" className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
             My Worlds
           </Link>

@@ -52,6 +52,12 @@ function PausePanel({
     router.push("/");
   };
 
+  // Reachable without an account — world creation has never required sign-in,
+  // it was just buried behind Quit to Menu -> My Worlds.
+  const handleCreateWorld = () => {
+    router.push("/game/create");
+  };
+
   // R11: replays from step one in any world, even once completed.
   const handleShowWalkthrough = () => {
     reopenWalkthrough();
@@ -145,6 +151,13 @@ function PausePanel({
           className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
         >
           Controls
+        </button>
+
+        <button
+          onClick={handleCreateWorld}
+          className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
+        >
+          Create New World
         </button>
 
         <button

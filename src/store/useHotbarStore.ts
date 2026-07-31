@@ -31,6 +31,13 @@ interface HotbarState {
   canAddItem: (blockId: number) => boolean;
   addItem: (blockId: number) => boolean;
   removeSelectedItem: () => number;
+  /**
+   * Removes up to `count` of `blockId` from anywhere in the inventory and
+   * returns how many were actually taken. Used by the recipe book to move
+   * ingredients into a crafting grid; the caller is responsible for putting
+   * back anything it does not place.
+   */
+  takeItems: (blockId: number, count: number) => number;
   damageSelectedTool: () => void;
   resetSlots: () => void;
 }
@@ -157,6 +164,28 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
     }
     set({ slots: newSlots });
     return blockId;
+  },
+
+  takeItems: (blockId: number, count: number) => {
+    if (blockId === BLOCK_ID.AIR || count <= 0) return 0;
+    const { slots } = get();
+    const newSlots = [...slots];
+    let remaining = count;
+
+    for (let i = 0; i < newSlots.length && remaining > 0; i++) {
+      const slot = newSlots[i];
+      if (slot.blockId !== blockId || slot.count <= 0) continue;
+      const taken = Math.min(slot.count, remaining);
+      remaining -= taken;
+      newSlots[i] =
+        slot.count === taken
+          ? { blockId: BLOCK_ID.AIR, count: 0 }
+          : { ...slot, count: slot.count - taken };
+    }
+
+    const removed = count - remaining;
+    if (removed > 0) set({ slots: newSlots });
+    return removed;
   },
 
   damageSelectedTool: () => {

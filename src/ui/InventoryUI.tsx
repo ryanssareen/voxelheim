@@ -11,6 +11,7 @@ import {
 import { getToolDef } from "@data/items";
 import { findRecipe } from "@systems/crafting/recipes";
 import { InventorySlot, CursorItemOverlay } from "@ui/ItemIcon";
+import { RecipeBook, useRecipeFill } from "@ui/RecipeBook";
 import { useSlotInteractions, ARMOR_LABELS } from "@ui/useSlotInteractions";
 
 export function InventoryUI() {
@@ -24,6 +25,7 @@ export function InventoryUI() {
 
   const { handleSlotClick, handleArmorClick, handleOffhandClick } =
     useSlotInteractions();
+  const fillFromRecipe = useRecipeFill(2);
 
   const recipe = useMemo(() => {
     const grid = craftingGrid.map((s) =>
@@ -152,6 +154,9 @@ export function InventoryUI() {
               </p>
             )}
           </div>
+
+          {/* Recipe book (right) */}
+          <RecipeBook gridSize={2} onFill={fillFromRecipe} />
         </div>
 
         {/* Separator */}
