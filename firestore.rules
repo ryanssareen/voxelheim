@@ -1,0 +1,90 @@
+rules_version = '2';
+
+// Voxelheim plays without accounts, so no request here is ever authenticated.
+// These rules cannot prove identity; they constrain blast radius instead:
+//   - session codes cannot be enumerated (join by code still works)
+//   - sessions cannot be deleted or rewritten by anyone
+//   - an email address can never be stored as a host name
+//   - payloads are size-bounded so an anonymous client cannot dump data
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function validSession(d, code) {
+      return d.keys().hasAll(['code', 'seed', 'worldType', 'worldName', 'hostName', 'createdAt'])
+        && d.keys().hasOnly(['code', 'seed', 'worldType', 'islandSize', 'worldName', 'hostName', 'createdAt', 'transport'])
+        && d.code == code
+        && d.seed is string && d.seed.size() <= 64
+        && d.worldType in ['island', 'flat', 'infinite']
+        && d.worldName is string && d.worldName.size() > 0 && d.worldName.size() <= 64
+        && d.hostName is string && d.hostName.size() > 0 && d.hostName.size() <= 16
+        // The account-free promise: no email may reach session data.
+        && !d.hostName.matches('.*@.*')
+        && d.createdAt is number;
+    }
+
+    match /multiplayerSessions/{code} {
+      // Joining reads exactly one document by its code.
+      allow get: if code.size() >= 4 && code.size() <= 12;
+
+      // Nothing in the app lists this collection, and allowing it would publish
+      // every live session code to anyone holding the public API key.
+      allow list: if false;
+
+      allow create: if validSession(request.resource.data, code);
+
+      // The app never rewrites or removes a session document. Leaving these open
+      // let any anonymous client end a game in progress.
+      allow update, delete: if false;
+
+      // In-session gameplay state. Anyone holding the code is a participant by
+      // definition, so these stay readable; writes are size-bounded only.
+      // Deliberately no exists() parent check -- player state syncs ~8x/sec per
+      // player and each exists() would bill an extra document read per write.
+
+      match /players/{playerId} {
+        allow read: if true;
+        allow write: if request.resource == null
+          || (request.resource.data.size() <= 24
+              && (!('name' in request.resource.data)
+                  || (request.resource.data.name is string
+                      && request.resource.data.name.size() <= 16
+                      && !request.resource.data.name.matches('.*@.*'))));
+      }
+
+      match /chat/{messageId} {
+        allow read: if true;
+        allow create: if request.resource.data.size() <= 8
+          && (!('text' in request.resource.data)
+              || (request.resource.data.text is string
+                  && request.resource.data.text.size() <= 280));
+        allow update, delete: if false;
+      }
+
+      match /blocks/{blockId} {
+        allow read: if true;
+        allow write: if request.resource == null || request.resource.data.size() <= 16;
+      }
+
+      match /drops/{dropId} {
+        allow read: if true;
+        allow write: if request.resource == null || request.resource.data.size() <= 16;
+      }
+
+      match /worldState/{chunkId} {
+        allow read: if true;
+        allow write: if request.resource == null || request.resource.data.size() <= 16;
+      }
+
+      match /hits/{hitId} {
+        allow read: if true;
+        allow create: if request.resource.data.size() <= 12;
+        allow update, delete: if false;
+      }
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

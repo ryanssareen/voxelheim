@@ -6,6 +6,7 @@ import type { Engine } from "@engine/Engine";
 import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 import { useWalkthroughStore } from "@store/useWalkthroughStore";
+import { useKeybindsStore } from "@store/useKeybindsStore";
 
 /**
  * Pause menu overlay. Shown when isPaused is true.
@@ -40,6 +41,7 @@ function PausePanel({
   const [spawnSet, setSpawnSet] = useState(false);
   const router = useRouter();
   const reopenWalkthrough = useWalkthroughStore((s) => s.reopen);
+  const openControls = useKeybindsStore((s) => s.open);
 
   const handleResume = () => {
     canvasRef.current?.requestPointerLock();
@@ -54,6 +56,12 @@ function PausePanel({
   const handleShowWalkthrough = () => {
     reopenWalkthrough();
     canvasRef.current?.requestPointerLock();
+    setPaused(false);
+  };
+
+  // The popup owns its own dismissal, so the game stays paused behind it.
+  const handleShowControls = () => {
+    openControls();
     setPaused(false);
   };
 
@@ -130,6 +138,13 @@ function PausePanel({
           className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
         >
           How to Play
+        </button>
+
+        <button
+          onClick={handleShowControls}
+          className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
+        >
+          Controls
         </button>
 
         <button
