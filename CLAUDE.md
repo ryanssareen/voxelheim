@@ -9,6 +9,7 @@ At the start of every conversation, read all files in `.ai-codex/` to understand
 At the start of every conversation, also read the compound engineering artifacts for this project:
 - `docs/plans/` — active implementation plans
 - `docs/solutions/` — documented solutions and learnings from past work
+- `CONCEPTS.md` — shared domain vocabulary (entities, named processes, status concepts)
 
 These contain institutional knowledge (resolved gotchas, architecture decisions, prevention strategies) that should inform implementation choices.
 

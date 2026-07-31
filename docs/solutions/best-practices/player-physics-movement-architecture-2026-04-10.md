@@ -6,6 +6,7 @@ module: engine-player
 problem_type: best_practice
 component: player-controller
 severity: medium
+last_updated: 2026-07-31
 applies_when:
   - "Modifying player movement, jump, or gravity behavior"
   - "Adding new movement modes (swimming, climbing, flying)"
@@ -26,7 +27,7 @@ tags:
 
 ## Context
 
-Voxelheim uses a ground-based gravity model for the player. The `PlayerController` handles all physics locally each frame: gravity, input-driven movement, AABB collision, and auto-jump. There is no server-authoritative physics -- each client runs its own simulation. Understanding this architecture is essential before modifying movement behavior or adding new movement modes.
+Voxelheim uses a ground-based gravity model for the player. The `PlayerController` handles all physics locally each frame: gravity, input-driven movement, and AABB collision. There is no server-authoritative physics -- each client runs its own simulation. Understanding this architecture is essential before modifying movement behavior or adding new movement modes.
 
 ## Guidance
 
@@ -34,19 +35,21 @@ Voxelheim uses a ground-based gravity model for the player. The `PlayerControlle
 
 The player update runs once per frame in this exact order within `PlayerController.update()`:
 
-1. Read crouch/sprint state from input
-2. Compute camera-relative WASD movement vector, apply speed multiplier
-3. Apply gravity to `velocity.y` (only when `onGround === false`)
-4. Handle jump input (Space when `onGround` and not crouching)
-5. Move and collide: Y axis first, then X, then Z (sub-stepped)
-6. Post-collision overlap resolution (safety push-up)
-7. Auto-jump check (post-collision, with cooldown)
+1. Double-tap Space detection for the flight toggle (creative only)
+2. Read crouch/sprint state from input
+3. Compute camera-relative WASD movement vector, apply speed multiplier
+4. Apply gravity to `velocity.y` (only when `onGround === false`) -- the whole gravity/jump block is gated behind `if (!this.isFlying)`
+5. Handle jump input (Space when `onGround`)
+6. Move and collide on Y (sub-stepped)
+7. Ground probe: when standing still, `moveAxisSafe` skips the Y move entirely, so nothing would clear `onGround`. This step re-checks that ground still exists beneath the hitbox. Skipped while flying.
+8. Move and collide on X, then Z (sub-stepped), with a crouch edge-prevention rollback after each
+9. Post-collision overlap resolution (`resolveOverlap`)
 
 After `PlayerController.update()` returns, `Engine.gameLoopInner()` handles:
 
-8. Fall damage calculation (compares `fallStartY` to landing position)
-9. Void death check (Y < -10)
-10. Block interaction, mob combat, hunger, and rendering
+10. Fall damage calculation (compares `fallStartY` to landing position)
+11. Void death check. Two different thresholds: the **player** dies below Y < -10, a **mob** below Y < 0 (`Mob.update`). The mob threshold is shallow enough that anything which displaces a mob under the terrain surface kills it almost immediately -- see the phantom-block collision bug linked under Related Files.
+12. Block interaction, mob combat, hunger, and rendering
 
 ### Physics Constants
 
@@ -62,7 +65,9 @@ After `PlayerController.update()` returns, `Engine.gameLoopInner()` handles:
 | STAND_HEIGHT | 1.8 | Standing hitbox height |
 | CROUCH_HEIGHT | 1.4 | Crouching hitbox height |
 | MAX_STEP_SIZE | 0.45 | Max displacement per collision sub-step |
-| AUTO_JUMP_COOLDOWN | 0.35s | Minimum time between auto-jumps |
+| FLY_SPEED | 20 blocks/s | Flight movement and ascend/descend speed |
+| FLY_SPRINT_SPEED | 40 blocks/s | Flight speed while holding Shift |
+| DOUBLE_TAP_WINDOW | 300 ms | Max gap between Space presses to toggle flight |
 
 ### Collision Sub-Stepping
 
@@ -72,24 +77,16 @@ The original plan called for single-step axis movement, but this caused clipping
 
 Y-axis collision runs before X and Z so that `onGround` is set correctly before lateral collision. This matters for:
 
-- Auto-jump: only triggers when `onGround` is true
 - Jump input: only accepted when `onGround` is true
 - Gravity: only applies when `onGround` is false
 
 If X/Z resolved first, the player could briefly register as on-ground during a lateral slide, causing phantom jumps.
 
-### Auto-Jump Implementation
+### There Is No Player Auto-Jump
 
-Auto-jump allows the player to walk up 1-block steps without pressing Space. It is NOT part of the collision loop -- it runs after all collision is resolved. This prevents the auto-jump from modifying position mid-collision, which previously caused the player to clip inside blocks.
+The player has **no** auto-jump / step-up assist -- 1-block steps must be jumped manually. An earlier version of this doc described an auto-jump system with a cooldown; that system is gone. The only remnant is the write-only `hadHorizCollision` field on `PlayerController`, which is still assigned but read nowhere and should be deleted.
 
-Conditions (all must be true):
-- `onGround` is true
-- Not crouching
-- Cooldown expired (0.35s between auto-jumps)
-- A horizontal collision was detected this frame
-- `velocity.y <= 0` (not already jumping upward)
-- The collided block has two empty blocks above it
-- The player has headroom (block above player's head is empty)
+Note the inversion, because it is easy to get backwards: **mobs** do have step-up assist (`Mob.updateHostileAI` gives a vertical impulse when the next path waypoint is above the mob and it is grounded). The player does not.
 
 ### Multiplayer Position Sync
 
@@ -103,26 +100,46 @@ What is NOT synced:
 
 Remote players are rendered via `RemotePlayerAvatar` which interpolates position with a lerp factor of 12/s. This means remote jump arcs appear smoothed rather than parabolic. The visual is acceptable but not physics-accurate.
 
-### Adding New Movement Modes
+### Flight Mode (shipped)
 
-If adding a flight mode, swimming, or other movement mode:
+Flight is implemented and creative-only. Double-tapping Space within `DOUBLE_TAP_WINDOW` toggles `isFlying`; Space ascends, Ctrl descends, neither hovers. Survival forces `isFlying = false` every frame.
 
-1. The gravity gate is `if (!this.onGround)` in `PlayerController.update()`. A flight mode would need to bypass this, e.g., by adding an `isFlying` flag and skipping gravity when true.
-2. Jump velocity would need to be repurposed or disabled during flight (Space = ascend, Ctrl = descend is the Minecraft creative pattern).
-3. Fall damage in `Engine.gameLoopInner()` tracks `wasFalling` and `fallStartY` -- flight mode must reset these when entering flight to avoid damage on landing.
-4. Multiplayer sync does not include movement mode. Adding flight would require extending `MultiplayerPlayerState` with an `isFlying` field, or remote players will appear to teleport vertically.
-5. Auto-jump should be disabled during flight (it checks `onGround`, which would be false during flight, so it naturally won't trigger).
-6. Collision still matters during flight to prevent flying through solid blocks -- the AABB system works regardless of movement mode.
+How it interacts with the rest of the loop:
+
+1. The gravity and jump block is gated behind `if (!this.isFlying)`. Crouch, the ground probe, and the crouch edge-prevention rollbacks are gated the same way.
+2. Fall damage in `Engine.gameLoopInner()` tracks `wasFalling` and `fallStartY`, and resets them while flying to avoid ghost fall damage on landing.
+3. Collision still applies during flight -- the AABB system runs regardless of movement mode.
+
+**Known gap:** movement mode is not part of the multiplayer sync payload. `MultiplayerPlayerState` has no `isFlying` field, so a flying player's remote avatar is interpolated as if walking and can appear to drift vertically. Adding the field is the fix if this becomes visible.
+
+If adding a further mode (swimming, climbing), follow the same shape: a flag on `PlayerController`, a gate on the gravity/jump block, and a decision about whether the flag needs syncing.
 
 ### Mob Physics Parity
 
-Mobs use the same gravity constant (20 m/s^2) and axis-by-axis AABB collision as the player, but with their own `moveAxis()` implementation in `Mob.ts`. They have a different terminal velocity cap (-15 vs -40) and no sub-stepping. If collision behavior changes in `PlayerController`, consider whether `Mob.moveAxis()` needs the same fix.
+Mobs use the same gravity constant (20 m/s^2) and axis-by-axis AABB collision as the player, but with their own `moveAxis()` implementation in `Mob.ts`. They have a different terminal velocity cap (-15 vs -40) and no sub-stepping. Mobs, unlike the player, do have step-up assist.
+
+**Parity is now partly enforced in code rather than by advice.** Both implementations import `maxBlock` from `@engine/physics` for their AABB max edges. The loops are still separate; only the range helper is shared.
+
+This section previously said only "consider whether `Mob.moveAxis()` needs the same fix." That advisory was correct and was not acted on, which is exactly how `Mob.moveAxis` shipped without the `if (delta === 0) return;` guard `PlayerController.moveAxis` already had -- and that gap made mobs fall out of the world when knocked into a wall. See `docs/solutions/logic-errors/aabb-max-edge-phantom-block-collision.md`.
+
+When you change collision behavior, work the checklist rather than the advice:
+
+1. Does the change belong in `@engine/physics` as a shared primitive instead of in one class?
+2. Does `Mob.moveAxis` need the same change? Does the paused/chat-composing gravity scan in `Engine.ts` -- a third copy of the same loop -- need it too?
+3. Add a test covering **both** the player and a mob. `src/tests/collision.test.ts` is the home and shows the stubbing needed for each.
 
 ## Related Files
 
 - `src/engine/player/PlayerController.ts` -- all player physics
+- `src/engine/physics/index.ts` -- shared AABB helpers used by both player and mob collision
 - `src/engine/Engine.ts` -- game loop, fall damage, void death, hunger effects on movement
 - `src/engine/entities/Mob.ts` -- mob physics (parallel implementation)
 - `src/engine/multiplayer/MultiplayerManager.ts` -- position sync protocol
 - `src/engine/multiplayer/RemotePlayerAvatar.ts` -- remote player interpolation
 - `src/lib/multiplayer/types.ts` -- `MultiplayerPlayerState` shape
+- `src/tests/collision.test.ts` -- collision regression tests for player and mob
+
+## Related Learnings
+
+- `docs/solutions/logic-errors/aabb-max-edge-phantom-block-collision.md` -- the diagnosed defect behind the parity checklist above: AABB scans used an inclusive max edge, so entities that parked flush against a `+X`/`+Z` face kept "overlapping" a zero-width block. Players climbed walls; mobs knocked into walls sank out of the world.
+- `docs/solutions/best-practices/voxel-coordinate-math-patterns-2026-04-05.md` -- the wider family of `Math.floor` / modulo semantics pitfalls in voxel coordinate math.
