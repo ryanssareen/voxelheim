@@ -11,7 +11,11 @@ service cloud.firestore {
 
     function validSession(d, code) {
       return d.keys().hasAll(['code', 'seed', 'worldType', 'worldName', 'hostName', 'createdAt'])
-        && d.keys().hasOnly(['code', 'seed', 'worldType', 'islandSize', 'worldName', 'hostName', 'createdAt', 'transport'])
+        && d.keys().hasOnly(['code', 'seed', 'worldType', 'islandSize', 'worldName', 'hostName', 'createdAt', 'transport', 'expiresAt'])
+        // Drives the TTL policy. Optional rather than required so a page open
+        // across a deploy does not silently lose cloud multiplayer; the app
+        // always sends it, so in practice every new session expires.
+        && (!('expiresAt' in d) || d.expiresAt is timestamp)
         && d.code == code
         && d.seed is string && d.seed.size() <= 64
         && d.worldType in ['island', 'flat', 'infinite']
@@ -32,9 +36,15 @@ service cloud.firestore {
 
       allow create: if validSession(request.resource.data, code);
 
-      // The app never rewrites or removes a session document. Leaving these open
-      // let any anonymous client end a game in progress.
-      allow update, delete: if false;
+      // The app never rewrites a session document, and leaving delete open let
+      // any anonymous client end a game in progress.
+      allow update: if false;
+
+      // Expiry is the authorization: a session may be deleted only once it has
+      // already expired, so a live game can never be killed. This is client-side
+      // reaping in place of a TTL policy, which requires the Blaze plan.
+      allow delete: if resource.data.expiresAt is timestamp
+        && resource.data.expiresAt < request.time;
 
       // In-session gameplay state. Anyone holding the code is a participant by
       // definition, so these stay readable; writes are size-bounded only.
