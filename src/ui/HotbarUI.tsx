@@ -4,52 +4,31 @@ import { useHotbarStore, HOTBAR_SLOTS } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
 import { ITEM_NAMES, getToolDef } from "@data/items";
 import { ItemIcon, DurabilityBar } from "@ui/ItemIcon";
-
-const BLOCK_VISUALS: Record<
-  number,
-  { top: string; side: string; name: string } | null
-> = {
-  [BLOCK_ID.GRASS]: { top: "#5cb85c", side: "#8D6E63", name: "Grass" },
-  [BLOCK_ID.DIRT]: { top: "#9b7653", side: "#7a5c3a", name: "Dirt" },
-  [BLOCK_ID.STONE]: { top: "#aaaaaa", side: "#888888", name: "Stone" },
-  [BLOCK_ID.SAND]: { top: "#ffe082", side: "#d4a832", name: "Sand" },
-  [BLOCK_ID.LOG]: { top: "#D7CCC8", side: "#5D4037", name: "Log" },
-  [BLOCK_ID.LEAVES]: { top: "#43a047", side: "#2E7D32", name: "Leaves" },
-  [BLOCK_ID.CRYSTAL]: { top: "#4dd0e1", side: "#0097a7", name: "Crystal" },
-  [BLOCK_ID.RAW_PORK]: { top: "#f0a0a0", side: "#d08080", name: "Raw Pork" },
-  [BLOCK_ID.RAW_BEEF]: { top: "#c45050", side: "#a03030", name: "Raw Beef" },
-  [BLOCK_ID.RAW_MUTTON]: { top: "#d4836a", side: "#b0654a", name: "Raw Mutton" },
-  [BLOCK_ID.PLANKS]: { top: "#c8a55a", side: "#a68940", name: "Planks" },
-  [BLOCK_ID.CRAFTING_TABLE]: { top: "#9b7653", side: "#7a5c3a", name: "Crafting Table" },
-  [BLOCK_ID.AIR]: null,
-};
-
-function BlockIcon({ blockId }: { blockId: number }) {
-  const v = BLOCK_VISUALS[blockId];
-  if (!v) return null;
-
-  return (
-    <svg width="80%" height="80%" viewBox="0 0 32 32" style={{ imageRendering: "pixelated" }}>
-      <polygon points="16,4 28,10 16,16 4,10" fill={v.top} />
-      <polygon points="4,10 16,16 16,28 4,22" fill={v.side} />
-      <polygon points="16,16 28,10 28,22 16,28" fill={v.side} style={{ opacity: 0.7 }} />
-    </svg>
-  );
-}
+import { useHudMetrics } from "@ui/useHudScale";
 
 /**
  * Full-width Minecraft-style hotbar with item stack counts.
+ *
+ * Slot, icon and text sizes are real pixel sizes from hudMetrics rather than a
+ * CSS transform, so the pixel-art stays crisp as the HUD scales. The hotbar
+ * used to draw its own flat isometric block sprite from a small colour table,
+ * which made a crafting table look identical to dirt; every slot now renders
+ * through ItemIcon so hotbar and inventory show the same detailed icon.
  */
 export function HotbarUI() {
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const slots = useHotbarStore((s) => s.slots);
   const offhand = useHotbarStore((s) => s.offhand);
+  const m = useHudMetrics();
 
   const selectedSlot = slots[selectedIndex];
   const selectedName =
-    selectedSlot.count > 0
-      ? (BLOCK_VISUALS[selectedSlot.blockId]?.name ?? ITEM_NAMES[selectedSlot.blockId] ?? null)
-      : null;
+    selectedSlot.count > 0 ? (ITEM_NAMES[selectedSlot.blockId] ?? null) : null;
+
+  const countStyle = {
+    fontSize: m.countFont,
+    textShadow: "1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000",
+  };
 
   return (
     <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10">
@@ -57,8 +36,8 @@ export function HotbarUI() {
       {selectedName && (
         <div className="text-center mb-1">
           <span
-            className="text-white font-mono text-sm px-3 py-1 bg-black/60 rounded-sm"
-            style={{ textShadow: "1px 1px 0 #000" }}
+            className="text-white font-mono px-3 py-1 bg-black/60 rounded-sm"
+            style={{ fontSize: m.itemNameFont, textShadow: "1px 1px 0 #000" }}
           >
             {selectedName}
           </span>
@@ -79,29 +58,29 @@ export function HotbarUI() {
         <div
           className="relative flex items-center justify-center shrink-0"
           style={{
-            width: 56,
-            height: 56,
-            margin: "4px",
+            width: m.offhandSlot,
+            height: m.offhandSlot,
+            margin: 4,
             background: offhand.count > 0 ? "#7a7aaa" : "#6a6a6a",
             border: "2px solid #373737",
             boxShadow: "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
           }}
         >
           {offhand.count > 0 && offhand.blockId !== BLOCK_ID.AIR && (
-            BLOCK_VISUALS[offhand.blockId]
-              ? <BlockIcon blockId={offhand.blockId} />
-              : <ItemIcon blockId={offhand.blockId} size={48} />
+            <ItemIcon blockId={offhand.blockId} size={m.offhandIcon} />
           )}
           {offhand.count > 1 && (
             <span
-              className="absolute bottom-0.5 right-1 text-[12px] font-mono font-bold text-white"
-              style={{ textShadow: "1px 1px 0 #000" }}
+              className="absolute bottom-0.5 right-1 font-mono font-bold text-white"
+              style={countStyle}
             >
               {offhand.count}
             </span>
           )}
           {offhand.count === 0 && (
-            <span className="text-[9px] font-mono text-[#888]">Off</span>
+            <span className="font-mono text-[#888]" style={{ fontSize: m.slotNumFont }}>
+              Off
+            </span>
           )}
         </div>
         {slots.slice(0, HOTBAR_SLOTS).map((slot, i) => {
@@ -109,10 +88,10 @@ export function HotbarUI() {
           return (
             <div
               key={i}
-              className="relative flex items-center justify-center flex-1"
+              className="relative flex items-center justify-center flex-1 min-w-0"
               style={{
-                height: 64,
-                margin: "2px",
+                height: m.hotbarSlot,
+                margin: 2,
                 background: isSelected ? "#c6c6c6" : "#8b8b8b",
                 border: isSelected ? "2px solid #ffffff" : "2px solid #373737",
                 boxShadow: isSelected
@@ -120,25 +99,29 @@ export function HotbarUI() {
                   : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
               }}
             >
-              {slot.count > 0 && (
-                BLOCK_VISUALS[slot.blockId]
-                  ? <BlockIcon blockId={slot.blockId} />
-                  : <ItemIcon blockId={slot.blockId} size={56} />
+              {slot.count > 0 && slot.blockId !== BLOCK_ID.AIR && (
+                <ItemIcon blockId={slot.blockId} size={m.hotbarIcon} />
               )}
 
               {/* Durability bar for tools */}
               {slot.count > 0 && (() => {
                 const td = getToolDef(slot.blockId);
                 return td && slot.durability !== undefined && slot.durability < td.durability
-                  ? <DurabilityBar durability={slot.durability} maxDurability={td.durability} width={64} />
+                  ? (
+                    <DurabilityBar
+                      durability={slot.durability}
+                      maxDurability={td.durability}
+                      width={m.hotbarSlot}
+                    />
+                  )
                   : null;
               })()}
 
               {/* Item count */}
               {slot.count > 1 && (
                 <span
-                  className="absolute bottom-0.5 right-1 text-[12px] font-mono font-bold text-white"
-                  style={{ textShadow: "1px 1px 0 #000" }}
+                  className="absolute bottom-0.5 right-1 font-mono font-bold text-white"
+                  style={countStyle}
                 >
                   {slot.count}
                 </span>
@@ -146,8 +129,9 @@ export function HotbarUI() {
 
               {/* Slot number */}
               <span
-                className="absolute top-0.5 left-1.5 text-[11px] font-mono font-bold"
+                className="absolute top-0.5 left-1.5 font-mono font-bold"
                 style={{
+                  fontSize: m.slotNumFont,
                   color: isSelected ? "#333" : "rgba(255,255,255,0.35)",
                   textShadow: isSelected ? "none" : "1px 1px 0 #000",
                 }}

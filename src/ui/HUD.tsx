@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import type { Engine } from "@engine/Engine";
 import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
+import { useHudMetrics, type HudMetrics } from "@ui/useHudScale";
 
 type DebugInfo = NonNullable<ReturnType<Engine["getDebugInfo"]>>;
 
 const HEART_PATH = "M6.5 11.5L1.5 6.5C0.2 5.2 0.2 3.1 1.5 1.8C2.8 0.5 4.9 0.5 6.2 1.8L6.5 2.1L6.8 1.8C8.1 0.5 10.2 0.5 11.5 1.8C12.8 3.1 12.8 5.2 11.5 6.5L6.5 11.5Z";
 
-function HeartIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: number }) {
+function HeartIcon({ fill, index, size }: { fill: "full" | "half" | "empty"; index: number; size: number }) {
   const clipId = `hh${index}`;
   return (
-    <svg width="18" height="18" viewBox="0 0 13 13" className="block">
+    <svg width={size} height={size} viewBox="0 0 13 13" className="block">
       <path d={HEART_PATH} fill="#3a1111" stroke="#1a0808" strokeWidth="0.8" />
       {fill === "full" && <path d={HEART_PATH} fill="#e53935" />}
       {fill === "half" && (
@@ -25,10 +26,10 @@ function HeartIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: nu
   );
 }
 
-function HungerIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: number }) {
+function HungerIcon({ fill, index, size }: { fill: "full" | "half" | "empty"; index: number; size: number }) {
   const clipId = `hd${index}`;
   return (
-    <svg width="18" height="18" viewBox="0 0 13 13" className="block">
+    <svg width={size} height={size} viewBox="0 0 13 13" className="block">
       <ellipse cx="7.5" cy="4.5" rx="3.5" ry="3" fill="#2a1f0f" stroke="#1a1408" strokeWidth="0.8" />
       {fill === "full" && (
         <ellipse cx="7.5" cy="4.5" rx="3.5" ry="3" fill="#c68c53" />
@@ -49,7 +50,7 @@ function HungerIcon({ fill, index }: { fill: "full" | "half" | "empty"; index: n
   );
 }
 
-function SunMoonIcon({ timeOfDay }: { timeOfDay: number }) {
+function SunMoonIcon({ timeOfDay, width, height }: { timeOfDay: number; width: number; height: number }) {
   const isNight = timeOfDay > 0.35 && timeOfDay < 0.75;
   const progress = isNight
     ? (timeOfDay - 0.35) / 0.4
@@ -59,7 +60,7 @@ function SunMoonIcon({ timeOfDay }: { timeOfDay: number }) {
   const arcY = 4 + Math.sin(Math.max(0, Math.min(1, progress)) * Math.PI) * -8;
 
   return (
-    <svg width="36" height="20" viewBox="0 0 36 20" className="block">
+    <svg width={width} height={height} viewBox="0 0 36 20" className="block">
       <line x1="2" y1="18" x2="34" y2="18" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
       {isNight ? (
         <>
@@ -86,35 +87,51 @@ function SunMoonIcon({ timeOfDay }: { timeOfDay: number }) {
   );
 }
 
-function HealthBar({ health, maxHealth }: { health: number; maxHealth: number }) {
+function HealthBar({
+  health,
+  maxHealth,
+  metrics,
+}: {
+  health: number;
+  maxHealth: number;
+  metrics: HudMetrics;
+}) {
   const lastDamageTime = useGameStore((s) => s.lastDamageTime);
   const hearts = maxHealth / 2;
   return (
     <div
       key={lastDamageTime}
-      className={`flex gap-[2px] ${lastDamageTime > 0 ? "animate-shake" : ""}`}
+      className={`flex ${lastDamageTime > 0 ? "animate-shake" : ""}`}
+      style={{ gap: metrics.statGap }}
     >
       {Array.from({ length: hearts }, (_, i) => {
         const hp = health - i * 2;
         const fill = hp >= 2 ? "full" : hp >= 1 ? "half" : "empty";
-        return <HeartIcon key={i} fill={fill} index={i} />;
+        return <HeartIcon key={i} fill={fill} index={i} size={metrics.stat} />;
       })}
     </div>
   );
 }
 
-function HungerBar({ hunger, maxHunger }: { hunger: number; maxHunger: number }) {
+function HungerBar({
+  hunger,
+  maxHunger,
+  metrics,
+}: {
+  hunger: number;
+  maxHunger: number;
+  metrics: HudMetrics;
+}) {
   const icons = maxHunger / 2;
   return (
     <div
-      className={`flex flex-row-reverse gap-[2px] ${
-        hunger <= 6 ? "animate-shake" : ""
-      }`}
+      className={`flex flex-row-reverse ${hunger <= 6 ? "animate-shake" : ""}`}
+      style={{ gap: metrics.statGap }}
     >
       {Array.from({ length: icons }, (_, i) => {
         const h = hunger - i * 2;
         const fill = h >= 2 ? "full" : h >= 1 ? "half" : "empty";
-        return <HungerIcon key={i} fill={fill} index={i} />;
+        return <HungerIcon key={i} fill={fill} index={i} size={metrics.stat} />;
       })}
     </div>
   );
@@ -139,6 +156,7 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
   const multiplayerStatus = useMultiplayerStore((s) => s.status);
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  const m = useHudMetrics();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -163,7 +181,7 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
     <div className="absolute inset-0 pointer-events-none z-10">
       {/* Minecraft-style crosshair — white + with slight transparency */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        <svg width="24" height="24" viewBox="0 0 24 24" className="opacity-70">
+        <svg width={m.crosshair} height={m.crosshair} viewBox="0 0 24 24" className="opacity-70">
           <rect x="11" y="4" width="2" height="7" fill="white" />
           <rect x="11" y="13" width="2" height="7" fill="white" />
           <rect x="4" y="11" width="7" height="2" fill="white" />
@@ -173,7 +191,14 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
 
       {/* Break progress bar below crosshair */}
       {breakProgress > 0 && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-5 w-24 h-1 bg-black/40 rounded-full overflow-hidden">
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 bg-black/40 rounded-full overflow-hidden"
+          style={{
+            marginTop: Math.round(m.crosshair * 0.85),
+            width: Math.round(m.crosshair * 4.6),
+            height: Math.max(3, Math.round(m.scale * 5)),
+          }}
+        >
           <div
             className="h-full bg-white/80 transition-none"
             style={{ width: `${breakProgress * 100}%` }}
@@ -183,7 +208,7 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
 
       {/* Sun/Moon indicator — top left */}
       <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 border border-white/10 rounded">
-        <SunMoonIcon timeOfDay={timeOfDay} />
+        <SunMoonIcon timeOfDay={timeOfDay} width={m.sunW} height={m.sunH} />
       </div>
 
       {/* Shard Counter — top center, Minecraft achievement style */}
@@ -191,8 +216,14 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
         className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 bg-black/50 border border-white/10 rounded"
         style={{ textShadow: "1px 1px 0 #000" }}
       >
-        <div className="w-3 h-3 rotate-45 bg-cyan-400 shadow-[0_0_6px_#00e5ff]" />
-        <span className="text-white font-mono text-sm font-bold">
+        <div
+          className="rotate-45 bg-cyan-400 shadow-[0_0_6px_#00e5ff]"
+          style={{ width: Math.round(m.shardFont * 0.72), height: Math.round(m.shardFont * 0.72) }}
+        />
+        <span
+          className="text-white font-mono font-bold leading-none"
+          style={{ fontSize: m.shardFont }}
+        >
           {shardsCollected}
           <span className="text-white/40 font-normal">/{shardsTotal}</span>
         </span>
@@ -203,7 +234,10 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
           className={`absolute top-3 ${minimapVisible ? "right-[204px]" : "right-3"} px-3 py-2 bg-black/50 border border-white/10 rounded`}
           style={{ textShadow: "1px 1px 0 #000" }}
         >
-          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-cyan-300/90">
+          <p
+            className="font-mono uppercase tracking-[0.2em] text-cyan-300/90"
+            style={{ fontSize: m.panelLabelFont }}
+          >
             {multiplayerStatus === "connecting"
               ? "Linking"
               : multiplayerSession?.transport === "local"
@@ -212,10 +246,10 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
           </p>
           {multiplayerSession && (
             <>
-              <p className="font-mono text-sm font-bold text-white">
+              <p className="font-mono font-bold text-white" style={{ fontSize: m.panelFont }}>
                 {multiplayerSession.code}
               </p>
-              <p className="font-mono text-[11px] text-white/55">
+              <p className="font-mono text-white/55" style={{ fontSize: m.panelLabelFont }}>
                 {multiplayerPlayers.length} player
                 {multiplayerPlayers.length === 1 ? "" : "s"} online
               </p>
@@ -257,18 +291,16 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
         </div>
       )}
 
-      {/* Health & Hunger bars — positioned above hotbar (hidden in creative) */}
+      {/* Health & Hunger bars — positioned above hotbar (hidden in creative).
+          Icon size and gaps come from hudMetrics, which budgets the row against
+          the viewport width so the two groups never collide or overflow. */}
       {gameMode !== "creative" && (
         <div
-          className="absolute bottom-[76px] left-1/2 -translate-x-1/2 flex items-end justify-between"
-          style={{ width: "min(100vw, 560px)" }}
+          className="absolute left-1/2 -translate-x-1/2 flex items-end justify-center"
+          style={{ bottom: m.statBottom, gap: m.barGap, maxWidth: "100vw" }}
         >
-          <div className="flex justify-end">
-            <HealthBar health={health} maxHealth={maxHealth} />
-          </div>
-          <div className="flex justify-start">
-            <HungerBar hunger={hunger} maxHunger={maxHunger} />
-          </div>
+          <HealthBar health={health} maxHealth={maxHealth} metrics={m} />
+          <HungerBar hunger={hunger} maxHunger={maxHunger} metrics={m} />
         </div>
       )}
 
