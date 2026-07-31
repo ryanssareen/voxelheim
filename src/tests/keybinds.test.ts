@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { KEYBIND_GROUPS } from "@data/keybinds";
 import { useKeybindsStore } from "@store/useKeybindsStore";
+import { PlayerController } from "@engine/player/PlayerController";
+import type { InputManager } from "@engine/InputManager";
+import type { Camera } from "@engine/player/Camera";
+import type { BlockRegistry } from "@engine/world/BlockRegistry";
 import { installWindow, removeWindow } from "./helpers";
 
 beforeEach(() => {
@@ -27,6 +31,68 @@ describe("keybind data", () => {
         expect(b.action.trim()).not.toBe("");
       }
     }
+  });
+});
+
+/**
+ * The popup is only useful if it describes what the game actually does. These
+ * tests drive PlayerController with the keys the popup advertises and assert the
+ * documented effect happens — the structural checks above passed happily while
+ * Sneak and Sprint were labelled on each other's keys.
+ */
+describe("advertised movement binds match PlayerController", () => {
+  const registry = { isSolid: () => false } as unknown as BlockRegistry;
+  const camera = {
+    getForward: () => ({ x: 0, y: 0, z: -1 }),
+    getRight: () => ({ x: 1, y: 0, z: 0 }),
+  } as unknown as Camera;
+  const noBlocks = () => 0;
+
+  /** Maps a label shown in the popup to the KeyboardEvent codes it stands for. */
+  const CODES: Record<string, string[]> = {
+    Ctrl: ["ControlLeft", "ControlRight"],
+    Shift: ["ShiftLeft", "ShiftRight"],
+    CapsLock: ["CapsLock"],
+  };
+
+  function keysFor(actionFragment: string): string[] {
+    const moving = KEYBIND_GROUPS.find((g) => g.title === "Moving");
+    const bind = moving?.binds.find((b) =>
+      b.action.toLowerCase().includes(actionFragment.toLowerCase())
+    );
+    if (!bind) throw new Error(`no "Moving" bind advertises "${actionFragment}"`);
+    return bind.keys.split("/").flatMap((label) => CODES[label.trim()] ?? []);
+  }
+
+  /** Runs one frame with `code` held and reports the resulting movement state. */
+  function stateWith(code: string) {
+    const player = new PlayerController(0, 10, 0);
+    const input = {
+      isKeyDown: (k: string) => k === code,
+    } as unknown as InputManager;
+    player.update(1 / 60, input, camera, noBlocks, registry);
+    return { crouching: player.isCrouching, sprinting: player.isSprinting };
+  }
+
+  it("every key advertised for Sneak actually crouches", () => {
+    const codes = keysFor("sneak");
+    expect(codes.length).toBeGreaterThan(0);
+    for (const code of codes) {
+      expect(stateWith(code).crouching, `${code} should sneak`).toBe(true);
+    }
+  });
+
+  it("every key advertised for Sprint actually sprints", () => {
+    const codes = keysFor("sprint");
+    expect(codes.length).toBeGreaterThan(0);
+    for (const code of codes) {
+      expect(stateWith(code).sprinting, `${code} should sprint`).toBe(true);
+    }
+  });
+
+  it("does not advertise the same key for both Sneak and Sprint", () => {
+    const overlap = keysFor("sneak").filter((k) => keysFor("sprint").includes(k));
+    expect(overlap).toEqual([]);
   });
 });
 

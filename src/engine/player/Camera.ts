@@ -3,13 +3,13 @@ import * as THREE from "three";
 const MAX_PITCH = (89 * Math.PI) / 180;
 const EYE_HEIGHT = 1.6;
 
-/** Camera perspective modes, cycled with F5. */
+/** Camera perspective modes, cycled with P. */
 export type CameraMode = "first-person" | "third-person-back" | "third-person-front";
 
 const THIRD_PERSON_DISTANCE = 5;
 
 /**
- * First-person camera with yaw/pitch mouse-look and F5 perspective cycling.
+ * First-person camera with yaw/pitch mouse-look and P perspective cycling.
  */
 export class Camera {
   public yaw = 0;
