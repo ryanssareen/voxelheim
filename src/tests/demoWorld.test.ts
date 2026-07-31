@@ -13,17 +13,14 @@ import {
   DEMO_WORLD_SEED,
   ensureDemoWorld,
 } from "@lib/demoWorld";
+import { installWindow, removeWindow } from "./helpers";
 
 beforeEach(() => {
   store.clear();
-  (globalThis as { window?: unknown }).window = {
-    sessionStorage: { setItem: () => {} },
-  };
+  installWindow();
 });
 
-afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-});
+afterEach(removeWindow);
 
 describe("ensureDemoWorld", () => {
   // Covers AE1.

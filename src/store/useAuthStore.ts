@@ -5,6 +5,7 @@ import {
   microsoftProvider,
   signInWithPopup,
 } from "@/lib/firebase";
+import { readLocalJson, removeLocal, writeLocalJson } from "@/lib/storage";
 
 interface AuthUser {
   email: string;
@@ -36,20 +37,14 @@ const STORAGE_KEY = "voxelheim_auth";
 
 function saveUser(user: AuthUser | null) {
   if (user) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    writeLocalJson(STORAGE_KEY, user);
   } else {
-    localStorage.removeItem(STORAGE_KEY);
+    removeLocal(STORAGE_KEY);
   }
 }
 
 function loadUser(): AuthUser | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  return readLocalJson<AuthUser | null>(STORAGE_KEY, null);
 }
 
 async function authViaRest(

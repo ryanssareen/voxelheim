@@ -1,5 +1,12 @@
 import { NAME_ADJECTIVES, NAME_NOUNS } from "@data/playerNames";
 import { useAuthStore } from "@store/useAuthStore";
+import {
+  readLocal,
+  readSession,
+  removeLocal,
+  writeLocal,
+  writeSession,
+} from "@lib/storage";
 
 export const PLAYER_ID_STORAGE_KEY = "voxelheim-multiplayer-player-id";
 export const PLAYER_NAME_STORAGE_KEY = "voxelheim-player-name";
@@ -37,23 +44,14 @@ export function __resetIdentityCache() {
   cachedGuestId = null;
 }
 
-function readStoredGuestId(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(PLAYER_ID_STORAGE_KEY);
-  } catch {
-    // Blocked site data or a sandboxed iframe throws on mere access.
-    return null;
-  }
-}
-
 /**
  * Stable identifier for this player. Prefers the auth uid when signed in, and
  * otherwise uses a local-only `guest-` id that never leaves the device.
  *
- * Pass `persist` on the first action that needs a durable identity (creating a
- * world, hosting or joining a session). Display-only callers leave it false so
- * merely loading the page writes nothing.
+ * Pass `persist` on the first action that earns a durable identity (creating a
+ * world, hosting or joining a session). Display-only callers leave it false:
+ * the id then lives in sessionStorage, which keeps the generated name stable
+ * across reloads without writing anything that outlives the tab.
  */
 export function resolvePlayerId(persist = false): string {
   const authUser = useAuthStore.getState().user;
@@ -61,21 +59,26 @@ export function resolvePlayerId(persist = false): string {
 
   if (typeof window === "undefined") return OFFLINE_PLAYER_ID;
 
-  const stored = readStoredGuestId();
-  if (stored) {
-    cachedGuestId = stored;
-    return stored;
+  const durable = readLocal(PLAYER_ID_STORAGE_KEY);
+  if (durable) {
+    cachedGuestId = durable;
+    return durable;
   }
 
-  if (!cachedGuestId) {
-    cachedGuestId = `guest-${Math.random().toString(36).slice(2, 10)}`;
-  }
+  const id =
+    readSession(PLAYER_ID_STORAGE_KEY) ??
+    cachedGuestId ??
+    `guest-${Math.random().toString(36).slice(2, 10)}`;
+  cachedGuestId = id;
+
+  // Promotes a per-visit id to a durable one, so an id minted on page load
+  // still becomes permanent the moment the player creates a world.
   if (persist) {
-    try {
-      window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, cachedGuestId);
-    } catch {}
+    writeLocal(PLAYER_ID_STORAGE_KEY, id);
+  } else {
+    writeSession(PLAYER_ID_STORAGE_KEY, id);
   }
-  return cachedGuestId;
+  return id;
 }
 
 /**
@@ -90,14 +93,8 @@ export function generateName(playerId: string): string {
 }
 
 export function readPlayerNameOverride(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
-    const trimmed = raw?.trim();
-    return trimmed ? trimmed : null;
-  } catch {
-    return null;
-  }
+  const trimmed = readLocal(PLAYER_NAME_STORAGE_KEY)?.trim();
+  return trimmed ? trimmed : null;
 }
 
 /**
@@ -106,14 +103,11 @@ export function readPlayerNameOverride(): string | null {
  */
 export function writePlayerNameOverride(name: string): string | null {
   const trimmed = name.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
-  if (typeof window === "undefined") return trimmed || null;
-  try {
-    if (trimmed) {
-      window.localStorage.setItem(PLAYER_NAME_STORAGE_KEY, trimmed);
-    } else {
-      window.localStorage.removeItem(PLAYER_NAME_STORAGE_KEY);
-    }
-  } catch {}
+  if (trimmed) {
+    writeLocal(PLAYER_NAME_STORAGE_KEY, trimmed);
+  } else {
+    removeLocal(PLAYER_NAME_STORAGE_KEY);
+  }
   return trimmed || null;
 }
 

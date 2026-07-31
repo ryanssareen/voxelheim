@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { readLocalJson, writeLocalJson } from "@lib/storage";
 
 const STORAGE_KEY = "voxelheim-settings";
 
@@ -16,27 +17,17 @@ interface SettingsState {
 }
 
 function loadSettings(): Partial<SettingsState> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {};
+  return readLocalJson<Partial<SettingsState>>(STORAGE_KEY, {});
 }
 
 function persistSettings(state: SettingsState) {
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        musicVolume: state.musicVolume,
-        musicEnabled: state.musicEnabled,
-        renderDistance: state.renderDistance,
-        simulationDistance: state.simulationDistance,
-        fov: state.fov,
-      })
-    );
-  } catch {}
+  writeLocalJson(STORAGE_KEY, {
+    musicVolume: state.musicVolume,
+    musicEnabled: state.musicEnabled,
+    renderDistance: state.renderDistance,
+    simulationDistance: state.simulationDistance,
+    fov: state.fov,
+  });
 }
 
 const defaults = {

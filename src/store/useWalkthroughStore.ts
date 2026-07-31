@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { readLocal, writeLocal } from "@lib/storage";
 
 export type WalkthroughAction = "move" | "break" | "place" | "inventory";
 
@@ -19,19 +20,11 @@ export const WALKTHROUGH_STEPS: readonly WalkthroughStep[] = [
 const STORAGE_KEY = "voxelheim-walkthrough-completed";
 
 function loadCompleted(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
+  return readLocal(STORAGE_KEY) === "true";
 }
 
 function persistCompleted(completed: boolean) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, String(completed));
-  } catch {}
+  writeLocal(STORAGE_KEY, String(completed));
 }
 
 interface WalkthroughState {

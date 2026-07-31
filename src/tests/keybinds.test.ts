@@ -1,27 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { KEYBIND_GROUPS } from "@data/keybinds";
 import { useKeybindsStore } from "@store/useKeybindsStore";
-
-function installWindow() {
-  const store = new Map<string, string>();
-  (globalThis as { window?: unknown }).window = {
-    localStorage: {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, v),
-      removeItem: (k: string) => void store.delete(k),
-    },
-  };
-  return store;
-}
+import { installWindow, removeWindow } from "./helpers";
 
 beforeEach(() => {
   installWindow();
   useKeybindsStore.setState({ isOpen: false, seen: false });
 });
 
-afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-});
+afterEach(removeWindow);
 
 describe("keybind data", () => {
   it("lists the movement, building and view groups", () => {
@@ -66,9 +53,9 @@ describe("showOnce", () => {
   });
 
   it("persists seen so a later page load does not auto-open", () => {
-    const store = installWindow();
+    const { local } = installWindow();
     useKeybindsStore.getState().showOnce();
-    expect(store.get("voxelheim-keybinds-seen")).toBe("true");
+    expect(local.get("voxelheim-keybinds-seen")).toBe("true");
   });
 });
 
