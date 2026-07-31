@@ -1,18 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { __resetIdentityCache, generateName } from "@lib/identity";
 import { useAuthStore } from "@store/useAuthStore";
-
-function installWindow() {
-  const store = new Map<string, string>();
-  (globalThis as { window?: unknown }).window = {
-    localStorage: {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, v),
-      removeItem: (k: string) => void store.delete(k),
-    },
-  };
-  return store;
-}
+import { installWindow, removeWindow } from "./helpers";
 
 // The store snapshots at module evaluation, so window must exist before import.
 installWindow();
@@ -26,7 +15,7 @@ beforeEach(() => {
 
 afterEach(() => {
   useAuthStore.setState({ user: null });
-  delete (globalThis as { window?: unknown }).window;
+  removeWindow();
   __resetIdentityCache();
 });
 

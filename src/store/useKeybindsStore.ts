@@ -1,21 +1,14 @@
 import { create } from "zustand";
+import { readLocal, writeLocal } from "@lib/storage";
 
 const STORAGE_KEY = "voxelheim-keybinds-seen";
 
 function loadSeen(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
+  return readLocal(STORAGE_KEY) === "true";
 }
 
 function persistSeen() {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, "true");
-  } catch {}
+  writeLocal(STORAGE_KEY, "true");
 }
 
 interface KeybindsState {

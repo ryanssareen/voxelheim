@@ -11,21 +11,17 @@ import {
 } from "@lib/identity";
 import { useAuthStore } from "@store/useAuthStore";
 
-// vitest runs in the node environment, so window is installed per-test.
-function installWindow() {
-  const store = new Map<string, string>();
-  (globalThis as { window?: unknown }).window = {
-    localStorage: {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, v),
-      removeItem: (k: string) => void store.delete(k),
-    },
-  };
-  return store;
-}
+import {
+  installWindow as installStubWindow,
+  readOnlyStorage,
+  removeWindow as removeStubWindow,
+  throwingStorage,
+} from "./helpers";
+
+const installWindow = () => installStubWindow().local;
 
 function removeWindow() {
-  delete (globalThis as { window?: unknown }).window;
+  removeStubWindow();
   __resetIdentityCache();
 }
 
@@ -67,17 +63,7 @@ describe("storage denial", () => {
   afterEach(removeWindow);
 
   it("does not throw when localStorage access itself throws", () => {
-    (globalThis as { window?: unknown }).window = {
-      localStorage: {
-        getItem: () => {
-          throw new Error("SecurityError: site data blocked");
-        },
-        setItem: () => {
-          throw new Error("SecurityError: site data blocked");
-        },
-        removeItem: () => {},
-      },
-    };
+    installStubWindow({ localStorage: throwingStorage() });
     useAuthStore.setState({ user: null });
 
     expect(() => resolvePlayerId()).not.toThrow();
@@ -85,15 +71,7 @@ describe("storage denial", () => {
   });
 
   it("returns a stable id across calls when the write fails", () => {
-    (globalThis as { window?: unknown }).window = {
-      localStorage: {
-        getItem: () => null,
-        setItem: () => {
-          throw new Error("QuotaExceededError");
-        },
-        removeItem: () => {},
-      },
-    };
+    installStubWindow({ localStorage: readOnlyStorage() });
     useAuthStore.setState({ user: null });
 
     expect(resolvePlayerId(true)).toBe(resolvePlayerId(true));
@@ -105,14 +83,49 @@ describe("lazy minting", () => {
 
   // R5: loading a page must not write a durable identifier.
   it("does not persist an id until persist is requested", () => {
-    const store = installWindow();
+    const { local } = installStubWindow();
     useAuthStore.setState({ user: null });
 
     resolvePlayerId();
-    expect(store.has(PLAYER_ID_STORAGE_KEY)).toBe(false);
+    expect(local.has(PLAYER_ID_STORAGE_KEY)).toBe(false);
 
     resolvePlayerId(true);
-    expect(store.has(PLAYER_ID_STORAGE_KEY)).toBe(true);
+    expect(local.has(PLAYER_ID_STORAGE_KEY)).toBe(true);
+  });
+
+  // Without this the generated name changes on every reload, so a visitor who
+  // never sets a name sees a different identity each time.
+  it("keeps the id stable across reloads via sessionStorage", () => {
+    const { session } = installStubWindow();
+    useAuthStore.setState({ user: null });
+
+    const first = resolvePlayerId();
+    expect(session.get(PLAYER_ID_STORAGE_KEY)).toBe(first);
+
+    // Simulate a reload: same tab storage, fresh module cache.
+    __resetIdentityCache();
+    expect(resolvePlayerId()).toBe(first);
+  });
+
+  it("promotes a per-visit id to durable on the first persisting action", () => {
+    const { local, session } = installStubWindow();
+    useAuthStore.setState({ user: null });
+
+    const visitId = resolvePlayerId();
+    expect(local.has(PLAYER_ID_STORAGE_KEY)).toBe(false);
+
+    expect(resolvePlayerId(true)).toBe(visitId);
+    expect(local.get(PLAYER_ID_STORAGE_KEY)).toBe(visitId);
+    expect(session.get(PLAYER_ID_STORAGE_KEY)).toBe(visitId);
+  });
+
+  it("prefers a durable id over the per-visit one", () => {
+    const { local, session } = installStubWindow();
+    useAuthStore.setState({ user: null });
+    session.set(PLAYER_ID_STORAGE_KEY, "guest-session");
+    local.set(PLAYER_ID_STORAGE_KEY, "guest-durable");
+
+    expect(resolvePlayerId()).toBe("guest-durable");
   });
 });
 

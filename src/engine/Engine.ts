@@ -34,6 +34,7 @@ import {
   LEGACY_ISLAND_SIZE_BLOCKS,
   type WorldType,
 } from "@engine/world/constants";
+import { readSessionJson } from "@lib/storage";
 import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import { getToolDef } from "@data/items";
 import type { MobType } from "@engine/entities/MobModel";
@@ -139,22 +140,21 @@ export class Engine {
       }
     } else {
       // Read seed from sessionStorage (from create world page)
-      try {
-        const config = JSON.parse(
-          sessionStorage.getItem("voxelheim-world-config") || "{}"
-        );
-        if (config.seed) this.seed = config.seed;
-        if (config.worldType === "flat" || config.worldType === "infinite") {
-          worldType = config.worldType;
-        }
-        if (config.gameMode === "creative" || config.gameMode === "hardcore") {
-          gameMode = config.gameMode;
-        }
-        if (typeof config.islandSize === "number") {
-          islandSize = config.islandSize;
-        }
-      } catch {
-        /* ignore */
+      const config = readSessionJson<{
+        seed?: string;
+        worldType?: string;
+        gameMode?: string;
+        islandSize?: number;
+      }>("voxelheim-world-config", {});
+      if (config.seed) this.seed = config.seed;
+      if (config.worldType === "flat" || config.worldType === "infinite") {
+        worldType = config.worldType;
+      }
+      if (config.gameMode === "creative" || config.gameMode === "hardcore") {
+        gameMode = config.gameMode;
+      }
+      if (typeof config.islandSize === "number") {
+        islandSize = config.islandSize;
       }
     }
 

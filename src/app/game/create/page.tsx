@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useIdentityStore } from "@store/useIdentityStore";
 import { resolvePlayerId } from "@lib/identity";
+import { writeSessionJson } from "@lib/storage";
 import { WORLD_SIZE_BLOCKS } from "@engine/world/constants";
 
 const MC_BTN =
@@ -83,10 +84,12 @@ export default function CreateWorldPage() {
         new Map()
       );
 
-      sessionStorage.setItem(
-        "voxelheim-world-config",
-        JSON.stringify({ seed: actualSeed, worldType: actualWorldType, gameMode: actualGameMode, islandSize })
-      );
+      writeSessionJson("voxelheim-world-config", {
+        seed: actualSeed,
+        worldType: actualWorldType,
+        gameMode: actualGameMode,
+        islandSize,
+      });
 
       if (startMultiplayer) {
         const { createMultiplayerSession } = await import(

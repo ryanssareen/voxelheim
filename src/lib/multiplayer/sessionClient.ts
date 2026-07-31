@@ -24,6 +24,7 @@ import {
   type Database,
 } from "firebase/database";
 import { firestore, rtdb, firebaseConfigured } from "@lib/firebase";
+import { readLocalJson, writeLocalJson } from "@lib/storage";
 import {
   createSessionCode,
   isLocalSessionCode,
@@ -107,64 +108,49 @@ function decodeBytes(encoded: string): Uint8Array {
   return data;
 }
 
-function readJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJson(key: string, value: unknown): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // localStorage full — silently continue so game loop doesn't crash
-  }
-}
-
 function readLocalSession(code: string): MultiplayerSessionMeta | null {
-  return readJson<MultiplayerSessionMeta | null>(sessionStorageKey(code), null);
+  return readLocalJson<MultiplayerSessionMeta | null>(
+    sessionStorageKey(code),
+    null
+  );
 }
 
 function writeLocalSession(session: MultiplayerSessionMeta): void {
-  writeJson(sessionStorageKey(session.code), session);
+  // A failed write is survivable: the session still runs, it just won't be
+  // recoverable after a reload.
+  writeLocalJson(sessionStorageKey(session.code), session);
 }
 
 function readLocalBlocks(code: string): LocalBlockMap {
-  return readJson<LocalBlockMap>(blockStorageKey(code), {});
+  return readLocalJson<LocalBlockMap>(blockStorageKey(code), {});
 }
 
 function writeLocalBlock(code: string, change: MultiplayerBlockState): void {
   const existing = readLocalBlocks(code);
   existing[blockRecordKey(change.x, change.y, change.z)] = change;
-  writeJson(blockStorageKey(code), existing);
+  writeLocalJson(blockStorageKey(code), existing);
 }
 
 function readLocalDrops(code: string): LocalDropMap {
-  return readJson<LocalDropMap>(dropStorageKey(code), {});
+  return readLocalJson<LocalDropMap>(dropStorageKey(code), {});
 }
 
 function writeLocalDrop(code: string, drop: MultiplayerDropState): void {
   const existing = readLocalDrops(code);
   existing[drop.dropId] = drop;
-  writeJson(dropStorageKey(code), existing);
+  writeLocalJson(dropStorageKey(code), existing);
 }
 
 function deleteLocalDrop(code: string, dropId: string): boolean {
   const existing = readLocalDrops(code);
   if (!existing[dropId]) return false;
   delete existing[dropId];
-  writeJson(dropStorageKey(code), existing);
+  writeLocalJson(dropStorageKey(code), existing);
   return true;
 }
 
 function readLocalWorldState(code: string): Map<string, Uint8Array> {
-  const existing = readJson<LocalWorldMap>(worldStorageKey(code), {});
+  const existing = readLocalJson<LocalWorldMap>(worldStorageKey(code), {});
   const chunks = new Map<string, Uint8Array>();
   for (const [chunkKey, encoded] of Object.entries(existing)) {
     chunks.set(chunkKey, decodeBytes(encoded));
@@ -180,7 +166,7 @@ function writeLocalWorldState(
   for (const [chunkKey, data] of chunks) {
     payload[chunkKey] = encodeBytes(data);
   }
-  writeJson(worldStorageKey(code), payload);
+  writeLocalJson(worldStorageKey(code), payload);
 }
 
 class LocalMultiplayerConnection implements MultiplayerConnection {

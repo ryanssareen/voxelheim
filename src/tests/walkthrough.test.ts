@@ -4,26 +4,14 @@ import {
   useWalkthroughStore,
 } from "@store/useWalkthroughStore";
 import { DEMO_WORLD_ID } from "@lib/demoWorld";
-
-function installWindow() {
-  const store = new Map<string, string>();
-  (globalThis as { window?: unknown }).window = {
-    localStorage: {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, v),
-      removeItem: (k: string) => void store.delete(k),
-    },
-  };
-}
+import { installWindow, removeWindow } from "./helpers";
 
 beforeEach(() => {
   installWindow();
   useWalkthroughStore.setState({ isOpen: false, activeIndex: 0, completed: false });
 });
 
-afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-});
+afterEach(removeWindow);
 
 describe("walkthrough steps", () => {
   // R10

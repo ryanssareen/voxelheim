@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { WorldMeta } from "@systems/persistence/WorldStorage";
 import { useIdentityStore } from "@store/useIdentityStore";
+import { writeSessionJson } from "@lib/storage";
 
 const MC_BTN =
   "block text-center py-2.5 text-white font-mono tracking-wide hover:brightness-125 active:brightness-90 transition-all select-none";
@@ -139,14 +140,11 @@ export default function WorldsPage() {
         return;
       }
 
-      sessionStorage.setItem(
-        "voxelheim-world-config",
-        JSON.stringify({
-          seed: session.seed,
-          worldType: session.worldType,
-          islandSize: session.islandSize,
-        })
-      );
+      writeSessionJson("voxelheim-world-config", {
+        seed: session.seed,
+        worldType: session.worldType,
+        islandSize: session.islandSize,
+      });
 
       router.push(`/game?session=${session.code}`);
     } catch (error) {
