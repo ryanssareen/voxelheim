@@ -5,6 +5,7 @@ import { useInventoryStore } from "@store/useInventoryStore";
 import {
   useHotbarStore,
   HOTBAR_SLOTS,
+  MAX_STACK,
   TOTAL_SLOTS,
 } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
@@ -52,9 +53,9 @@ export function FurnaceUI() {
       invStore.setFurnaceSlot(slotIndex, cursor.blockId, cursor.count);
       invStore.clearCursor();
     } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId === slot.blockId) {
-      // Merge cursor stack onto slot (cap at 99 to match inventory UI)
+      // Merge cursor stack onto slot (cap at MAX_STACK)
       const total = slot.count + cursor.count;
-      const fit = Math.min(total, 99);
+      const fit = Math.min(total, MAX_STACK);
       const leftover = total - fit;
       invStore.setFurnaceSlot(slotIndex, slot.blockId, fit);
       if (leftover > 0) invStore.setCursorItem(cursor.blockId, leftover);
@@ -85,7 +86,7 @@ export function FurnaceUI() {
     } else if (cursor.count > 0 && slot.count > 0) {
       if (cursor.blockId === slot.blockId && !getToolDef(cursor.blockId)) {
         const total = slot.count + cursor.count;
-        const fit = Math.min(total, 99);
+        const fit = Math.min(total, MAX_STACK);
         const leftover = total - fit;
         const newSlots = [...store.slots];
         newSlots[index] = { blockId: slot.blockId, count: fit };
@@ -116,7 +117,7 @@ export function FurnaceUI() {
     const cursor = invStore.cursorItem;
     if (cursor.count === 0) {
       invStore.setCursorItem(recipe.result, recipe.count);
-    } else if (cursor.blockId === recipe.result && cursor.count + recipe.count <= 64) {
+    } else if (cursor.blockId === recipe.result && cursor.count + recipe.count <= MAX_STACK) {
       invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
     } else {
       useHotbarStore.getState().addItem(recipe.result);

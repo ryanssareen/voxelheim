@@ -5,6 +5,7 @@ import { useInventoryStore } from "@store/useInventoryStore";
 import {
   useHotbarStore,
   HOTBAR_SLOTS,
+  MAX_STACK,
   TOTAL_SLOTS,
 } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
@@ -77,7 +78,7 @@ export function CraftingTableUI() {
     } else if (cursor.count > 0 && slot.count > 0) {
       if (cursor.blockId === slot.blockId && !getToolDef(cursor.blockId)) {
         const total = slot.count + cursor.count;
-        const fit = Math.min(total, 99);
+        const fit = Math.min(total, MAX_STACK);
         const leftover = total - fit;
         const newSlots = [...store.slots];
         newSlots[index] = { blockId: slot.blockId, count: fit };
@@ -106,7 +107,7 @@ export function CraftingTableUI() {
     const craftDur = getToolDef(recipe.result)?.durability;
     if (cursor.count === 0) {
       invStore.setCursorItem(recipe.result, recipe.count, craftDur);
-    } else if (!isTool && cursor.blockId === recipe.result && cursor.count + recipe.count <= 64) {
+    } else if (!isTool && cursor.blockId === recipe.result && cursor.count + recipe.count <= MAX_STACK) {
       invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
     } else {
       for (let i = 0; i < recipe.count; i++) {

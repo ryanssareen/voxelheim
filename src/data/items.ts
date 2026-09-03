@@ -3,10 +3,23 @@ import { BLOCK_ID } from "@data/blocks";
 export type ToolType = "pickaxe" | "axe" | "shovel" | "sword";
 export type ToolMaterial = "wood" | "stone" | "iron" | "diamond";
 
+/** Harvest level per tool material. A block with `minTier` only drops when the tool tier is >= it. */
+export const TOOL_TIER: Record<ToolMaterial, number> = {
+  wood: 1,
+  stone: 2,
+  iron: 3,
+  diamond: 4,
+};
+
+/** Tier of an empty hand (or a non-tool item). */
+export const NO_TOOL_TIER = 0;
+
 export interface ToolDef {
   itemId: number;
   toolType: ToolType;
   material: ToolMaterial;
+  /** Harvest level; see TOOL_TIER. */
+  tier: number;
   durability: number;
   miningSpeedMultiplier: number;
   attackDamage: number;
@@ -18,6 +31,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.WOODEN_PICKAXE,
     toolType: "pickaxe",
     material: "wood",
+    tier: TOOL_TIER.wood,
     durability: 59,
     miningSpeedMultiplier: 2,
     attackDamage: 2,
@@ -27,6 +41,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.WOODEN_AXE,
     toolType: "axe",
     material: "wood",
+    tier: TOOL_TIER.wood,
     durability: 59,
     miningSpeedMultiplier: 2,
     attackDamage: 3,
@@ -36,6 +51,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.WOODEN_SHOVEL,
     toolType: "shovel",
     material: "wood",
+    tier: TOOL_TIER.wood,
     durability: 59,
     miningSpeedMultiplier: 2,
     attackDamage: 1,
@@ -45,6 +61,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.WOODEN_SWORD,
     toolType: "sword",
     material: "wood",
+    tier: TOOL_TIER.wood,
     durability: 59,
     miningSpeedMultiplier: 1,
     attackDamage: 4,
@@ -54,6 +71,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.STONE_PICKAXE,
     toolType: "pickaxe",
     material: "stone",
+    tier: TOOL_TIER.stone,
     durability: 131,
     miningSpeedMultiplier: 4,
     attackDamage: 3,
@@ -63,6 +81,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.STONE_AXE,
     toolType: "axe",
     material: "stone",
+    tier: TOOL_TIER.stone,
     durability: 131,
     miningSpeedMultiplier: 4,
     attackDamage: 4,
@@ -72,6 +91,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.STONE_SHOVEL,
     toolType: "shovel",
     material: "stone",
+    tier: TOOL_TIER.stone,
     durability: 131,
     miningSpeedMultiplier: 4,
     attackDamage: 2,
@@ -81,6 +101,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.STONE_SWORD,
     toolType: "sword",
     material: "stone",
+    tier: TOOL_TIER.stone,
     durability: 131,
     miningSpeedMultiplier: 1,
     attackDamage: 5,
@@ -90,6 +111,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.IRON_PICKAXE,
     toolType: "pickaxe",
     material: "iron",
+    tier: TOOL_TIER.iron,
     durability: 250,
     miningSpeedMultiplier: 6,
     attackDamage: 4,
@@ -99,6 +121,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.IRON_AXE,
     toolType: "axe",
     material: "iron",
+    tier: TOOL_TIER.iron,
     durability: 250,
     miningSpeedMultiplier: 6,
     attackDamage: 5,
@@ -108,6 +131,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.IRON_SHOVEL,
     toolType: "shovel",
     material: "iron",
+    tier: TOOL_TIER.iron,
     durability: 250,
     miningSpeedMultiplier: 6,
     attackDamage: 3,
@@ -117,6 +141,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.IRON_SWORD,
     toolType: "sword",
     material: "iron",
+    tier: TOOL_TIER.iron,
     durability: 250,
     miningSpeedMultiplier: 1,
     attackDamage: 6,
@@ -126,6 +151,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.DIAMOND_PICKAXE,
     toolType: "pickaxe",
     material: "diamond",
+    tier: TOOL_TIER.diamond,
     durability: 1561,
     miningSpeedMultiplier: 8,
     attackDamage: 5,
@@ -135,6 +161,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.DIAMOND_AXE,
     toolType: "axe",
     material: "diamond",
+    tier: TOOL_TIER.diamond,
     durability: 1561,
     miningSpeedMultiplier: 8,
     attackDamage: 6,
@@ -144,6 +171,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.DIAMOND_SHOVEL,
     toolType: "shovel",
     material: "diamond",
+    tier: TOOL_TIER.diamond,
     durability: 1561,
     miningSpeedMultiplier: 8,
     attackDamage: 4,
@@ -153,6 +181,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     itemId: BLOCK_ID.DIAMOND_SWORD,
     toolType: "sword",
     material: "diamond",
+    tier: TOOL_TIER.diamond,
     durability: 1561,
     miningSpeedMultiplier: 1,
     attackDamage: 7,

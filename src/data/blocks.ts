@@ -27,8 +27,23 @@ export interface BlockDefinition {
   dropId: number;
   /** Tool type required for the block to drop an item. If unset, drops with any tool or fist. */
   requiresTool?: "pickaxe" | "axe" | "shovel" | "sword";
+  /**
+   * Minimum tool tier (see TOOL_TIER in @data/items) for the block to drop an item.
+   * Unset = any tool of the required type. Below-tier mining still breaks the block but drops nothing.
+   */
+  minTier?: number;
   /** Hunger points restored when eaten (food items only). */
   hungerRestore?: number;
+  /** Seconds the eat animation takes before hunger is restored (food only). Defaults to DEFAULT_EAT_TIME_SECONDS. */
+  eatTimeSeconds?: number;
+}
+
+/** Eat duration used when a food definition does not set eatTimeSeconds. */
+export const DEFAULT_EAT_TIME_SECONDS = 1.6;
+
+/** Eat duration for a block definition, falling back to the default. */
+export function getEatTimeSeconds(def: Pick<BlockDefinition, "eatTimeSeconds">): number {
+  return def.eatTimeSeconds ?? DEFAULT_EAT_TIME_SECONDS;
 }
 
 /** Canonical block type IDs. */
@@ -141,7 +156,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     name: "Crystal",
     solid: true, transparent: true, breakable: true,
     textures: { top: "crystal_shard", bottom: "crystal_shard", side: "crystal_shard" },
-    special: "crystal_shard", breakTime: 3.0, dropId: BLOCK_ID.CRYSTAL, requiresTool: "pickaxe",
+    special: "crystal_shard", breakTime: 3.0, dropId: BLOCK_ID.CRYSTAL, requiresTool: "pickaxe", minTier: 3,
   },
   {
     id: BLOCK_ID.RAW_PORK,
@@ -280,7 +295,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     name: "Iron Ore",
     solid: true, transparent: false, breakable: true,
     textures: { top: "iron_ore", bottom: "iron_ore", side: "iron_ore" },
-    special: "none", breakTime: 3.0, dropId: BLOCK_ID.IRON_ORE, requiresTool: "pickaxe",
+    special: "none", breakTime: 3.0, dropId: BLOCK_ID.IRON_ORE, requiresTool: "pickaxe", minTier: 2,
   },
   {
     id: BLOCK_ID.IRON_INGOT,
@@ -294,7 +309,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     name: "Diamond Ore",
     solid: true, transparent: false, breakable: true,
     textures: { top: "diamond_ore", bottom: "diamond_ore", side: "diamond_ore" },
-    special: "none", breakTime: 4.0, dropId: BLOCK_ID.DIAMOND_ORE, requiresTool: "pickaxe",
+    special: "none", breakTime: 4.0, dropId: BLOCK_ID.DIAMOND_ORE, requiresTool: "pickaxe", minTier: 3,
   },
   {
     id: BLOCK_ID.DIAMOND,
