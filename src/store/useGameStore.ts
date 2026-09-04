@@ -23,6 +23,8 @@ interface GameState {
   isDead: boolean;
   deathMessage: string;
   breakProgress: number;
+  /** 0..1 progress of the current hold-to-eat; 0 when not eating. */
+  eatProgress: number;
   timeOfDay: number;
   health: number;
   maxHealth: number;
@@ -40,6 +42,7 @@ interface GameState {
   setPaused: (paused: boolean) => void;
   setDead: (dead: boolean) => void;
   setBreakProgress: (progress: number) => void;
+  setEatProgress: (progress: number) => void;
   setTimeOfDay: (t: number) => void;
   setHealth: (h: number) => void;
   setHunger: (h: number) => void;
@@ -116,6 +119,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   isDead: false,
   deathMessage: "",
   breakProgress: 0,
+  eatProgress: 0,
   timeOfDay: 0,
   health: 20,
   maxHealth: 20,
@@ -144,6 +148,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setPaused: (paused: boolean) => set({ isPaused: paused }),
   setDead: (dead: boolean) => set({ isDead: dead }),
   setBreakProgress: (progress: number) => set({ breakProgress: progress }),
+  setEatProgress: (progress: number) => set({ eatProgress: progress }),
   setTimeOfDay: (t: number) => set({ timeOfDay: t }),
   setHealth: (h: number) => set({ health: Math.max(0, Math.min(h, get().maxHealth)) }),
   setHunger: (h: number) => set({ hunger: Math.max(0, Math.min(h, get().maxHunger)) }),

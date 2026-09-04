@@ -35,7 +35,7 @@ import {
   type WorldType,
 } from "@engine/world/constants";
 import { readSessionJson } from "@lib/storage";
-import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS, getEatTimeSeconds } from "@data/blocks";
 import { getToolDef } from "@data/items";
 import type { MobType } from "@engine/entities/MobModel";
 import type { Biome } from "@engine/generation/TerrainGenerator";
@@ -84,6 +84,10 @@ export class Engine {
   private qWasDown = false;
   private hungerExhaustion = 0;
   private passiveHungerTimer = 0;
+  /** Seconds the right button has been held on the current food item. */
+  private eatTimer = 0;
+  /** Block id being eaten; a hotbar change mid-bite cancels the bite. */
+  private eatingBlockId = 0;
   private regenTimer = 0;
   private starvationTimer = 0;
   private stuckTimer = 0;
@@ -1101,20 +1105,36 @@ export class Engine {
       creative
     );
 
-    // Eating: right-click with food in hand when not aiming at a block
-    if (rightClick && selectedBlockId !== 0) {
-      const blockDef = BLOCK_DEFINITIONS[selectedBlockId];
-      if (blockDef?.special === "food" && blockDef.hungerRestore) {
-        const target = this.blockInteraction!.getTargetBlock(this.player!.position, lookDir);
-        if (!target.hit) {
-          const gs2 = useGameStore.getState();
-          if (gs2.hunger < gs2.maxHunger) {
-            gs2.setHunger(gs2.hunger + blockDef.hungerRestore);
-            useHotbarStore.getState().removeSelectedItem();
-          }
-        }
+    // Eating: hold right-click with food in hand while not aiming at a block.
+    // Progress accrues over getEatTimeSeconds(def); releasing the button,
+    // switching items, filling up, or looking at a block cancels and resets it.
+    // Holding through a stack eats successive items.
+    const foodDef = selectedBlockId !== 0 ? BLOCK_DEFINITIONS[selectedBlockId] : undefined;
+    const restore = foodDef?.special === "food" ? foodDef.hungerRestore ?? 0 : 0;
+    const gs2 = useGameStore.getState();
+    const canEat =
+      restore > 0 &&
+      this.input.isMouseButtonDown(2) &&
+      gs2.hunger < gs2.maxHunger &&
+      !this.blockInteraction!.getTargetBlock(this.player!.position, lookDir).hit;
+    if (!canEat || selectedBlockId !== this.eatingBlockId) {
+      this.eatTimer = 0;
+      this.eatingBlockId = canEat ? selectedBlockId : 0;
+    }
+    let eatProgress = 0;
+    if (canEat && foodDef) {
+      const eatTime = getEatTimeSeconds(foodDef);
+      this.eatTimer += dt;
+      if (this.eatTimer >= eatTime) {
+        gs2.setHunger(gs2.hunger + restore);
+        useHotbarStore.getState().removeSelectedItem();
+        this.eatTimer = 0;
+        this.eatingBlockId = 0;
+      } else {
+        eatProgress = this.eatTimer / eatTime;
       }
     }
+    gs2.setEatProgress(eatProgress);
 
     // Update day/night cycle
     this.dayNight!.update(dt);

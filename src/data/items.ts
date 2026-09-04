@@ -35,7 +35,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 59,
     miningSpeedMultiplier: 2,
     attackDamage: 2,
-    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.CRYSTAL],
+    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.FURNACE, BLOCK_ID.CRYSTAL],
   },
   [BLOCK_ID.WOODEN_AXE]: {
     itemId: BLOCK_ID.WOODEN_AXE,
@@ -75,7 +75,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 131,
     miningSpeedMultiplier: 4,
     attackDamage: 3,
-    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.CRYSTAL],
+    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.FURNACE, BLOCK_ID.CRYSTAL],
   },
   [BLOCK_ID.STONE_AXE]: {
     itemId: BLOCK_ID.STONE_AXE,
@@ -115,7 +115,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 250,
     miningSpeedMultiplier: 6,
     attackDamage: 4,
-    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.CRYSTAL, BLOCK_ID.IRON_ORE, BLOCK_ID.DIAMOND_ORE],
+    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.FURNACE, BLOCK_ID.CRYSTAL, BLOCK_ID.IRON_ORE, BLOCK_ID.DIAMOND_ORE],
   },
   [BLOCK_ID.IRON_AXE]: {
     itemId: BLOCK_ID.IRON_AXE,
@@ -155,7 +155,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 1561,
     miningSpeedMultiplier: 8,
     attackDamage: 5,
-    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.CRYSTAL, BLOCK_ID.IRON_ORE, BLOCK_ID.DIAMOND_ORE],
+    effectiveAgainst: [BLOCK_ID.STONE, BLOCK_ID.FURNACE, BLOCK_ID.CRYSTAL, BLOCK_ID.IRON_ORE, BLOCK_ID.DIAMOND_ORE],
   },
   [BLOCK_ID.DIAMOND_AXE]: {
     itemId: BLOCK_ID.DIAMOND_AXE,

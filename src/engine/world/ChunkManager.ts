@@ -18,7 +18,7 @@ import {
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
 import { useSettingsStore } from "@store/useSettingsStore";
 
-export type BlockChangeSource = "local" | "remote";
+export type BlockChangeSource = "local" | "remote" | "simulation";
 
 /**
  * Manages chunk storage, generation, and rendering.
@@ -375,6 +375,16 @@ export class ChunkManager {
   // ──────────────────────────────────────────────
   //  Block access
   // ──────────────────────────────────────────────
+
+  /**
+   * Visits every loaded chunk in load order. Used by budgeted simulation
+   * passes (random tick); the order is stable while no chunk loads or unloads.
+   */
+  forEachLoadedChunk(visit: (chunk: Chunk) => void): void {
+    for (const chunk of this.chunks.values()) {
+      visit(chunk);
+    }
+  }
 
   setBlockChangeListener(
     listener:

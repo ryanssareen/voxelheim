@@ -75,8 +75,10 @@ function SliderOption({
 }
 
 function OptionsModal({ onClose }: { onClose: () => void }) {
-  const { musicEnabled, musicVolume, renderDistance, simulationDistance, fov, setMusicEnabled, setMusicVolume, setRenderDistance, setSimulationDistance, setFov } =
-    useSettingsStore();
+  const {
+    musicEnabled, musicVolume, renderDistance, simulationDistance, fov, autoJump, fullscreenOnPlay,
+    setMusicEnabled, setMusicVolume, setRenderDistance, setSimulationDistance, setFov, setAutoJump, setFullscreenOnPlay,
+  } = useSettingsStore();
   const nameOverride = useIdentityStore((state) => state.nameOverride);
   const generatedName = useIdentityStore((state) => state.generatedName);
   const setPlayerName = useIdentityStore((state) => state.setPlayerName);
@@ -148,6 +150,22 @@ function OptionsModal({ onClose }: { onClose: () => void }) {
             displayValue={String(fov)}
             onChange={setFov}
           />
+          <div className="flex gap-2 w-full">
+            <button
+              onClick={() => setAutoJump(!autoJump)}
+              className={MC_BTN + " flex-1 text-sm"}
+              style={BTN_STYLE}
+            >
+              Auto-Jump: {autoJump ? "ON" : "OFF"}
+            </button>
+            <button
+              onClick={() => setFullscreenOnPlay(!fullscreenOnPlay)}
+              className={MC_BTN + " flex-1 text-sm"}
+              style={BTN_STYLE}
+            >
+              Fullscreen: {fullscreenOnPlay ? "ON" : "OFF"}
+            </button>
+          </div>
         </div>
         <button onClick={onClose} className={MC_BTN + " w-full text-sm"} style={BTN_STYLE}>
           Done

@@ -136,12 +136,20 @@ ids where the product of `(outputCount / inputCount)` exceeds 1.
 | STICK | 0.125 | 2 planks -> 4 |
 | CRAFTING_TABLE | 1 | 4 planks |
 | FURNACE | 4 | 8 stone |
-| WOODEN_* tools | 1 | 3 planks + 2 sticks |
-| STONE_* tools | 1.75 | 3 stone + 2 sticks |
+| WOODEN_PICKAXE, WOODEN_AXE | 1 | 3 planks + 2 sticks |
+| WOODEN_SHOVEL | 0.5 | 1 plank + 2 sticks |
+| WOODEN_SWORD | 0.625 | 2 planks + 1 stick |
+| STONE_PICKAXE, STONE_AXE | 1.75 | 3 stone + 2 sticks |
+| STONE_SHOVEL | 0.75 | 1 stone + 2 sticks |
+| STONE_SWORD | 1.125 | 2 stone + 1 stick |
 | IRON_ORE, IRON_INGOT | 4 | tier 2 mining, smelted 1:1 |
 | DIAMOND_ORE, DIAMOND | 16 | tier 3 mining |
-| IRON_* tools | 12 | 3 ingots + 2 sticks |
-| DIAMOND_* tools | 48 | 3 diamonds + 2 sticks |
+| IRON_PICKAXE, IRON_AXE | 12 | 3 ingots + 2 sticks |
+| IRON_SHOVEL | 4.25 | 1 ingot + 2 sticks |
+| IRON_SWORD | 8.125 | 2 ingots + 1 stick |
+| DIAMOND_PICKAXE, DIAMOND_AXE | 48 | 3 diamonds + 2 sticks |
+| DIAMOND_SHOVEL | 16.25 | 1 diamond + 2 sticks |
+| DIAMOND_SWORD | 32.125 | 2 diamonds + 1 stick |
 | IRON_HELMET / CHEST / LEGS / BOOTS | 20 / 32 / 28 / 16 | 5 / 8 / 7 / 4 ingots |
 | DIAMOND_HELMET / CHEST / LEGS / BOOTS | 80 / 128 / 112 / 64 | 5 / 8 / 7 / 4 diamonds |
 | CRYSTAL | 8 | tier 3 mining, feeds `collectShard()` |
@@ -194,8 +202,102 @@ the lead's reading is below and the triage agent confirms or corrects it.
   play (alignment, visibility, stage progression, transparent blocks) and fix
   in `BlockBreakOverlay.ts` only.
 
-## Phase 1 triage — sections below are appended by triage agents
+## Phase 1 triage — results and lead review
 
-Each section: bugs reproduced, classification (CONFIRMED / NOT-A-BUG /
-DIFFERENT-THAN-DESCRIBED) with file:line evidence, root cause, proposed fix,
-blast radius, test strategy.
+Full triage reports (per workstream, structured JSON with file:line evidence,
+root cause, proposed fix, blast radius, test strategy) were produced by the
+triage agents and reviewed by the lead. Summary of classifications:
+
+| WS | CONFIRMED | DIFFERENT | NOT-A-BUG | MISSING-SYSTEM |
+|---|---|---|---|---|
+| A | A1 planks doubler, A2 leaves->log, A4 tables bulk, A6 no diamond smelt, A7 non-atomic craft, A9 place-and-remine shard | A3 crystal recipes (Matrix is 5C+4S), A5 value table shovel/sword rows wrong | | A8 economy test |
+| B | B1 minTier never read, B2 under-tier not slower, B3 under-tier crystal counts shard | | B4 durability already -1, B5 creative no drops, B6 no other drop sites | B7 progression test blocked on A |
+| D | D1 forest ~48-50% / plains ~10%, D2 uniform tree roll (forest 24.5/chunk, plains 4.5) | D4 terrain worker is dead code, generation is main-thread | | D3 grass spread |
+| E | E1 knockback overwritten by AI, E5 idle breathing integrates (0.6 block drift), E6 sword-killed creeper still explodes | E3 skeleton proportions, E4 all mobs authored facing +X but move along -Z (walk broadside) | | E2 creeper swell/hiss/abort |
+| F | F1 all drops identical colour cubes, F3 leaves tile fully opaque (pipeline already supports cutout) | | F4 atlas -> mesh builder works | F2 item icon sheet, F5 wood variants (report only) |
+| G | G3 addItem inside updater, G4 non-atomic craft/smelt grant, G5 grid setters strip durability (free repair), G6 duplicated click handlers lack armor guard | G2 open* wipe is latent; reachable loss is close* with a full inventory | | G1 quick-move |
+| H | | | | H1 autoJump, H2 fullscreenOnPlay, H3 timed eating, H4 no settings UI |
+| C, I | triage in progress (see addendum below) | | | |
+
+### Lead decisions (binding for implementation)
+
+Landed on main by the lead before Phase 2 (so every branch starts from them):
+
+- `useGameStore`: `eatProgress` + `setEatProgress`.
+- `ChunkManager`: `forEachLoadedChunk(visit)` and `"simulation"` added to
+  `BlockChangeSource` (D's cross-needs from C).
+- `Engine.ts`: H3's hold-to-eat patch applied verbatim (timer, cancel rules,
+  `setEatProgress` every frame).
+- `items.ts`: FURNACE added to every pickaxe's `effectiveAgainst`.
+- Home page Options modal: Auto-Jump and Fullscreen toggles (H4).
+- Contract value table: shovel/sword rows corrected to their input sums (A5).
+
+**A.** Remove: Planks (Efficient), Log, Log (Bulk), Crystal Synthesis,
+Crystal (Rare Find), Crystal (Polishing), Crystal (Compression), Crystal
+Matrix. Reprice Crafting Tables (Bulk) to 2. Add smelting DIAMOND_ORE ->
+DIAMOND. Also remove the tool-free stone sources that let a player skip the
+wooden pickaxe: "Stone" (4 sand -> 1 stone, 2x2), "Stone (Bulk Smelt)" (9 sand
+-> 4 stone) and "Stonework" (8 planks -> 4 stone); keep SAND -> STONE smelting
+(a furnace already costs 8 stone) and 4 stone -> 4 sand. Value table lives in
+the test file. Objective-output assertion (no recipe outputs a block with
+`special === "crystal_shard"`) approved. A7: the result click is a no-op when
+the cursor cannot take the result (Minecraft); `resolveCraft` in
+`src/systems/crafting/craft.ts` plus `findRecipeForCells` in recipes.ts, G
+applies the handlers. The STONE -> SAND -> STONE product-1.0 loop is fine.
+Remove the now-unused single-letter consts so lint stays clean.
+
+**B.** Helpers `canHarvest` and `harvestSpeedMultiplier` live in a new B-owned
+file `src/engine/player/harvest.ts` (pure, no engine imports).
+`BlockInteraction` uses them at both sites. Approve the data-driven tidy
+(`blockDef.special === "crystal_shard"` instead of the id compare). Creative
+stays ungated. Close A9: refuse placement of blocks whose definition has
+`special === "crystal_shard"`. Progression test lands after A (Phase 2 runs A
+first).
+
+**D.** Accept regenerated terrain for existing infinite/flat saves (dev-stage
+local saves; island and demo worlds unaffected); document it in the code
+comment and the solutions doc. Biome split: the one-line change (plains ~29%,
+forest ~30%). Cluster noise per D2 with the data table, scale 32. Write DIRT
+under trunks in `decorateChunk` only (not `placeTrees`). Random tick is
+client-local (source `"simulation"`, not broadcast). Light predicate: transparent
+above, as the brief says. Do not gate mountain trees on surface block; do not
+touch the island tree path.
+
+**E.** Ship E4 (facing) with E3. Knockback constants as proposed (speed 3,
+decay 6, stagger 0.35 s bumping attackCooldown). Creeper `fuseSeconds` /
+`fuseAbortRange` as MobConfig data, abort range 3.5, keeps chasing. `MobSfx.ts`
+with its own lazily created AudioContext, gated by musicEnabled and scaled by
+musicVolume (no new settings). Compensate the name tag / health bar sprites
+against the swell. `fuseDetonated` replaces the four-term explosion predicate.
+
+**F.** Spinning DoubleSide quad for item drops (Lambert, lit). Item sheet load
+failure degrades to the colour-box fallback. Keep generating tiles; allow
+per-tile PNG overrides from `public/textures/blocks/<name>.png`. Generated
+`atlasUVs.ts`, `atlas.png`, `items.png` are F's outputs. No npm script (no new
+dependency); keep `npx tsx scripts/buildAtlas.ts` in the script header.
+Regenerate the atlas last before handback. Wood variants: not scheduled.
+
+**G.** `craftInput` priority is -1 (never a quick-move destination). Leftovers
+on close are parked in the container/cursor, not dropped. One craft per
+shift-click on an output slot. Delete `toggle` (no callers). Add `reset()` to
+the inventory store for tests. Container slot setters gain an optional 4th
+`durability` param. Plain click on an output uses A's `resolveCraft`;
+shift-click on an output quick-moves the result into hotbar/storage and
+consumes only if it all fits. The furnace result uses the same path with a
+finder over [input, fuel] (`isFuel` + `findSmeltingRecipe`), fixing the
+fixed-one-unit grant.
+
+**H.** New H-owned file `src/ui/playCapture.ts` exporting `enterPlayCapture`.
+PlayerController reads the settings store directly. `AUTO_JUMP_VELOCITY = 7`.
+Fullscreen target is the container div. Eat gate unchanged. Also H5: give the
+player the same decaying knockback impulse channel E1 gives mobs
+(`applyKnockback` is currently overwritten by input every frame).
+PauseMenu re-lock sites switch to `enterPlayCapture` (lead applies at
+integration).
+
+### Phase 2 order
+
+1. A alone (P0; B and G depend on its data and `craft.ts`).
+2. B, C, D, E, F, G, H, I in parallel from the merged main.
+3. Lead applies Engine patches (D random ticker, F atlas arg) and PauseMenu
+   change, runs the gate, merges.
