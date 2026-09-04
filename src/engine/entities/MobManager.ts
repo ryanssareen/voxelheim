@@ -95,7 +95,7 @@ export class MobManager {
         ) {
           // Spawn a physical arrow aimed at the player — dodgeable
           onMobShoot(
-            { x: mob.position.x, y: mob.position.y + 1.3, z: mob.position.z },
+            { x: mob.position.x, y: mob.position.y + 1.05, z: mob.position.z },
             { x: playerPos.x, y: playerPos.y + 0.9, z: playerPos.z },
             2,
             `skeleton-${mob.position.x.toFixed(1)}-${mob.position.z.toFixed(1)}`,
@@ -105,9 +105,11 @@ export class MobManager {
       }
     }
 
-    // Handle creeper explosions
+    // Handle creeper explosions — fuseDetonated is the explicit "fuse
+    // completed" state, so a sword-killed creeper (dead via health <= 0,
+    // fuseDetonated left false) never blows up after its death animation.
     for (const mob of this.mobs) {
-      if (mob.type === "creeper" && mob.dead && mob.deathTimer < 0 && mob.age > 0) {
+      if (mob.fuseDetonated) {
         this.explodeCreeper(mob, chunkManager);
         if (onDamagePlayer) {
           const dist = mob.distanceTo(playerPos);

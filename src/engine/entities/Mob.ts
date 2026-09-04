@@ -4,8 +4,29 @@ import { createMobModel, type MobType, type MobModelData } from "@engine/entitie
 import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import { BLOCK_ID } from "@data/blocks";
 import { findPath, findNearestCover, type PathPoint } from "@engine/entities/MobPathfinder";
+import { playCreeperHiss, type SfxHandle } from "@engine/entities/MobSfx";
 
 const GRAVITY = 20;
+
+// Knockback: an impulse channel kept separate from the AI's own velocity
+// output (every AI branch reassigns velocity.x/z every tick, so anything
+// added straight into velocity survives less than one frame). The impulse is
+// added at the point moveAxis is called and decays exponentially afterward.
+const KNOCKBACK_SPEED = 3;
+const KNOCKBACK_DECAY = 6;
+const STAGGER_SECONDS = 0.35;
+
+// Models are authored with the face on local +X; physics, head tracking and
+// leg swing assume local -Z is forward (matching the camera convention). This
+// offset reconciles them: rotating the group by yaw + PI/2 maps local +X to
+// (-sin yaw, 0, -cos yaw), the direction the AI actually moves the mob in.
+const MODEL_YAW_OFFSET = Math.PI / 2;
+
+// Creeper fuse: swell scale and pulse rate (the pulse accelerates from
+// FUSE_PULSE_HZ_MIN to FUSE_PULSE_HZ_MAX as the fuse burns down).
+const FUSE_SWELL = 0.3;
+const FUSE_PULSE_HZ_MIN = 1;
+const FUSE_PULSE_HZ_MAX = 4;
 
 interface MobConfig {
   health: number;
@@ -16,6 +37,8 @@ interface MobConfig {
   detectRange: number;
   attackRange: number;
   dropId: number;
+  fuseSeconds?: number;
+  fuseAbortRange?: number;
 }
 
 const MOB_CONFIGS: Record<MobType, MobConfig> = {
@@ -24,7 +47,7 @@ const MOB_CONFIGS: Record<MobType, MobConfig> = {
   sheep:    { health: 5,  speed: 1.5, halfWidth: 0.25, height: 0.65, hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_MUTTON },
   zombie:   { health: 10, speed: 2.5, halfWidth: 0.25, height: 1.6,  hostile: true,  detectRange: 16, attackRange: 1.5, dropId: BLOCK_ID.DIRT },
   skeleton: { health: 10, speed: 2.0, halfWidth: 0.2,  height: 1.6,  hostile: true,  detectRange: 16, attackRange: 10,  dropId: BLOCK_ID.STONE },
-  creeper:  { health: 10, speed: 2.0, halfWidth: 0.2,  height: 1.2,  hostile: true,  detectRange: 16, attackRange: 2,   dropId: BLOCK_ID.SAND },
+  creeper:  { health: 10, speed: 2.0, halfWidth: 0.2,  height: 1.2,  hostile: true,  detectRange: 16, attackRange: 2,   dropId: BLOCK_ID.SAND, fuseSeconds: 1.5, fuseAbortRange: 3.5 },
 };
 
 interface DamageNumber {
@@ -45,14 +68,20 @@ export class Mob {
   public age = 0;
 
   private model: MobModelData;
+  private readonly bodyRestY: number;
   private walkTime = 0;
   private aiTimer = 0;
   private aiTargetYaw = 0;
   private isMoving = false;
   private fleeTimer = 0;
   private hurtFlashTimer = 0;
+  private knockback = { x: 0, z: 0 };
+  private staggerTimer = 0;
   private exploding = false;
   private explodeTimer = 0;
+  private fusePhase = 0;
+  private hiss: SfxHandle | null = null;
+  public fuseDetonated = false;
   private originalColors: Map<THREE.Mesh, number> = new Map();
   public attackCooldown = 0;
   public deathTimer = -1;
@@ -90,6 +119,7 @@ export class Mob {
     this.yaw = Math.random() * Math.PI * 2;
     this.aiTargetYaw = this.yaw;
     this.model = createMobModel(type);
+    this.bodyRestY = this.model.body.position.y;
     this.pathRecalcTimer = Math.random(); // stagger across mobs
 
     // Store original colors for hurt flash
@@ -136,11 +166,25 @@ export class Mob {
       this.updateBurning(dt, getBlock, registry, playerPos, timeOfDay);
     }
 
+    // A fusing creeper switched to creative mode aborts its fuse — the AI
+    // dispatch below skips updateHostileAI (and its abort check) in creative.
+    if (creative && this.exploding) this.abortFuse();
+
     // AI — hostile mobs wander (like passive) in creative mode
     if (this.config.hostile && !creative) {
       this.updateHostileAI(dt, playerPos, getBlock, registry);
     } else {
       this.updatePassiveAI(dt, playerPos, getBlock, registry);
+    }
+
+    // Stagger from a knockback hit overrides the AI's own velocity output for
+    // a short window, so a staggered mob cannot walk (or attack — this also
+    // bumps attackCooldown) through the hit.
+    if (this.staggerTimer > 0) {
+      this.staggerTimer -= dt;
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+      this.isMoving = false;
     }
 
     // Gravity (capped to prevent ground clipping)
@@ -155,29 +199,40 @@ export class Mob {
       return;
     }
 
-    // Apply movement
+    // Apply movement. The knockback impulse is added here rather than into
+    // velocity, so it can never be overwritten by the next AI tick.
     this.moveAxis("y", this.velocity.y * dt, getBlock, registry);
-    this.moveAxis("x", this.velocity.x * dt, getBlock, registry);
-    this.moveAxis("z", this.velocity.z * dt, getBlock, registry);
+    this.moveAxis("x", (this.velocity.x + this.knockback.x) * dt, getBlock, registry);
+    this.moveAxis("z", (this.velocity.z + this.knockback.z) * dt, getBlock, registry);
+
+    const knockbackDecay = Math.exp(-KNOCKBACK_DECAY * dt);
+    this.knockback.x *= knockbackDecay;
+    this.knockback.z *= knockbackDecay;
+    if (Math.abs(this.knockback.x) + Math.abs(this.knockback.z) < 0.05) {
+      this.knockback.x = 0;
+      this.knockback.z = 0;
+    }
 
     // Update visuals
     this.model.group.position.set(this.position.x, this.position.y, this.position.z);
-    this.model.group.rotation.y = this.yaw;
+    this.model.group.rotation.y = this.yaw + MODEL_YAW_OFFSET;
 
     // Walk animation
     if (this.isMoving) {
       this.walkTime += dt * 6;
       const swing = Math.sin(this.walkTime) * 0.4;
       for (let i = 0; i < this.model.legs.length; i++) {
-        this.model.legs[i].rotation.x = i % 2 === 0 ? swing : -swing;
+        this.model.legs[i].rotation.z = i % 2 === 0 ? swing : -swing;
       }
+      this.model.body.position.y = this.bodyRestY;
     } else {
       this.walkTime = 0;
-      for (const leg of this.model.legs) leg.rotation.x = 0;
+      for (const leg of this.model.legs) leg.rotation.z = 0;
 
-      // Idle breathing: subtle body bob when standing still
+      // Idle breathing: subtle body bob when standing still, oscillating
+      // around the model's authored rest height rather than accumulating.
       const breathe = Math.sin(this.age * 2) * 0.01;
-      this.model.body.position.y += breathe;
+      this.model.body.position.y = this.bodyRestY + breathe;
     }
 
     // Head tracking: look toward player when nearby
@@ -196,10 +251,10 @@ export class Mob {
 
         const dy = (playerPos.y + 1) - (this.position.y + this.config.height);
         const pitch = Math.atan2(dy, dist);
-        this.model.head.rotation.x = Math.max(-0.5, Math.min(0.5, pitch));
+        this.model.head.rotation.z = Math.max(-0.5, Math.min(0.5, pitch));
       } else {
         this.model.head.rotation.y = 0;
-        this.model.head.rotation.x = 0;
+        this.model.head.rotation.z = 0;
       }
     }
 
@@ -228,8 +283,9 @@ export class Mob {
       });
     }
 
-    // Burn visual — orange tint when burning (and not in hurt flash)
-    if (this.isBurning && this.hurtFlashTimer <= 0) {
+    // Burn visual — orange tint when burning (and not in hurt flash or the
+    // creeper fuse flash, which already drives the same materials).
+    if (this.isBurning && this.hurtFlashTimer <= 0 && !this.exploding) {
       const flicker = Math.sin(this.age * 8) > 0;
       if (flicker) {
         this.model.group.traverse((obj) => {
@@ -558,9 +614,11 @@ export class Mob {
       } else {
         // Within attack range
         this.yaw = Math.atan2(-dx, -dz);
-        if (this.type === "creeper" && !this.exploding) {
+        if (this.config.fuseSeconds !== undefined && !this.exploding) {
           this.exploding = true;
-          this.explodeTimer = 1.5;
+          this.explodeTimer = this.config.fuseSeconds;
+          this.fusePhase = 0;
+          this.hiss = playCreeperHiss(dist, this.config.fuseSeconds);
         }
         this.velocity.x = 0;
         this.velocity.z = 0;
@@ -607,10 +665,25 @@ export class Mob {
       }
     }
 
-    // Creeper explosion countdown
+    // Abort the fuse once the player retreats out of range — checked before
+    // the countdown below so an aborted fuse does not also advance one frame
+    // of swell/flash on the way out.
+    if (this.exploding && dist > (this.config.fuseAbortRange ?? Infinity)) {
+      this.abortFuse();
+    }
+
+    // Creeper explosion countdown: swell 1x -> 1.3x with an accelerating
+    // pulse (1 Hz -> 4 Hz as the fuse burns down), flash synced to the pulse.
     if (this.exploding) {
       this.explodeTimer -= dt;
-      const flash = Math.sin(this.explodeTimer * 10) > 0;
+      const fuseSeconds = this.config.fuseSeconds ?? 1.5;
+      const t = 1 - Math.max(0, this.explodeTimer) / fuseSeconds;
+      this.fusePhase += dt * Math.PI * 2 * (FUSE_PULSE_HZ_MIN + (FUSE_PULSE_HZ_MAX - FUSE_PULSE_HZ_MIN) * t);
+      const pulse = Math.sin(this.fusePhase);
+      const scale = 1 + FUSE_SWELL * t + 0.04 * t * Math.max(0, pulse);
+      this.model.group.scale.setScalar(scale);
+      this.compensateSwellSprites(scale);
+      const flash = pulse > 0;
       this.model.group.traverse((obj) => {
         if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshLambertMaterial) {
           obj.material.color.setHex(flash ? 0xffffff : (this.originalColors.get(obj) ?? 0x4caf50));
@@ -618,8 +691,36 @@ export class Mob {
       });
       if (this.explodeTimer <= 0) {
         this.dead = true;
+        this.fuseDetonated = true;
+        this.hiss = null;
       }
     }
+  }
+
+  /**
+   * Sprites (name tag, health bar) are parented to the group, so they swell
+   * with the fuse scale unless compensated back to their authored size.
+   */
+  private compensateSwellSprites(scale: number): void {
+    if (this.nameTagSprite) this.nameTagSprite.scale.set(1.2 / scale, 0.3 / scale, 1);
+    if (this.healthBarSprite) this.healthBarSprite.scale.set(0.8 / scale, 0.1 / scale, 1);
+  }
+
+  /** Cancels a lit fuse: out-of-range retreat or a switch to creative mode. */
+  private abortFuse(): void {
+    this.exploding = false;
+    this.explodeTimer = 0;
+    this.fusePhase = 0;
+    this.fuseDetonated = false;
+    this.model.group.scale.setScalar(1);
+    this.compensateSwellSprites(1);
+    this.model.group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshLambertMaterial) {
+        obj.material.color.setHex(this.originalColors.get(obj) ?? 0xffffff);
+      }
+    });
+    this.hiss?.stop();
+    this.hiss = null;
   }
 
   // ─── Damage / Combat ──────────────────────────────────
@@ -638,8 +739,10 @@ export class Mob {
       const dz = this.position.z - attackerPos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist > 0.01) {
-        this.velocity.x += (dx / dist) * 3;
-        this.velocity.z += (dz / dist) * 3;
+        this.knockback.x = (dx / dist) * KNOCKBACK_SPEED;
+        this.knockback.z = (dz / dist) * KNOCKBACK_SPEED;
+        this.staggerTimer = STAGGER_SECONDS;
+        this.attackCooldown = Math.max(this.attackCooldown, STAGGER_SECONDS);
         this.velocity.y = 2;
         this.onGround = false;
       }
@@ -842,15 +945,19 @@ export class Mob {
     } else if (axis === "x") {
       this.position.x = delta < 0 ? layer + 1 + hw : layer - hw;
       this.velocity.x = 0;
+      this.knockback.x = 0;
     } else {
       this.position.z = delta < 0 ? layer + 1 + hw : layer - hw;
       this.velocity.z = 0;
+      this.knockback.z = 0;
     }
   }
 
   // ─── Cleanup ──────────────────────────────────────────
 
   dispose(): void {
+    this.hiss?.stop();
+    this.hiss = null;
     for (const dn of this.damageNumbers) {
       this.model.group.remove(dn.sprite);
       (dn.sprite.material as THREE.SpriteMaterial).map?.dispose();
