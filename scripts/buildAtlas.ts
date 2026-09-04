@@ -50,11 +50,11 @@ const TEXTURES: TextureDef[] = [
   { name: "dirt", color: "", custom: dirtTexture },
   { name: "stone", color: "", custom: stoneTexture },
   { name: "sand", color: "", custom: sandTexture },
-  { name: "log_side", color: "", custom: logSide },
-  { name: "log_top", color: "", custom: logTop },
-  { name: "leaves", color: "", custom: leavesTexture },
+  { name: "log_side", color: "", custom: (buf) => logSide(buf, OAK_PALETTE) },
+  { name: "log_top", color: "", custom: (buf) => logTop(buf, OAK_PALETTE) },
+  { name: "leaves", color: "", custom: (buf) => leavesTexture(buf, OAK_PALETTE) },
   { name: "crystal_shard", color: "", custom: crystalShard },
-  { name: "planks", color: "", custom: planksTexture },
+  { name: "planks", color: "", custom: (buf) => planksTexture(buf, OAK_PALETTE) },
   { name: "crafting_table_top", color: "", custom: craftingTableTop },
   { name: "crafting_table_side", color: "", custom: craftingTableSide },
   { name: "furnace_top", color: "", custom: furnaceTop },
@@ -65,15 +65,15 @@ const TEXTURES: TextureDef[] = [
   { name: "water", color: "", custom: waterTexture },
   { name: "snow", color: "", custom: snowTexture },
   { name: "ice", color: "", custom: iceTexture },
-  // Wood variants (Phase 0 placeholders reuse the oak painters; Workstream F paints species palettes).
-  { name: "birch_log_side", color: "", custom: logSide },
-  { name: "birch_log_top", color: "", custom: logTop },
-  { name: "birch_leaves", color: "", custom: leavesTexture },
-  { name: "birch_planks", color: "", custom: planksTexture },
-  { name: "spruce_log_side", color: "", custom: logSide },
-  { name: "spruce_log_top", color: "", custom: logTop },
-  { name: "spruce_leaves", color: "", custom: leavesTexture },
-  { name: "spruce_planks", color: "", custom: planksTexture },
+  // Wood variants: each species binds the shared painters to its own palette via a closure.
+  { name: "birch_log_side", color: "", custom: (buf) => logSide(buf, BIRCH_PALETTE) },
+  { name: "birch_log_top", color: "", custom: (buf) => logTop(buf, BIRCH_PALETTE) },
+  { name: "birch_leaves", color: "", custom: (buf) => leavesTexture(buf, BIRCH_PALETTE) },
+  { name: "birch_planks", color: "", custom: (buf) => planksTexture(buf, BIRCH_PALETTE) },
+  { name: "spruce_log_side", color: "", custom: (buf) => logSide(buf, SPRUCE_PALETTE) },
+  { name: "spruce_log_top", color: "", custom: (buf) => logTop(buf, SPRUCE_PALETTE) },
+  { name: "spruce_leaves", color: "", custom: (buf) => leavesTexture(buf, SPRUCE_PALETTE) },
+  { name: "spruce_planks", color: "", custom: (buf) => planksTexture(buf, SPRUCE_PALETTE) },
 ];
 
 
@@ -253,27 +253,125 @@ function lavaTexture(buf: Buffer): void {
 
 // ---------------------------------------------------------------- wood
 
-/** Columns that get a carved bark groove, each broken into intermittent runs by hash. */
+/** Columns that get a carved bark groove (vertical species), each broken into intermittent runs by hash. */
 const LOG_GROOVE_COLS = [0, 3, 7, 10, 13];
+/** Rows that get a carved bark fleck (horizontal species — birch), each broken into intermittent runs by hash. */
+const LOG_FLECK_ROWS = [1, 4, 6, 9, 12, 14];
 
-function logSide(buf: Buffer): void {
-  // vertical bark: per-column tone, then fine vertical streaking
-  const pal = ["#6b5335", "#6b5335", "#7a6039", "#5b452b", "#87703f", "#4d3a23"].map(hexToRGB);
+interface WoodPalette {
+  bark: string[];              // 6-entry weighted ramp for log_side base tone (index 0 doubled to weight it, same shape as today's inline pal)
+  barkAxis: "vertical" | "horizontal"; // groove orientation on log_side
+  barkStreak: string;           // groove/fleck colour
+  barkStreakHighlight: string;  // ridge highlight beside a vertical groove; unused when barkAxis === "horizontal"
+  knotCenter: string;
+  knotRing: string;
+  topBg: string[];              // 5-entry ramp for log_top background speckle
+  topRingA: string;
+  topRingB: string;
+  topCenter: string;
+  topRim: string;                // bark rim colour around the log_top edge
+  planksBases: string[];         // 4 entries, one per 4px board band
+  planksSeam: string;
+  planksNail: string;
+  leaves: string[];              // 6-entry ramp for leaves base speckle
+  leavesFleckDark: string;
+  leavesFleckLight: string;
+  leavesHole: string;            // colour showing through the alpha-cutout holes
+}
+
+const OAK_PALETTE: WoodPalette = {
+  bark: ["#6b5335", "#6b5335", "#7a6039", "#5b452b", "#87703f", "#4d3a23"],
+  barkAxis: "vertical",
+  barkStreak: "#3f2f1c",
+  barkStreakHighlight: "#8a7145",
+  knotCenter: "#2f2113",
+  knotRing: "#4a3722",
+  topBg: ["#b39058", "#b39058", "#bd9b63", "#a8854e", "#c6a56e"],
+  topRingA: "#8e6f40",
+  topRingB: "#9c7d4c",
+  topCenter: "#7d6035",
+  topRim: "#5b452b",
+  planksBases: ["#b58c4f", "#a97f45", "#bf975a", "#b08a4a"],
+  planksSeam: "#71512a",
+  planksNail: "#4a3a24",
+  leaves: ["#2a5f1e", "#2a5f1e", "#397b29", "#1f4716", "#4f9636", "#6fbc52"],
+  leavesFleckDark: "#1a3811",
+  leavesFleckLight: "#79bd5b",
+  leavesHole: "#173410",
+};
+// Every field above is copied byte-for-byte from the previous inline literals so oak's rendered
+// tiles do not change at all -- this MUST stay byte-identical or the two hardcoded-hex tests in
+// drops.test.ts ("log_side has bark grooves", "planks keeps the board seam colour") will fail.
+
+const BIRCH_PALETTE: WoodPalette = {
+  bark: ["#e6dab8", "#e6dab8", "#eee2c4", "#d8ca9e", "#f5ecd6", "#c9ba8c"],
+  barkAxis: "horizontal",
+  barkStreak: "#332b1e",
+  barkStreakHighlight: "#332b1e",
+  knotCenter: "#2b2318",
+  knotRing: "#584d38",
+  topBg: ["#e9dcb9", "#e9dcb9", "#f0e5c8", "#ddd0a3", "#f7efdc"],
+  topRingA: "#c9b183",
+  topRingB: "#d9c398",
+  topCenter: "#b89e6e",
+  topRim: "#332b1e",
+  planksBases: ["#e3d6ae", "#dccaa0", "#ebe0bc", "#dfd2a8"],
+  planksSeam: "#a89468",
+  planksNail: "#6b5b3c",
+  leaves: ["#5fae46", "#5fae46", "#71c05a", "#4a9636", "#86d16c", "#357a28"],
+  leavesFleckDark: "#2f6b21",
+  leavesFleckLight: "#a9e08c",
+  leavesHole: "#2c5c1f",
+};
+
+const SPRUCE_PALETTE: WoodPalette = {
+  bark: ["#3f2f1f", "#3f2f1f", "#4a3826", "#332619", "#54402c", "#2a1f14"],
+  barkAxis: "vertical",
+  barkStreak: "#1c130b",
+  barkStreakHighlight: "#5c4630",
+  knotCenter: "#140d07",
+  knotRing: "#2c2013",
+  topBg: ["#4d3a26", "#4d3a26", "#573f2a", "#402e1c", "#5e4830"],
+  topRingA: "#382a1a",
+  topRingB: "#453321",
+  topCenter: "#2e2013",
+  topRim: "#1c130b",
+  planksBases: ["#8a5a34", "#7d4f2c", "#96643c", "#875730"],
+  planksSeam: "#4a2f18",
+  planksNail: "#2e1c0d",
+  leaves: ["#1f4a42", "#1f4a42", "#2a5c50", "#173a34", "#356e60", "#0f2a26"],
+  leavesFleckDark: "#0c211d",
+  leavesFleckLight: "#4f8f7d",
+  leavesHole: "#122f2a",
+};
+
+function logSide(buf: Buffer, pal: WoodPalette): void {
+  // per-column tone, then fine vertical streaking
+  const rgb = pal.bark.map(hexToRGB);
   for (let x = 0; x < 16; x++) {
     const col = hash2(Math.floor(x / 2), 0, 20) * 0.7 + hash2(x, 0, 21) * 0.3;
-    const base = pal[Math.min(pal.length - 1, Math.floor(col * pal.length))];
+    const base = rgb[Math.min(rgb.length - 1, Math.floor(col * rgb.length))];
     for (let y = 0; y < 16; y++) {
       const d = (hash2(x, Math.floor(y / 3), 22) - 0.5) * 2 * 9;
       setPixel(buf, x, y, { r: clampByte(base.r + d), g: clampByte(base.g + d), b: clampByte(base.b + d) });
     }
   }
-  // bark grooves: a dark 1px column with a lighter ridge on its right,
-  // broken into runs so it reads as fissured bark rather than a straight cut.
-  for (const gx of LOG_GROOVE_COLS) {
-    for (let y = 0; y < 16; y++) {
-      if (hash2(gx, Math.floor(y / 4), 25) > 0.2) {
-        setHex(buf, gx, y, "#3f2f1c");
-        if (gx + 1 < 16 && hash2(gx, y, 26) > 0.5) setHex(buf, gx + 1, y, "#8a7145");
+  if (pal.barkAxis === "vertical") {
+    // bark grooves: a dark 1px column with a lighter ridge on its right,
+    // broken into runs so it reads as fissured bark rather than a straight cut.
+    for (const gx of LOG_GROOVE_COLS) {
+      for (let y = 0; y < 16; y++) {
+        if (hash2(gx, Math.floor(y / 4), 25) > 0.2) {
+          setHex(buf, gx, y, pal.barkStreak);
+          if (gx + 1 < 16 && hash2(gx, y, 26) > 0.5) setHex(buf, gx + 1, y, pal.barkStreakHighlight);
+        }
+      }
+    }
+  } else {
+    // bark flecks: dark 1px rows broken into runs, reading as birch's horizontal lenticels.
+    for (const gy of LOG_FLECK_ROWS) {
+      for (let x = 0; x < 16; x++) {
+        if (hash2(Math.floor(x / 4), gy, 25) > 0.2) setHex(buf, x, gy, pal.barkStreak);
       }
     }
   }
@@ -282,13 +380,13 @@ function logSide(buf: Buffer): void {
     for (let dx = -1; dx <= 1; dx++) {
       const x = 11 + dx, y = 7 + dy;
       if (x < 0 || y < 0 || x > 15 || y > 15) continue;
-      setHex(buf, x, y, dx === 0 && dy === 0 ? "#2f2113" : "#4a3722");
+      setHex(buf, x, y, dx === 0 && dy === 0 ? pal.knotCenter : pal.knotRing);
     }
   }
 }
 
-function logTop(buf: Buffer): void {
-  speckle(buf, ["#b39058", "#b39058", "#bd9b63", "#a8854e", "#c6a56e"], 23, 2);
+function logTop(buf: Buffer, pal: WoodPalette): void {
+  speckle(buf, pal.topBg, 23, 2);
   // continuous growth rings: for each pixel, test its angular slice against
   // each target radius with a per-slice wobble, instead of rounding distance
   // to an integer (which breaks the ring into disconnected pixels).
@@ -301,29 +399,29 @@ function logTop(buf: Buffer): void {
       for (const radius of RING_RADII) {
         const wobble = (hash2(slice, radius, 24) - 0.5) * 1.2;
         if (Math.abs(dist - (radius + wobble)) < 0.55) {
-          setHex(buf, x, y, hash2(x, y, 24) > 0.35 ? "#8e6f40" : "#9c7d4c");
+          setHex(buf, x, y, hash2(x, y, 24) > 0.35 ? pal.topRingA : pal.topRingB);
           break;
         }
       }
     }
   }
-  for (const [x, y] of [[7, 7], [8, 7], [7, 8], [8, 8]]) setHex(buf, x, y, "#7d6035");
+  for (const [x, y] of [[7, 7], [8, 7], [7, 8], [8, 8]]) setHex(buf, x, y, pal.topCenter);
   // bark rim around the cut face
   for (let i = 0; i < 16; i++) {
-    if (hash2(i, 0, 27) > 0.15) setHex(buf, i, 0, "#5b452b");
-    if (hash2(i, 15, 27) > 0.15) setHex(buf, i, 15, "#5b452b");
-    if (hash2(0, i, 28) > 0.15) setHex(buf, 0, i, "#5b452b");
-    if (hash2(15, i, 28) > 0.15) setHex(buf, 15, i, "#5b452b");
+    if (hash2(i, 0, 27) > 0.15) setHex(buf, i, 0, pal.topRim);
+    if (hash2(i, 15, 27) > 0.15) setHex(buf, i, 15, pal.topRim);
+    if (hash2(0, i, 28) > 0.15) setHex(buf, 0, i, pal.topRim);
+    if (hash2(15, i, 28) > 0.15) setHex(buf, 15, i, pal.topRim);
   }
 }
 
-function planksTexture(buf: Buffer): void {
-  const bases = ["#b58c4f", "#a97f45", "#bf975a", "#b08a4a"];
+function planksTexture(buf: Buffer, pal: WoodPalette): void {
+  const bases = pal.planksBases;
   for (let y = 0; y < 16; y++) {
     const band = Math.floor(y / 4);
-    const pal = [bases[band], bases[band], bases[band],
+    const rowPal = [bases[band], bases[band], bases[band],
       shift(bases[band], 14), shift(bases[band], -20)];
-    for (let x = 0; x < 16; x++) setHex(buf, x, y, ramp(pal, clump(x, y, 50 + band, 2)));
+    for (let x = 0; x < 16; x++) setHex(buf, x, y, ramp(rowPal, clump(x, y, 50 + band, 2)));
   }
   // grain streaks inside each plank
   for (let band = 0; band < 4; band++) {
@@ -331,28 +429,28 @@ function planksTexture(buf: Buffer): void {
     for (let x = 0; x < 16; x++) if (hash2(x, band, 56) > 0.45) setHex(buf, x, y, shift(bases[band], -26));
   }
   for (let x = 0; x < 16; x++) {
-    for (const y of [3, 7, 11, 15]) setHex(buf, x, y, "#71512a");
+    for (const y of [3, 7, 11, 15]) setHex(buf, x, y, pal.planksSeam);
   }
-  for (let y = 0; y < 3; y++) setHex(buf, 8, y, "#71512a");
-  for (let y = 4; y < 7; y++) setHex(buf, 3, y, "#71512a");
-  for (let y = 8; y < 11; y++) setHex(buf, 12, y, "#71512a");
-  for (let y = 12; y < 15; y++) setHex(buf, 6, y, "#71512a");
+  for (let y = 0; y < 3; y++) setHex(buf, 8, y, pal.planksSeam);
+  for (let y = 4; y < 7; y++) setHex(buf, 3, y, pal.planksSeam);
+  for (let y = 8; y < 11; y++) setHex(buf, 12, y, pal.planksSeam);
+  for (let y = 12; y < 15; y++) setHex(buf, 6, y, pal.planksSeam);
   // nail heads, one pair per plank board
   for (let band = 0; band < 4; band++) {
-    setHex(buf, 1, band * 4 + 1, "#4a3a24");
-    setHex(buf, 14, band * 4 + 2, "#4a3a24");
+    setHex(buf, 1, band * 4 + 1, pal.planksNail);
+    setHex(buf, 14, band * 4 + 2, pal.planksNail);
   }
 }
 
-function leavesTexture(buf: Buffer): void {
-  speckle(buf, ["#2a5f1e", "#2a5f1e", "#397b29", "#1f4716", "#4f9636", "#6fbc52"], 30, 2);
-  scatter(buf, "#1a3811", 31, 0.90);
-  scatter(buf, "#79bd5b", 32, 0.93);
-  // clumped alpha-0 holes with dark green showing through underneath, so the
+function leavesTexture(buf: Buffer, pal: WoodPalette): void {
+  speckle(buf, pal.leaves, 30, 2);
+  scatter(buf, pal.leavesFleckDark, 31, 0.90);
+  scatter(buf, pal.leavesFleckLight, 32, 0.93);
+  // clumped alpha-0 holes with dark colour showing through underneath, so the
   // cutout reads as gaps in a canopy rather than a bleeding transparent edge.
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
-      if (clump(x, y, 33, 2) > 0.685) setHex(buf, x, y, "#173410", 0);
+      if (clump(x, y, 33, 2) > 0.685) setHex(buf, x, y, pal.leavesHole, 0);
     }
   }
 }

@@ -6,7 +6,7 @@ import * as crypto from "crypto";
 import sharp from "sharp";
 import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { TextureAtlas } from "@engine/renderer/TextureAtlas";
-import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS, woodBlockIds } from "@data/blocks";
 import { BLOCK_HEX_COLORS } from "@data/items";
 import { ATLAS_UVS, ATLAS_HASH, ITEM_ATLAS_UVS, ITEM_ATLAS_HASH } from "@data/atlasUVs";
 import { useHotbarStore } from "@store/useHotbarStore";
@@ -340,5 +340,62 @@ describe("atlas <-> mesh builder integrity (F4 guard, complements ChunkMeshBuild
 
     expect(result.vertexCount).toBe(48);
     expect(result.indexCount).toBe(72);
+  });
+});
+
+async function tileMeanColour(name: string): Promise<{ r: number; g: number; b: number; holeFrac: number }> {
+  const { data, width, height } = await readPng("atlas.png");
+  const rect = ATLAS_UVS[name];
+  const x0 = Math.round(rect.u0 * width), y0 = Math.round(rect.v0 * height);
+  const x1 = Math.round(rect.u1 * width), y1 = Math.round(rect.v1 * height);
+  let r = 0, g = 0, b = 0, n = 0, below = 0, total = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * width + x) * 4;
+      total++;
+      if (data[i + 3] < 128) { below++; continue; }
+      r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+    }
+  }
+  return { r: r / n, g: g / n, b: b / n, holeFrac: below / total };
+}
+
+describe("wood species palettes (F5)", () => {
+  it("birch bark is lighter than oak, spruce bark is darker than oak", async () => {
+    const oak = await tileMeanColour("log_side");
+    const birch = await tileMeanColour("birch_log_side");
+    const spruce = await tileMeanColour("spruce_log_side");
+    const lum = (c: { r: number; g: number; b: number }) => (c.r + c.g + c.b) / 3;
+    expect(lum(birch)).toBeGreaterThan(lum(oak));
+    expect(lum(oak)).toBeGreaterThan(lum(spruce));
+  });
+
+  it("every species' leaves tile has 15-35% cutout holes", async () => {
+    for (const name of ["leaves", "birch_leaves", "spruce_leaves"]) {
+      const { holeFrac } = await tileMeanColour(name);
+      expect(holeFrac, name).toBeGreaterThanOrEqual(0.15);
+      expect(holeFrac, name).toBeLessThanOrEqual(0.35);
+    }
+  });
+
+  it("the three planks tiles have pairwise distinct mean colour", async () => {
+    const oak = await tileMeanColour("planks");
+    const birch = await tileMeanColour("birch_planks");
+    const spruce = await tileMeanColour("spruce_planks");
+    const dist = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
+      Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
+    expect(dist(oak, birch)).toBeGreaterThan(15);
+    expect(dist(oak, spruce)).toBeGreaterThan(15);
+    expect(dist(birch, spruce)).toBeGreaterThan(15);
+  });
+
+  it("every wood block's texture names resolve to atlas UV rects", () => {
+    for (const id of woodBlockIds()) {
+      const def = BLOCK_DEFINITIONS[id];
+      for (const face of ["top", "bottom", "side"] as const) {
+        const name = def.textures[face];
+        expect(ATLAS_UVS[name], `${def.name} ${face} -> "${name}"`).toBeDefined();
+      }
+    }
   });
 });
