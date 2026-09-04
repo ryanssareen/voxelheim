@@ -24,3 +24,32 @@ Splitting one frame's displacement into bounded increments and resolving collisi
 
 ### Void Kill
 The rule that an entity which falls below the bottom of the world is destroyed rather than left falling forever. Players and mobs use different depth thresholds, and a mob's is the shallower of the two — a mob displaced below the terrain surface dies quickly, while a player has more margin to recover.
+
+### Knockback Impulse
+A decaying horizontal push kept in its own channel, separate from the velocity that AI or player input assigns every tick. It is added to displacement at move time, decays exponentially, and is zeroed on a wall hit. Writing knockback into velocity does not work because the next tick overwrites it.
+
+## Progression
+
+### Tool Tier
+The harvest level of a tool (wood 1, stone 2, iron 3, diamond 4; empty hand 0). A block may declare a minimum tier. Below-tier mining still breaks the block but drops nothing, does not count toward the objective, and is slower. The tool type gate (`requiresTool`) and the tier gate are separate checks and both must pass.
+
+### Objective Block
+A block whose definition carries `special: "crystal_shard"`. Breaking one with a sufficient tool advances the win condition. No recipe may output one and it cannot be placed, so the world-generated count is the only supply.
+
+## Economy
+
+### Value Potential
+An abstract per-block value such that every recipe's output is worth no more than its inputs. Because total inventory value can never rise, no crafting loop can create items. The table lives with the economy test; a recipe that violates it is a bug in the recipe, not the table.
+
+## Inventory
+
+### Slot Region
+A contiguous range of a screen's flat slot space with a role, an `accepts` predicate that reads item data, and a destination priority. Quick-move resolves purely against declared regions, so adding a container means declaring its regions and nothing else. Output regions are take-only; negative priority means never a destination.
+
+### Quick-Move
+Shift-click transfer of a stack into the best accepting region: partial stacks of the same item first, then empty slots, whole stack or as much as fits, remainder left at the source. Conservation is the acceptance test: the multiset of items across every slot and the cursor never changes.
+
+## Simulation
+
+### Random Tick
+A budgeted per-frame pass that samples a few cells in each loaded chunk and applies data-declared rules (grass spreads to lit dirt, grass under an opaque block decays). Edits carry the change source `"simulation"`, are client-local, and re-mesh through the normal `setBlock` path.

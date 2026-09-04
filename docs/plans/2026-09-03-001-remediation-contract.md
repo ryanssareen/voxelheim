@@ -328,3 +328,46 @@ correct.
 2. B, C, D, E, F, G, H, I in parallel from the merged main.
 3. Lead applies Engine patches (D random ticker, F atlas arg) and PauseMenu
    change, runs the gate, merges.
+
+## Phase 2 — completion record (2026-09-04)
+
+All nine workstreams merged to main; every merge passed
+`npx tsc --noEmit && npm run lint && npm test`. Test suite grew from 22 files
+/ 247 tests to 37 files / 607 tests. Lint went from 11 warnings to 10 (an
+unused recipe const removed); still 0 errors.
+
+| WS | Branch merge | What landed | New tests |
+|---|---|---|---|
+| A | `a5a9b55` | 11 recipes removed (8 value-creating, 3 tool-free stone sources), Crafting Tables (Bulk) repriced to 2, DIAMOND_ORE -> DIAMOND smelting, `findRecipeForCells`, `systems/crafting/craft.ts` `resolveCraft` | `economy.test.ts` (value potential + cycle DFS + objective guard), `craft.test.ts` (conservation over every recipe) |
+| B | `b497a56` (with G) | `engine/player/harvest.ts` `canHarvest` / `harvestSpeedMultiplier`; BlockInteraction uses both; `special === "crystal_shard"` replaces id compares; crystal_shard blocks cannot be placed (A9) | `toolTiers.test.ts` (full block x tool matrix, integration through `update`, progression fixpoint) |
+| C | `eea1a96` | `unloadColumn` re-queues surviving neighbours for remesh (the invisible wall); island worlds get a STONE perimeter ring y=1..SEA_LEVEL+6 carved after decoration, never over a crystal | `ChunkManager.test.ts` (unload remesh, arrival remesh, border, enumeration) |
+| D | `6124639` | plains cut at humidity < 0.1 (plains ~29% / forest ~30%), cluster-noise trees via `TREE_DENSITY` + `treeChance`, DIRT under trunks, `systems/simulation` RandomTicker + grass spread rule; Engine ticks it each frame | `biomeDistribution`, `treeClusters`, `randomTick` |
+| E | `6124639` | decaying knockback impulse + stagger, model yaw offset (mobs face their travel direction), skeleton re-proportioned, breathing fixed, creeper swell/pulse/hiss/abort via `fuseSeconds`/`fuseAbortRange`, `fuseDetonated` explosion predicate, `MobSfx.ts` | `mobs.test.ts` |
+| F | `6124639` | atlas-textured lit block drops, spinning icon quads for items from a generated `items.png`, cutout leaves (17.6% alpha holes), bark/rings/planks art, per-tile PNG override; Engine passes the atlas | `drops.test.ts` |
+| G | `b497a56` | `quickMove` resolver, flat layout, data-driven regions, `returnToPlayer`, `craftOnce`; open* no longer wipe, close* park leftovers with one write per store, durability survives containers, shift-click everywhere, shared slot hook, furnace result through `resolveCraft` | `inventoryTransfer`, `inventoryConservation`, `inventoryCraft` |
+| H | `6124639` | auto-jump (settings-gated, one-block ledges), player knockback impulse channel, `ui/playCapture.ts` pointer lock + fullscreen, eat progress bar; PauseMenu re-enters through `enterPlayCapture` | `autoJump`, `playCapture`, `hudEatIndicator` |
+| I | `f979f52` | darken-only crack highlight (`CRACK_HIGHLIGHT_RGBA`); Engine hides the overlay on early-return frames (lead, `c0594ca`) | +1 in `blockBreakOverlay.test.ts` |
+
+Lead commits: `3c39582` Phase 0, `89303cb` cross-needs, `c0594ca` overlay
+fix, `6124639` Engine/PauseMenu wiring.
+
+Browser smoke test (Chrome pane, demo island): home page and Options toggles
+render, world loads with cutout leaves, both texture sheets fetched with their
+new hashes, no console errors except pointer-lock rejections that the embedded
+pane does not permit (pre-existing call, environment limitation).
+
+### Follow-ups not done in this pass
+
+- Wood variants (F5): report only; four-owner blast radius, needs append-only
+  ids and a per-world flag for infinite saves.
+- `HandRenderer` / `OffhandRenderer` still draw flat colour cubes for the held
+  item; `TextureAtlas` now exposes everything needed to fix that.
+- `systems/crafting/recipeBook.ts` still returns grid items through
+  `addItem` one unit at a time (loses durability); `returnToPlayer` exists now.
+- `src/engine/workers/**` is dead code (never instantiated).
+- Existing infinite/flat saves regenerate unmodified chunks under the new
+  biome split and tree clustering; stored chunks keep old terrain, so seams
+  can appear at their faces. Island and demo worlds are unaffected except for
+  the new border ring.
+- `requestPointerLock` rejections are unhandled promises in `playCapture.ts`
+  and `InputManager`; harmless, noisy in environments that deny pointer lock.
