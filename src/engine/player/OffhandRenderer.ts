@@ -41,6 +41,7 @@ export class OffhandRenderer {
   private heldBlock: THREE.Mesh;
   private readonly heldBlockMat: THREE.MeshBasicMaterial;
   private readonly heldItemMat: THREE.MeshBasicMaterial;
+  private readonly fallbackMat: THREE.MeshBasicMaterial;
   private readonly skinMat: THREE.MeshBasicMaterial;
   private readonly skinDarkMat: THREE.MeshBasicMaterial;
   private readonly registry = BlockRegistry.getInstance();
@@ -70,7 +71,7 @@ export class OffhandRenderer {
     this.fist.position.set(0, -0.75, 0);
 
     this.heldBlockMat = new THREE.MeshBasicMaterial({
-      color: 0x888888,
+      color: 0xffffff,
       map: this.atlas?.getTexture() ?? null,
       depthTest: false,
     });
@@ -80,6 +81,7 @@ export class OffhandRenderer {
       side: THREE.DoubleSide,
       depthTest: false,
     });
+    this.fallbackMat = new THREE.MeshBasicMaterial({ color: 0x888888, depthTest: false });
     this.heldBlock = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), this.heldBlockMat);
     this.heldBlock.position.set(0, -0.73, 0);
     this.heldBlock.renderOrder = 999;
@@ -126,7 +128,8 @@ export class OffhandRenderer {
       this.registry,
       this.atlas,
       this.heldBlockMat,
-      this.heldItemMat
+      this.heldItemMat,
+      this.fallbackMat
     );
     this.heldBlock.position.copy(position);
     this.heldBlock.renderOrder = 999;
@@ -144,12 +147,12 @@ export class OffhandRenderer {
     registry: BlockRegistry,
     atlas: TextureAtlas | null,
     blockMat: THREE.MeshBasicMaterial,
-    itemMat: THREE.MeshBasicMaterial
+    itemMat: THREE.MeshBasicMaterial,
+    fallbackMat: THREE.MeshBasicMaterial
   ): THREE.Mesh {
     const def = registry.getBlock(blockId);
 
     if (def && def.textures.side !== "" && atlas?.getTexture()) {
-      blockMat.color.setHex(0xffffff);
       const geometry = new THREE.BoxGeometry(0.14, 0.14, 0.14);
       for (let group = 0; group < BOX_FACE_OF_GROUP.length; group++) {
         const rect = atlas.getBlockFaceUVs(blockId, BOX_FACE_OF_GROUP[group]);
@@ -165,8 +168,8 @@ export class OffhandRenderer {
       return new THREE.Mesh(geometry, itemMat);
     }
 
-    blockMat.color.setHex(BLOCK_COLORS[blockId] ?? 0x888888);
-    return new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), blockMat);
+    fallbackMat.color.setHex(BLOCK_COLORS[blockId] ?? 0x888888);
+    return new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), fallbackMat);
   }
 
   update(dt: number, isWalking: boolean): void {

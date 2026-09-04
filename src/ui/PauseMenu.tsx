@@ -89,13 +89,18 @@ function PausePanel({
     }
   };
 
+  const secondaryButtonClass =
+    "w-full py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors";
+
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30">
-      <div className="flex flex-col items-center gap-6 bg-gray-900/90 rounded-lg p-10 border border-gray-700">
-        <h2 className="text-3xl font-mono font-bold text-white">PAUSED</h2>
+    <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30 p-6">
+      <div className="flex max-h-full w-64 flex-col items-stretch gap-4 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/90 p-6">
+        <h2 className="text-center text-2xl font-mono font-bold tracking-wide text-white">
+          PAUSED
+        </h2>
 
         {multiplayerSession && (
-          <div className="w-64 rounded border border-cyan-400/20 bg-cyan-500/5 p-3 text-center">
+          <div className="rounded border border-cyan-400/20 bg-cyan-500/5 p-3 text-center">
             <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-cyan-200/80">
               {multiplayerSession.transport === "local"
                 ? "Local Co-op"
@@ -119,51 +124,38 @@ function PausePanel({
 
         <button
           onClick={handleResume}
-          className="w-48 py-3 bg-white/10 hover:bg-white/20 text-white font-mono rounded border border-white/20 transition-colors"
+          className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-mono rounded border border-white/20 transition-colors"
         >
           Resume
         </button>
 
-        {gameMode !== "hardcore" && (
-          <button
-            onClick={handleToggleGameMode}
-            className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
-          >
-            {gameMode === "creative" ? "Switch to Survival" : "Switch to Creative"}
+        <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
+          {gameMode !== "hardcore" && (
+            <button onClick={handleToggleGameMode} className={secondaryButtonClass}>
+              {gameMode === "creative" ? "Switch to Survival" : "Switch to Creative"}
+            </button>
+          )}
+
+          <button onClick={handleSetSpawn} className={secondaryButtonClass}>
+            {spawnSet ? "Spawn set!" : "Set Spawn Here"}
           </button>
-        )}
 
-        <button
-          onClick={handleSetSpawn}
-          className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
-        >
-          {spawnSet ? "Spawn set!" : "Set Spawn Here"}
-        </button>
+          <button onClick={handleShowWalkthrough} className={secondaryButtonClass}>
+            How to Play
+          </button>
 
-        <button
-          onClick={handleShowWalkthrough}
-          className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
-        >
-          How to Play
-        </button>
+          <button onClick={handleShowControls} className={secondaryButtonClass}>
+            Controls
+          </button>
 
-        <button
-          onClick={handleShowControls}
-          className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
-        >
-          Controls
-        </button>
-
-        <button
-          onClick={handleCreateWorld}
-          className="w-48 py-2 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white font-mono text-sm rounded border border-white/10 transition-colors"
-        >
-          Create New World
-        </button>
+          <button onClick={handleCreateWorld} className={secondaryButtonClass}>
+            Create New World
+          </button>
+        </div>
 
         <button
           onClick={handleQuit}
-          className="w-48 py-3 bg-white/5 hover:bg-red-900/30 text-white/60 hover:text-white font-mono rounded border border-white/10 transition-colors"
+          className="w-full py-3 bg-white/5 hover:bg-red-900/30 text-white/60 hover:text-white font-mono rounded border border-white/10 transition-colors"
         >
           Quit to Menu
         </button>
