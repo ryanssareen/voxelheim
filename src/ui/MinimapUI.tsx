@@ -7,7 +7,7 @@ import { useGameStore } from "@store/useGameStore";
 import { useHudMetrics } from "@ui/useHudScale";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { SEA_LEVEL } from "@engine/world/constants";
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 
 const MAP_SIZE = 176; // canvas pixels
 const SAMPLES = 96; // terrain grid resolution per axis
@@ -46,6 +46,7 @@ const CAT_ICE = makeCategory("Ice", "#b3e5fc");
 const CAT_GRASS = makeCategory("Grass", "#6aab3f");
 const CAT_STONE = makeCategory("Stone", "#8a8a8a");
 const CAT_WOOD = makeCategory("Wood", "#8b6914");
+const CAT_LEAVES = makeCategory("Leaves", "#3f7d2c");
 
 // Biome colors for infinite worlds
 const BIOME_CATEGORIES: Record<string, Category> = {
@@ -56,7 +57,9 @@ const BIOME_CATEGORIES: Record<string, Category> = {
   snowy: makeCategory("Snowy", "#eceff1"),
 };
 
-// Surface-block color buckets for island/flat worlds and loaded chunks
+// Surface-block color buckets for island/flat worlds and loaded chunks.
+// Wood blocks (any species) are not listed here — they resolve via
+// blockCategory() below, from BlockDefinition.wood.part instead of by id.
 const BLOCK_CATEGORIES: Record<number, Category> = {
   [BLOCK_ID.GRASS]: CAT_GRASS,
   [BLOCK_ID.DIRT]: makeCategory("Dirt", "#9b7653"),
@@ -68,11 +71,19 @@ const BLOCK_CATEGORIES: Record<number, Category> = {
   [BLOCK_ID.SNOW]: makeCategory("Snow", "#f4f8fa"),
   [BLOCK_ID.ICE]: CAT_ICE,
   [BLOCK_ID.WATER]: CAT_WATER,
-  [BLOCK_ID.LOG]: CAT_WOOD,
-  [BLOCK_ID.PLANKS]: CAT_WOOD,
   [BLOCK_ID.CRAFTING_TABLE]: CAT_WOOD,
-  [BLOCK_ID.LEAVES]: makeCategory("Leaves", "#3f7d2c"),
 };
+
+/**
+ * Minimap category for a block, including every wood species: log and
+ * planks read as Wood, leaves as Leaves, regardless of species. Non-wood
+ * blocks fall back to the id-keyed table above.
+ */
+export function blockCategory(blockId: number): Category | undefined {
+  const wood = BLOCK_DEFINITIONS[blockId]?.wood;
+  if (wood) return wood.part === "leaves" ? CAT_LEAVES : CAT_WOOD;
+  return BLOCK_CATEGORIES[blockId];
+}
 
 // Blocks the generator itself places at the surface of infinite worlds —
 // these keep the biome color; anything else is a player build and overrides it.
@@ -95,7 +106,7 @@ function categorize(
   if (info.surfaceY <= SEA_LEVEL) {
     return isInfinite && info.biome === "snowy" ? CAT_ICE : CAT_WATER;
   }
-  const blockCat = BLOCK_CATEGORIES[info.blockId];
+  const blockCat = blockCategory(info.blockId);
   if (isInfinite) {
     if (blockCat && !NATURAL_INFINITE_SURFACE.has(info.blockId)) return blockCat;
     if (info.biome) return BIOME_CATEGORIES[info.biome] ?? CAT_GRASS;
