@@ -65,6 +65,12 @@ export class TerrainGenerator {
   /**
    * Determine the biome at a world column using temperature and humidity noise.
    * Only meaningful for infinite worlds.
+   *
+   * NOTE: changing these thresholds changes the terrain of every *unmodified*
+   * chunk on existing infinite/flat saves the next time it is regenerated
+   * from seed (WorldStorage only persists player-modified chunks; everything
+   * else regenerates on load). Island worlds never call getBiome and are
+   * unaffected.
    */
   getBiome(wx: number, wz: number): Biome {
     // Large-scale noise -> big biome regions (hundreds of blocks each)
@@ -76,9 +82,9 @@ export class TerrainGenerator {
     if (temp < -0.5) return "snowy";
     // Warm + dry -> mountains (~8%)
     if (temp > 0.15 && humidity < -0.15) return "mountains";
-    // Very dry -> plains (~12%)
-    if (humidity < -0.4) return "plains";
-    // Everything else -> forest (dominant ~50%)
+    // Dry side of the humidity field -> plains (~30%)
+    if (humidity < 0.1) return "plains";
+    // Wet side -> forest (~30%)
     return "forest";
   }
 
@@ -157,6 +163,11 @@ export class TerrainGenerator {
           surfaceMap.set(`${wx},${wz}`, surfaceY);
         }
 
+        // Pure function of (wx, wz): hoisted out of the y loop below rather
+        // than recomputed per block. Determinism-neutral (same value every
+        // call), just cheaper (16 calls into 2 noise samples instead of 16).
+        const columnBiome = this.worldType === "infinite" ? this.getBiome(wx, wz) : undefined;
+
         for (let y = 0; y < CHUNK_SIZE; y++) {
           const wy = cy * CHUNK_SIZE + y;
 
@@ -183,7 +194,7 @@ export class TerrainGenerator {
             }
           } else if (this.worldType === "infinite") {
             // Biome-aware block placement for infinite worlds
-            const biome = this.getBiome(wx, wz);
+            const biome = columnBiome as Biome;
             if (wy === 0) {
               chunk.setBlock(x, y, z, BLOCK_ID.STONE); // bedrock
             } else if (wy > surfaceY) {

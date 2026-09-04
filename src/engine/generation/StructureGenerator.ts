@@ -2,6 +2,7 @@ import { Chunk } from "@engine/world/Chunk";
 import { BLOCK_ID } from "@data/blocks";
 import { CHUNK_SIZE, SEA_LEVEL, CRYSTAL_MIN_DEPTH } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
+import { SeededNoise } from "@lib/noise";
 import type { TerrainGenerator, Biome } from "@engine/generation/TerrainGenerator";
 
 /** Simple deterministic string hash producing a 32-bit integer. */
@@ -22,13 +23,52 @@ function mixHash(a: number, b: number): number {
 }
 
 /**
+ * Per-biome tree density curve. `floor` is the base (background) tree
+ * chance, `peak` is the chance inside a cluster, and `onset` is the
+ * cluster-noise threshold (in [0, 1]) above which the chance ramps from
+ * floor up to peak. This is a data table, not a switch — tune density here.
+ */
+interface TreeDensity {
+  floor: number;
+  peak: number;
+  onset: number;
+}
+
+const TREE_DENSITY: Record<Biome, TreeDensity> = {
+  forest: { floor: 0.004, peak: 0.12, onset: 0.30 },
+  plains: { floor: 0.0012, peak: 0.115, onset: 0.68 },
+  mountains: { floor: 0.003, peak: 0.05, onset: 0.50 },
+  snowy: { floor: 0.004, peak: 0.07, onset: 0.45 },
+  desert: { floor: 0, peak: 0, onset: 1 },
+};
+
+/** World-space scale (in blocks) of the cluster-noise field driving tree density. */
+const TREE_CLUSTER_SCALE = 32;
+
+/**
  * Places structures (trees) into an already-generated world.
  */
 export class StructureGenerator {
   private readonly seedHash: number;
+  private readonly clusterNoise: SeededNoise;
 
   constructor(seed: string) {
     this.seedHash = hashString(seed + ":structures");
+    this.clusterNoise = new SeededNoise(hashString(seed + ":treeclusters"));
+  }
+
+  /**
+   * Tree placement chance at a world column for a given biome: a low-frequency
+   * simplex field (the "cluster" spatial variation) picks out groves and
+   * clearings, and the uniform hash roll in decorateChunk/placeTrees decides
+   * yes/no against that chance (noise for spatial shape, hash for the
+   * probability decision — see docs/solutions/best-practices/noise-vs-hash-for-probability-decisions).
+   */
+  treeChance(wx: number, wz: number, biome: Biome): number {
+    const d = TREE_DENSITY[biome];
+    const f = (this.clusterNoise.noise2D(wx / TREE_CLUSTER_SCALE, wz / TREE_CLUSTER_SCALE) + 1) / 2;
+    if (f < d.onset) return d.floor;
+    return d.floor + (d.peak - d.floor) * ((f - d.onset) / (1 - d.onset));
   }
 
   /**
@@ -143,22 +183,26 @@ export class StructureGenerator {
         const surfaceY = terrainGen.getSurfaceHeight(wx, wz);
         if (surfaceY <= SEA_LEVEL + 2) continue;
 
-        // Biome-dependent tree chance
+        // Cluster-noise driven tree chance (spatial variation), gated by
+        // the existing uniform hash roll (the yes/no decision).
         const biome: Biome = terrainGen.getBiome(wx, wz);
-        if (biome === "desert") continue; // No trees in deserts
-        let treeThreshold: number;
-        switch (biome) {
-          case "plains":    treeThreshold = 0.015; break;
-          case "forest":    treeThreshold = 0.10;  break;
-          case "mountains": treeThreshold = 0.025; break;
-          case "snowy":     treeThreshold = 0.04;  break;
-          default:          treeThreshold = 0.04;  break;
-        }
         const chance = mixHash(wx + this.seedHash, wz) / 4294967296;
-        if (chance > treeThreshold) continue;
+        if (chance > this.treeChance(wx, wz, biome)) continue;
 
         const trunkRand = mixHash(wx + this.seedHash + 1000, wz + 1000) / 4294967296;
         const trunkHeight = 4 + Math.floor(trunkRand * 3);
+
+        // Write DIRT under the trunk (Minecraft-style) so the surface block
+        // a tree stands on is never GRASS with an opaque block directly
+        // above it — otherwise the grass-decay random tick would immediately
+        // start converting pristine, freshly generated terrain.
+        if (surfaceY >= chunkMinY && surfaceY <= chunkMaxY) {
+          const tc = worldToChunk(wx, surfaceY, wz);
+          if (tc.cx === cx && tc.cz === cz) {
+            const local = worldToLocal(wx, surfaceY, wz);
+            chunk.setBlock(local.lx, local.ly, local.lz, BLOCK_ID.DIRT);
+          }
+        }
 
         // Place trunk blocks that fall in this chunk
         for (let ty = 1; ty <= trunkHeight; ty++) {
