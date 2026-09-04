@@ -35,6 +35,13 @@ describe("resolveCraft — basic consumption", () => {
     expect(outcome!.cursor).toEqual(stack(BLOCK_ID.PLANKS, 4));
   });
 
+  it("follows the input species: a birch log resolves to birch planks, not canonical oak", () => {
+    const grid = [stack(BLOCK_ID.BIRCH_LOG, 1), empty(), empty(), empty()];
+    const outcome = resolveCraft(grid, empty(), MAX_STACK);
+    expect(outcome).not.toBeNull();
+    expect(outcome!.cursor).toEqual(stack(BLOCK_ID.BIRCH_PLANKS, 4));
+  });
+
   it("decrements a cell by one when more than one item sits there", () => {
     const outcome = resolveCraft(plankGrid(2), empty(), MAX_STACK);
     expect(outcome).not.toBeNull();

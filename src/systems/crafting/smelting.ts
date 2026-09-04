@@ -1,4 +1,4 @@
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS, isBurnable } from "@data/blocks";
 
 /** A smelting recipe: input + fuel → output. */
 export interface SmeltingRecipe {
@@ -8,13 +8,10 @@ export interface SmeltingRecipe {
   name: string;
 }
 
-/** Items that can be used as furnace fuel. */
-export const FUEL_ITEMS: ReadonlySet<number> = new Set([
-  BLOCK_ID.STICK,
-  BLOCK_ID.PLANKS,
-  BLOCK_ID.LOG,
-  BLOCK_ID.LEAVES,
-]);
+/** Items that can be used as furnace fuel — every block flagged burnable in the block data. */
+export const FUEL_ITEMS: ReadonlySet<number> = new Set(
+  BLOCK_DEFINITIONS.filter((d) => isBurnable(d.id)).map((d) => d.id)
+);
 
 export const SMELTING_RECIPES: SmeltingRecipe[] = [
   { input: BLOCK_ID.RAW_PORK, result: BLOCK_ID.COOKED_PORK, count: 1, name: "Cooked Pork" },
@@ -32,5 +29,5 @@ export function findSmeltingRecipe(inputId: number): SmeltingRecipe | null {
 
 /** Check if an item can be used as fuel. */
 export function isFuel(itemId: number): boolean {
-  return FUEL_ITEMS.has(itemId);
+  return isBurnable(itemId);
 }

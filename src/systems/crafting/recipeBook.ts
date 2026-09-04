@@ -1,5 +1,12 @@
 import type { ItemStack } from "@store/useHotbarStore";
 import {
+  BLOCK_DEFINITIONS,
+  getWoodBlockId,
+  WOOD_SPECIES,
+  type WoodPart,
+  type WoodSpecies,
+} from "@data/blocks";
+import {
   RECIPES,
   RECIPES_3x3,
   type CraftingRecipe,
@@ -87,13 +94,23 @@ export function countAvailable(slots: ReadonlyArray<ItemStack>): Map<number, num
   return have;
 }
 
+/**
+ * Available count for a requirement id: exact match, or — for a wood cell —
+ * summed across every species of that part.
+ */
+function availableForRequirement(blockId: number, available: ReadonlyMap<number, number>): number {
+  const wood = BLOCK_DEFINITIONS[blockId]?.wood;
+  if (!wood) return available.get(blockId) ?? 0;
+  return WOOD_SPECIES.reduce((sum, species) => sum + (available.get(getWoodBlockId(species, wood.part)) ?? 0), 0);
+}
+
 /** Whether the held items cover everything the recipe consumes. */
 export function canCraft(
   entry: BookEntry,
   available: ReadonlyMap<number, number>
 ): boolean {
   for (const [blockId, needed] of requirementsFor(entry)) {
-    if ((available.get(blockId) ?? 0) < needed) return false;
+    if (availableForRequirement(blockId, available) < needed) return false;
   }
   return true;
 }
@@ -127,26 +144,76 @@ function clearGridToInventory(host: GridFillHost): void {
 }
 
 /**
+ * Species already present in the grid, by wood part — read before clearing,
+ * so a fill can favor the species the player already committed to for that
+ * part.
+ */
+function existingSpeciesByPart(grid: ReadonlyArray<ItemStack>): Map<WoodPart, WoodSpecies> {
+  const preferred = new Map<WoodPart, WoodSpecies>();
+  for (const cell of grid) {
+    if (cell.count <= 0 || cell.blockId === 0) continue;
+    const wood = BLOCK_DEFINITIONS[cell.blockId]?.wood;
+    if (wood && !preferred.has(wood.part)) preferred.set(wood.part, wood.species);
+  }
+  return preferred;
+}
+
+/** Species to try, in order: the preferred one first (if any), then WOOD_SPECIES order. */
+function speciesCandidates(preferred: WoodSpecies | undefined): readonly WoodSpecies[] {
+  return preferred ? [preferred, ...WOOD_SPECIES.filter((s) => s !== preferred)] : WOOD_SPECIES;
+}
+
+/**
  * Lays a recipe's ingredients into the crafting grid, pulling them out of the
  * inventory. Clears the grid back into the inventory first.
+ *
+ * A wood requirement tries each species' id for that part (preferring the
+ * species already in the grid, then WOOD_SPECIES order) so the grid ends up
+ * holding whatever species was actually taken — never silently rewritten to
+ * the canonical (oak) id.
  *
  * Returns false and restores what it took if the inventory turns out not to
  * cover the recipe — so a click can never half-fill a grid or eat items.
  */
 export function fillGridFromRecipe(entry: BookEntry, host: GridFillHost): boolean {
+  const preferredSpecies = existingSpeciesByPart(host.readGrid());
   clearGridToInventory(host);
 
   const need = requirementsFor(entry);
+  const indicesFor = new Map<number, number[]>();
+  entry.cells.forEach((cell, i) => {
+    if (cell === 0) return;
+    indicesFor.set(cell, [...(indicesFor.get(cell) ?? []), i]);
+  });
+
+  const placed: number[] = new Array(entry.cells.length).fill(0);
   const taken = new Map<number, number>();
   let short = false;
 
-  for (const [blockId, count] of need) {
+  const take = (blockId: number, count: number): number => {
     const got = host.takeItems(blockId, count);
-    taken.set(blockId, got);
-    if (got < count) {
-      short = true;
-      break;
+    if (got > 0) taken.set(blockId, (taken.get(blockId) ?? 0) + got);
+    return got;
+  };
+
+  for (const [canonicalId, count] of need) {
+    const wood = BLOCK_DEFINITIONS[canonicalId]?.wood;
+    const indices = indicesFor.get(canonicalId)!;
+    if (!wood) {
+      const got = take(canonicalId, count);
+      for (let k = 0; k < got; k++) placed[indices[k]] = canonicalId;
+      if (got < count) { short = true; break; }
+      continue;
     }
+    let filled = 0;
+    for (const species of speciesCandidates(preferredSpecies.get(wood.part))) {
+      if (filled >= count) break;
+      const speciesId = getWoodBlockId(species, wood.part);
+      const got = take(speciesId, count - filled);
+      for (let k = 0; k < got; k++) placed[indices[filled + k]] = speciesId;
+      filled += got;
+    }
+    if (filled < count) { short = true; break; }
   }
 
   if (short) {
@@ -157,8 +224,7 @@ export function fillGridFromRecipe(entry: BookEntry, host: GridFillHost): boolea
   }
 
   for (let i = 0; i < entry.cells.length; i++) {
-    const blockId = entry.cells[i];
-    host.setCell(i, blockId, blockId === 0 ? 0 : 1);
+    host.setCell(i, placed[i], placed[i] === 0 ? 0 : 1);
   }
   return true;
 }
