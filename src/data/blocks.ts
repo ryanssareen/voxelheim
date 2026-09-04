@@ -5,6 +5,12 @@ export interface BlockTextures {
   side: string;
 }
 
+/** Tree species. Oak is the canonical variant; block ids 5/6/11 stay oak forever (saves store raw ids). */
+export type WoodSpecies = "oak" | "birch" | "spruce";
+/** Which part of a tree a wood block is. Recipes match wood ingredients by part, not by species. */
+export type WoodPart = "log" | "planks" | "leaves";
+export const WOOD_SPECIES: readonly WoodSpecies[] = ["oak", "birch", "spruce"];
+
 /** Full definition of a block type in the world. */
 export interface BlockDefinition {
   /** Unique numeric identifier for this block type. */
@@ -36,6 +42,10 @@ export interface BlockDefinition {
   hungerRestore?: number;
   /** Seconds the eat animation takes before hunger is restored (food only). Defaults to DEFAULT_EAT_TIME_SECONDS. */
   eatTimeSeconds?: number;
+  /** Set on tree blocks. Species picks the art; part is the crafting ingredient class ("any log", "any planks"). */
+  wood?: { species: WoodSpecies; part: WoodPart };
+  /** Usable as furnace fuel. */
+  burnable?: boolean;
 }
 
 /** Eat duration used when a food definition does not set eatTimeSeconds. */
@@ -98,6 +108,12 @@ export const BLOCK_ID = {
   DIAMOND_CHESTPLATE: 47,
   DIAMOND_LEGGINGS: 48,
   DIAMOND_BOOTS: 49,
+  BIRCH_LOG: 50,
+  BIRCH_LEAVES: 51,
+  BIRCH_PLANKS: 52,
+  SPRUCE_LOG: 53,
+  SPRUCE_LEAVES: 54,
+  SPRUCE_PLANKS: 55,
 } as const;
 
 /** All block definitions indexed by their ID. */
@@ -143,6 +159,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: true, transparent: false, breakable: true,
     textures: { top: "log_top", bottom: "log_top", side: "log_side" },
     special: "none", breakTime: 2.0, dropId: BLOCK_ID.LOG,
+    wood: { species: "oak", part: "log" }, burnable: true,
   },
   {
     id: BLOCK_ID.LEAVES,
@@ -150,6 +167,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: true, transparent: true, breakable: true,
     textures: { top: "leaves", bottom: "leaves", side: "leaves" },
     special: "none", breakTime: 0.2, dropId: BLOCK_ID.LEAVES, requiresTool: "axe",
+    wood: { species: "oak", part: "leaves" }, burnable: true,
   },
   {
     id: BLOCK_ID.CRYSTAL,
@@ -188,6 +206,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: true, transparent: false, breakable: true,
     textures: { top: "planks", bottom: "planks", side: "planks" },
     special: "none", breakTime: 1.0, dropId: BLOCK_ID.PLANKS,
+    wood: { species: "oak", part: "planks" }, burnable: true,
   },
   {
     id: BLOCK_ID.CRAFTING_TABLE,
@@ -202,6 +221,7 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     solid: false, transparent: true, breakable: false,
     textures: { top: "", bottom: "", side: "" },
     special: "none", breakTime: 0, dropId: BLOCK_ID.STICK,
+    burnable: true,
   },
   {
     id: BLOCK_ID.WOODEN_PICKAXE,
@@ -459,4 +479,73 @@ export const BLOCK_DEFINITIONS: readonly BlockDefinition[] = [
     textures: { top: "", bottom: "", side: "" },
     special: "none", breakTime: 0, dropId: BLOCK_ID.DIAMOND_BOOTS,
   },
+  // Wood variants — appended ids 50-55; never renumber (chunk data stores raw ids).
+  {
+    id: BLOCK_ID.BIRCH_LOG,
+    name: "Birch Log",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "birch_log_top", bottom: "birch_log_top", side: "birch_log_side" },
+    special: "none", breakTime: 2.0, dropId: BLOCK_ID.BIRCH_LOG,
+    wood: { species: "birch", part: "log" }, burnable: true,
+  },
+  {
+    id: BLOCK_ID.BIRCH_LEAVES,
+    name: "Birch Leaves",
+    solid: true, transparent: true, breakable: true,
+    textures: { top: "birch_leaves", bottom: "birch_leaves", side: "birch_leaves" },
+    special: "none", breakTime: 0.2, dropId: BLOCK_ID.BIRCH_LEAVES, requiresTool: "axe",
+    wood: { species: "birch", part: "leaves" }, burnable: true,
+  },
+  {
+    id: BLOCK_ID.BIRCH_PLANKS,
+    name: "Birch Planks",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "birch_planks", bottom: "birch_planks", side: "birch_planks" },
+    special: "none", breakTime: 1.0, dropId: BLOCK_ID.BIRCH_PLANKS,
+    wood: { species: "birch", part: "planks" }, burnable: true,
+  },
+  {
+    id: BLOCK_ID.SPRUCE_LOG,
+    name: "Spruce Log",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "spruce_log_top", bottom: "spruce_log_top", side: "spruce_log_side" },
+    special: "none", breakTime: 2.0, dropId: BLOCK_ID.SPRUCE_LOG,
+    wood: { species: "spruce", part: "log" }, burnable: true,
+  },
+  {
+    id: BLOCK_ID.SPRUCE_LEAVES,
+    name: "Spruce Leaves",
+    solid: true, transparent: true, breakable: true,
+    textures: { top: "spruce_leaves", bottom: "spruce_leaves", side: "spruce_leaves" },
+    special: "none", breakTime: 0.2, dropId: BLOCK_ID.SPRUCE_LEAVES, requiresTool: "axe",
+    wood: { species: "spruce", part: "leaves" }, burnable: true,
+  },
+  {
+    id: BLOCK_ID.SPRUCE_PLANKS,
+    name: "Spruce Planks",
+    solid: true, transparent: false, breakable: true,
+    textures: { top: "spruce_planks", bottom: "spruce_planks", side: "spruce_planks" },
+    special: "none", breakTime: 1.0, dropId: BLOCK_ID.SPRUCE_PLANKS,
+    wood: { species: "spruce", part: "planks" }, burnable: true,
+  },
 ];
+
+const WOOD_LOOKUP: Record<string, number> = {};
+for (const def of BLOCK_DEFINITIONS) {
+  if (def.wood) WOOD_LOOKUP[`${def.wood.species}:${def.wood.part}`] = def.id;
+}
+
+/** Block id of a species' log, planks or leaves. */
+export function getWoodBlockId(species: WoodSpecies, part: WoodPart): number {
+  return WOOD_LOOKUP[`${species}:${part}`];
+}
+
+/** Ids of every wood block, optionally only one part (all species). */
+export function woodBlockIds(part?: WoodPart): number[] {
+  return BLOCK_DEFINITIONS.filter((d) => d.wood && (part === undefined || d.wood.part === part)).map((d) => d.id);
+}
+
+/** Whether an item burns as furnace fuel. */
+export function isBurnable(blockId: number): boolean {
+  return BLOCK_DEFINITIONS[blockId]?.burnable === true;
+}

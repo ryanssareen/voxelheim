@@ -1,4 +1,7 @@
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, woodBlockIds } from "@data/blocks";
+
+/** Every wood block (all species, all parts) plus the table: what axes are good at. */
+const AXE_TARGETS: number[] = [...woodBlockIds(), BLOCK_ID.CRAFTING_TABLE];
 
 export type ToolType = "pickaxe" | "axe" | "shovel" | "sword";
 export type ToolMaterial = "wood" | "stone" | "iron" | "diamond";
@@ -45,7 +48,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 59,
     miningSpeedMultiplier: 2,
     attackDamage: 3,
-    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
+    effectiveAgainst: AXE_TARGETS,
   },
   [BLOCK_ID.WOODEN_SHOVEL]: {
     itemId: BLOCK_ID.WOODEN_SHOVEL,
@@ -85,7 +88,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 131,
     miningSpeedMultiplier: 4,
     attackDamage: 4,
-    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
+    effectiveAgainst: AXE_TARGETS,
   },
   [BLOCK_ID.STONE_SHOVEL]: {
     itemId: BLOCK_ID.STONE_SHOVEL,
@@ -125,7 +128,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 250,
     miningSpeedMultiplier: 6,
     attackDamage: 5,
-    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
+    effectiveAgainst: AXE_TARGETS,
   },
   [BLOCK_ID.IRON_SHOVEL]: {
     itemId: BLOCK_ID.IRON_SHOVEL,
@@ -165,7 +168,7 @@ export const TOOL_DEFS: Record<number, ToolDef> = {
     durability: 1561,
     miningSpeedMultiplier: 8,
     attackDamage: 6,
-    effectiveAgainst: [BLOCK_ID.LOG, BLOCK_ID.PLANKS, BLOCK_ID.CRAFTING_TABLE, BLOCK_ID.LEAVES],
+    effectiveAgainst: AXE_TARGETS,
   },
   [BLOCK_ID.DIAMOND_SHOVEL]: {
     itemId: BLOCK_ID.DIAMOND_SHOVEL,
@@ -246,13 +249,13 @@ export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.DIRT]: "Dirt",
   [BLOCK_ID.STONE]: "Stone",
   [BLOCK_ID.SAND]: "Sand",
-  [BLOCK_ID.LOG]: "Log",
-  [BLOCK_ID.LEAVES]: "Leaves",
+  [BLOCK_ID.LOG]: "Oak Log",
+  [BLOCK_ID.LEAVES]: "Oak Leaves",
   [BLOCK_ID.CRYSTAL]: "Crystal",
   [BLOCK_ID.RAW_PORK]: "Raw Pork",
   [BLOCK_ID.RAW_BEEF]: "Raw Beef",
   [BLOCK_ID.RAW_MUTTON]: "Raw Mutton",
-  [BLOCK_ID.PLANKS]: "Planks",
+  [BLOCK_ID.PLANKS]: "Oak Planks",
   [BLOCK_ID.CRAFTING_TABLE]: "Crafting Table",
   [BLOCK_ID.STICK]: "Stick",
   [BLOCK_ID.WOODEN_PICKAXE]: "Wooden Pickaxe",
@@ -291,6 +294,12 @@ export const ITEM_NAMES: Record<number, string> = {
   [BLOCK_ID.DIAMOND_CHESTPLATE]: "Diamond Chestplate",
   [BLOCK_ID.DIAMOND_LEGGINGS]: "Diamond Leggings",
   [BLOCK_ID.DIAMOND_BOOTS]: "Diamond Boots",
+  [BLOCK_ID.BIRCH_LOG]: "Birch Log",
+  [BLOCK_ID.BIRCH_LEAVES]: "Birch Leaves",
+  [BLOCK_ID.BIRCH_PLANKS]: "Birch Planks",
+  [BLOCK_ID.SPRUCE_LOG]: "Spruce Log",
+  [BLOCK_ID.SPRUCE_LEAVES]: "Spruce Leaves",
+  [BLOCK_ID.SPRUCE_PLANKS]: "Spruce Planks",
 };
 
 /** Numeric hex colors for Three.js renderers (hand, offhand, item drops). */
@@ -344,6 +353,12 @@ export const BLOCK_HEX_COLORS: Record<number, number> = {
   [BLOCK_ID.DIAMOND_CHESTPLATE]: 0x55cccc,
   [BLOCK_ID.DIAMOND_LEGGINGS]: 0x55cccc,
   [BLOCK_ID.DIAMOND_BOOTS]: 0x55cccc,
+  [BLOCK_ID.BIRCH_LOG]: 0xd7cbb0,
+  [BLOCK_ID.BIRCH_LEAVES]: 0x6fa84f,
+  [BLOCK_ID.BIRCH_PLANKS]: 0xd8c9a3,
+  [BLOCK_ID.SPRUCE_LOG]: 0x4a3423,
+  [BLOCK_ID.SPRUCE_LEAVES]: 0x1f4d2b,
+  [BLOCK_ID.SPRUCE_PLANKS]: 0x7a5a3a,
 };
 
 export const ITEM_COLORS: Record<number, string> = {
@@ -396,4 +411,10 @@ export const ITEM_COLORS: Record<number, string> = {
   [BLOCK_ID.DIAMOND_CHESTPLATE]: "#55cccc",
   [BLOCK_ID.DIAMOND_LEGGINGS]: "#55cccc",
   [BLOCK_ID.DIAMOND_BOOTS]: "#55cccc",
+  [BLOCK_ID.BIRCH_LOG]: "#d7cbb0",
+  [BLOCK_ID.BIRCH_LEAVES]: "#6fa84f",
+  [BLOCK_ID.BIRCH_PLANKS]: "#d8c9a3",
+  [BLOCK_ID.SPRUCE_LOG]: "#4a3423",
+  [BLOCK_ID.SPRUCE_LEAVES]: "#1f4d2b",
+  [BLOCK_ID.SPRUCE_PLANKS]: "#7a5a3a",
 };

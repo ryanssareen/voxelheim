@@ -65,6 +65,15 @@ const TEXTURES: TextureDef[] = [
   { name: "water", color: "", custom: waterTexture },
   { name: "snow", color: "", custom: snowTexture },
   { name: "ice", color: "", custom: iceTexture },
+  // Wood variants (Phase 0 placeholders reuse the oak painters; Workstream F paints species palettes).
+  { name: "birch_log_side", color: "", custom: logSide },
+  { name: "birch_log_top", color: "", custom: logTop },
+  { name: "birch_leaves", color: "", custom: leavesTexture },
+  { name: "birch_planks", color: "", custom: planksTexture },
+  { name: "spruce_log_side", color: "", custom: logSide },
+  { name: "spruce_log_top", color: "", custom: logTop },
+  { name: "spruce_leaves", color: "", custom: leavesTexture },
+  { name: "spruce_planks", color: "", custom: planksTexture },
 ];
 
 

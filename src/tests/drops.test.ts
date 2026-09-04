@@ -235,6 +235,11 @@ describe("item icon sheet (F2)", () => {
   });
 });
 
+/** Tile names of every leaves block: the only tiles allowed sub-threshold alpha. */
+const CUTOUT_TILES = new Set(
+  BLOCK_DEFINITIONS.filter((d) => d.wood?.part === "leaves").map((d) => d.textures.side)
+);
+
 describe("block atlas art (F3)", () => {
   it("leaves tile has clumped cutout holes covering 15-35% of the tile, with real colour variety", async () => {
     const { data, width, height } = await readPng("atlas.png");
@@ -263,7 +268,7 @@ describe("block atlas art (F3)", () => {
   it("every other block tile is fully opaque — the leaves cutout is deliberate, not leaked", async () => {
     const { data, width, height } = await readPng("atlas.png");
     for (const [name, rect] of Object.entries(ATLAS_UVS)) {
-      if (name === "leaves") continue;
+      if (CUTOUT_TILES.has(name)) continue;
       const x0 = Math.round(rect.u0 * width), y0 = Math.round(rect.v0 * height);
       const x1 = Math.round(rect.u1 * width), y1 = Math.round(rect.v1 * height);
       let below = 0;
@@ -316,10 +321,12 @@ describe("atlas <-> mesh builder integrity (F4 guard, complements ChunkMeshBuild
     }
   });
 
-  it("every ATLAS_UVS rect is exactly one 16px tile (0.25 x 0.2 of the sheet)", () => {
+  it("every ATLAS_UVS rect is exactly one 16px tile of a 4-column sheet", () => {
+    const cols = 4;
+    const rows = Math.ceil(Object.keys(ATLAS_UVS).length / cols);
     for (const [name, rect] of Object.entries(ATLAS_UVS)) {
-      expect(rect.u1 - rect.u0, name).toBeCloseTo(0.25, 5);
-      expect(rect.v1 - rect.v0, name).toBeCloseTo(0.2, 5);
+      expect(rect.u1 - rect.u0, name).toBeCloseTo(1 / cols, 5);
+      expect(rect.v1 - rect.v0, name).toBeCloseTo(1 / rows, 5);
     }
   });
 
