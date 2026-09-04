@@ -36,6 +36,14 @@ The harvest level of a tool (wood 1, stone 2, iron 3, diamond 4; empty hand 0). 
 ### Objective Block
 A block whose definition carries `special: "crystal_shard"`. Breaking one with a sufficient tool advances the win condition. No recipe may output one and it cannot be placed, so the world-generated count is the only supply.
 
+## Wood
+
+### Wood Species
+One of oak, birch or spruce, carried on a block definition's `wood` field together with its part (log, planks, leaves). Species picks the art and the drop; ids are append-only and the oak ids 5, 6 and 11 are permanent because chunk data stores raw ids. A tree's species is a pure function of seed, position and biome, so the same world always grows the same trees.
+
+### Ingredient Group
+A recipe cell that names a wood block means "any species of that part". Recipes stay plain id grids using the oak id as the canonical marker; the matcher compares wood cells by part and resolves the result to the ingredients' species when they agree, or to oak when they are mixed. Non-wood cells still match by exact id.
+
 ## Economy
 
 ### Value Potential

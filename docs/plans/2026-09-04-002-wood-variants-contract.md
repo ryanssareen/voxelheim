@@ -167,3 +167,32 @@ Four triage agents, sixteen skeptic votes, none refuted.
 
 All four workstreams are independent and were dispatched in parallel from
 Phase 0 (`f784a72`).
+
+## Phase 2 — completion record (2026-09-04)
+
+All four branches merged to main at `6abadd4`; every merge passed the gate.
+Tests went from 641 (after Phase 0) to 702 across 40 files; lint 0 errors /
+10 warnings; tsc clean.
+
+| WS | What landed | New tests |
+|---|---|---|
+| A | `cellMatches` / `woodSpeciesUsed` / `resolveResult` in recipes.ts; wood cells match by part, results follow a single-species input; `FUEL_ITEMS` and `isFuel` derived from `burnable`; recipe book `canCraft` sums across species and `fillGridFromRecipe` places the species it took | `recipeGroups.test.ts` (31), +1 in `craft.test.ts` |
+| D | `BIOME_WOOD`, `ISLAND_WOOD`, `WOOD_TREE_SHAPE` tables; `treeSpecies(wx, wz, biome?)` on a seeded field at scale 48; all four trunk/canopy sites write `getWoodBlockId`; existing tree tests detect any log | `treeSpecies.test.ts` (7) |
+| F | `WoodPalette`-parameterised painters; oak byte-identical; birch pale bark with horizontal flecks; spruce dark bark and blue-green leaves; atlas regenerated (`ATLAS_HASH c4ee2121`, item sheet unchanged) | +4 in `drops.test.ts` |
+| U | `src/data/woodPalette.ts`; `ItemIcon.cubeFaces` branches on `wood` data before the id switch, oak icons byte-identical; minimap `blockCategory` by `wood.part` | `woodPalette.test.ts` (18) |
+
+Lead commits: `f784a72` Phase 0, `f001a5c` triage review.
+
+Measured species shares (seed voxelheim-mvp, infinite): forest oak 77% /
+birch 23%; plains oak 100%; mountains spruce 64% / oak 36%; snowy spruce
+100%. Demo island: oak 93% / birch 7%.
+
+### Follow-ups not done in this pass
+
+- `RecipeBook.tsx` "Missing: ..." tooltip counts only the canonical species
+  (cosmetic; the enabled state is correct).
+- `recipeBook.test.ts` documents a pre-existing overwrite of a non-recipe
+  item stuck in a grid cell when the inventory is full.
+- `decorateChunk` has a dead `treeIndex` increment (harmless).
+- Existing saves: unmodified chunks regenerate with species; modified chunks
+  keep oak. Old multiplayer clients render ids 50-55 as invisible.
