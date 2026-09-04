@@ -776,7 +776,10 @@ export class Engine {
     } else if (!state.isDead && this.wasDead) {
       this.wasDead = false;
     }
-    if (state.isDead) return;
+    if (state.isDead) {
+      this.breakOverlay?.update(null, 0);
+      return;
+    }
 
     // Chat composing behaves like paused for input purposes — player
     // shouldn't turn/mine just because they typed "s" into the chat box.
@@ -840,6 +843,7 @@ export class Engine {
         this.player!.isCrouching ? 1.2 : 1.6,
         this.isSolidAt
       );
+      this.breakOverlay?.update(null, 0);
       this.renderer!.render();
       return;
     }
@@ -892,6 +896,7 @@ export class Engine {
         this.player!.isCrouching ? 1.2 : 1.6,
         this.isSolidAt
       );
+      this.breakOverlay?.update(null, 0);
       this.renderer!.render();
       return;
     }
@@ -1252,6 +1257,7 @@ export class Engine {
       if (document.pointerLockElement) {
         document.exitPointerLock();
       }
+      this.breakOverlay?.update(null, 0);
       return;
     }
 

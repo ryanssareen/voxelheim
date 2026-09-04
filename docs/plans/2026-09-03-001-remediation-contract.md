@@ -295,6 +295,33 @@ player the same decaying knockback impulse channel E1 gives mobs
 PauseMenu re-lock sites switch to `enterPlayCapture` (lead applies at
 integration).
 
+### C and I (triage addendum, verified by skeptics)
+
+| WS | CONFIRMED | DIFFERENT | NOT-A-BUG | MISSING-SYSTEM |
+|---|---|---|---|---|
+| C | C1 `unloadColumn` never re-queues surviving neighbours for remesh (the invisible wall: stale culled faces over real, minable block data), C3 terrain worker is dead code | C4 `getBlock` surface fallback for generated-but-unmeshed chunks (skeptic: matches the code; intentional, left as is) | C2 neighbour-arrives-late remesh already works | C5 island worlds have no border, C6 loaded-chunk enumeration (landed by lead as `forEachLoadedChunk`) |
+| I | I-1 overlay freezes visible on pause/chat/inventory/death frames (Engine call sites), I-2 highlight pass adds light-independent white | | I-3 alignment, I-4 z-fighting, I-5 transparent blocks, I-6 stage progression / tool speed / six faces | |
+
+**C.** C1: add `markNeighborColumnsForRemesh(ccx, ccz)` at the end of
+`unloadColumn` after the column's chunks are deleted. Permanent regression
+tests for both directions (neighbour unloads, neighbour arrives late) with a
+stub renderer. C5: visible barrier. A 1-block STONE perimeter ring on the
+outermost block row/column of the island grid, from y = 1 up to SEA_LEVEL + 6,
+generated as ordinary chunk data inside `generateFiniteWorld` so it is meshed
+and collidable through the normal pipeline. The ring must never overwrite a
+crystal (test: CRYSTAL count after generation still equals
+`CRYSTAL_SHARD_COUNT`). Existing island saves: generated (unmodified) edge
+chunks gain the ring; player-modified edge chunks keep their stored data, so
+the ring can have gaps there. Document that. C4: leave as is. C3: leave the
+dead worker files; out of scope. C6: already landed as `forEachLoadedChunk`;
+do not add a second enumerator.
+
+**I.** I-1: the four `breakOverlay.update(null, 0)` insertions were applied
+to Engine.ts by the lead. I-2: darken-only highlight via an exported
+`CRACK_HIGHLIGHT_RGBA` constant plus the regression assertion. I's brief
+reading was wrong about where the defect lived; the overlay class itself is
+correct.
+
 ### Phase 2 order
 
 1. A alone (P0; B and G depend on its data and `craft.ts`).
