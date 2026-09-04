@@ -139,3 +139,31 @@ unknown ids as invisible, non-solid blocks; all clients must run the same
 build.
 
 ## Phase 1 triage — lead review
+
+Four triage agents, sixteen skeptic votes, none refuted.
+
+| WS | CONFIRMED | NOT-A-BUG / corrections |
+|---|---|---|
+| A | A1 matcher is exact-id (birch log crafts nothing), A2 `FUEL_ITEMS` static oak-only, A3 recipe-book `canCraft` exact-id, A4 `fillGridFromRecipe` rewrites the taken species to oak | A5 progression closure unaffected, A6 economy unaffected, A7 `resolveCraft` and every inventory consumer unaffected |
+| D | D3 four hardcoded LOG/LEAVES write sites, D4 tree tests hardcode LOG; D5-D8 are U's and A's items | D1 correction: only `placeTrees` (island) lacks a biome; flat worlds stream through `decorateChunk` with a real biome. D9-D13: recipe data, grass tick, mesh culling, cutout leaves, dirt-under-trunk all data-driven already |
+| F | F-01 placeholders are byte-identical to oak, F-04 distinctness tests needed | F-02/03/05 drops, item sheet, other assertions unaffected |
+| U | U1 `cubeFaces` id switch, U2 minimap id map, U3 `PlayerModel` colour table | U4-U6 tooltips, creative listing, hand/offhand/drops already data-driven |
+
+### Lead decisions
+
+- **A**: implement A1-A4 as proposed; recipe data stays numbers; species
+  follows a single-species input; recipe-book fill prefers the species in the
+  grid, then `WOOD_SPECIES` order. `RecipeBook.tsx` tooltip shortfall text is
+  a cosmetic follow-up (frozen this pass).
+- **D**: `ISLAND_WOOD` oak 0.85 / birch 0.15 for island worlds;
+  `WOOD_TREE_SHAPE` with spruce trunks 5-8 approved; the dead `treeIndex`
+  increment stays out of scope.
+- **F**: birch bark uses a horizontal fleck axis as palette data; the two
+  locked hex constants and the leaves cutout seed/threshold stay.
+- **U**: U3 dropped. `PlayerModel`'s colour table is worn armour and
+  unreachable for blocks, so no held-block palette. Minimap keeps two
+  categories: log/planks are Wood, leaves keep the Leaves colour, resolved
+  from `wood.part`.
+
+All four workstreams are independent and were dispatched in parallel from
+Phase 0 (`f784a72`).
