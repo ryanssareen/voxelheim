@@ -6,6 +6,7 @@ import { useChatStore } from "@store/useChatStore";
 import { useGameStore } from "@store/useGameStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { HUD } from "@ui/HUD";
+import { enterPlayCapture } from "@ui/playCapture";
 import { MinimapUI } from "@ui/MinimapUI";
 import { HotbarUI } from "@ui/HotbarUI";
 import { PauseMenu } from "@ui/PauseMenu";
@@ -39,7 +40,7 @@ export function GameCanvas({
   }, [start, worldId, sessionId]);
 
   const handleCanvasClick = useCallback(() => {
-    canvasRef.current?.requestPointerLock();
+    enterPlayCapture(canvasRef.current);
   }, []);
 
   const handleRespawn = useCallback(() => {

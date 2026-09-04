@@ -82,11 +82,15 @@ Y-axis collision runs before X and Z so that `onGround` is set correctly before 
 
 If X/Z resolved first, the player could briefly register as on-ground during a lateral slide, causing phantom jumps.
 
-### There Is No Player Auto-Jump
+### Player Auto-Jump (Settings-Gated)
 
-The player has **no** auto-jump / step-up assist -- 1-block steps must be jumped manually. An earlier version of this doc described an auto-jump system with a cooldown; that system is gone, and the last piece of dead state it left behind (a write-only `hadHorizCollision` flag on `PlayerController`) has been removed too. Nothing in `PlayerController` tracks horizontal collisions across a frame any more -- if you add step-up assist, that plumbing has to come back.
+The player has step-up assist again, gated behind `useSettingsStore().autoJump` (default on). This reverses the "no auto-jump" note that used to live here: `PlayerController` once again tracks whether a frame's horizontal move was blocked, because step-up assist needs that.
 
-Note the inversion, because it is easy to get backwards: **mobs** do have step-up assist (`Mob.updateHostileAI` gives a vertical impulse when the next path waypoint is above the mob and it is grounded). The player does not.
+`moveAxis` and `moveAxisSafe` now return the block layer their collision resolved against (`number | null`) instead of `void` -- `update()` captures `hitX`/`hitZ` from the X/Z move calls. After `resolveOverlap()`, if the player is grounded, not crouching, not flying, and the setting is on, a blocked axis is checked with `isOneBlockLedge(axis, layer, getBlock, registry)`: solid at foot level somewhere across the cross-axis span (using `maxBlock` for the max edge, per the half-open AABB rule), with `ceil(height)` blocks of clearance above every solid cell in that span. If either blocked axis qualifies, `velocity.y = AUTO_JUMP_VELOCITY` (7, the same impulse `Mob.updateHostileAI` uses for step-ups) and `onGround = false` -- applied at the *end* of the frame, after `resolveOverlap`, so it never competes with that method's downward-push candidate; the actual rise happens on the Y move at the start of the next frame.
+
+The step-up is a plain jump impulse, not a teleport: it clears the ledge in flight the same way a manual jump would, and re-fires on the next grounded blocked frame if the first hop landed short. A two-block-tall obstruction (no head clearance) or a crouching/flying player never triggers it -- see `src/tests/autoJump.test.ts`.
+
+Note the inversion this replaces, because it is easy to get backwards: **mobs** already had step-up assist (`Mob.updateHostileAI` gives a vertical impulse when the next path waypoint is above the mob and it is grounded) while the player did not. Both now behave the same way, modulo the player's setting and its ledge-shape check.
 
 ### Multiplayer Position Sync
 

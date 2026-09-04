@@ -2,6 +2,7 @@ import { InputManager } from "@engine/InputManager";
 import { Camera } from "@engine/player/Camera";
 import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
+import { useSettingsStore } from "@store/useSettingsStore";
 
 const WALK_SPEED = 5;
 const SPRINT_SPEED = 8;
@@ -13,6 +14,8 @@ const STAND_HEIGHT = 1.8;
 const CROUCH_HEIGHT = 1.4;
 const MAX_FALL_SPEED = -40;
 const MAX_STEP_SIZE = 0.45; // Max displacement per sub-step to prevent clipping
+const AUTO_JUMP_VELOCITY = 7; // same impulse Mob.followPath uses for step-ups
+const KNOCKBACK_DECAY = 6; // impulse channel decay rate, 1/s
 
 const FLY_SPEED = 20;
 const FLY_SPRINT_SPEED = 40;
@@ -28,6 +31,14 @@ export class PlayerController {
 
   private lastSpacePressTime = 0;
   private spaceWasDown = false;
+  /**
+   * Decaying horizontal impulse channel, kept separate from `velocity` so a
+   * hit still displaces the player even while a movement key holds
+   * velocity.x/z pinned to the input direction every frame. Added into the
+   * horizontal displacement at move time and exponentially decayed
+   * (`KNOCKBACK_DECAY`/s); zeroed the instant its axis hits a wall.
+   */
+  private knockback = { x: 0, z: 0 };
 
   constructor(spawnX: number, spawnY: number, spawnZ: number) {
     this.position = { x: spawnX, y: spawnY, z: spawnZ };
@@ -37,17 +48,17 @@ export class PlayerController {
     return this.isCrouching ? CROUCH_HEIGHT : STAND_HEIGHT;
   }
 
-  applyKnockback(fromX: number, fromZ: number, force: number): void {
+  applyKnockback(fromX: number, fromZ: number, strength: number): void {
     const dx = this.position.x - fromX;
     const dz = this.position.z - fromZ;
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist > 0.01) {
       // Cap knockback velocity to prevent clipping
-      const cappedForce = Math.min(force, 5);
-      this.velocity.x = (dx / dist) * cappedForce;
-      this.velocity.z = (dz / dist) * cappedForce;
+      const cappedStrength = Math.min(strength, 5);
+      this.knockback.x = (dx / dist) * cappedStrength;
+      this.knockback.z = (dz / dist) * cappedStrength;
     }
-    this.velocity.y = Math.min(force * 0.4, 4);
+    this.velocity.y = Math.min(strength * 0.4, 4);
     this.onGround = false;
   }
 
@@ -117,6 +128,13 @@ export class PlayerController {
     this.velocity.x = moveX;
     this.velocity.z = moveZ;
 
+    // Decay the knockback impulse channel. Independent of input, so it keeps
+    // pushing the player even while a movement key holds velocity.x/z at the
+    // input direction.
+    const knockbackFactor = Math.exp(-KNOCKBACK_DECAY * dt);
+    this.knockback.x *= knockbackFactor;
+    this.knockback.z *= knockbackFactor;
+
     if (this.isFlying) {
       // Flight vertical controls: Space=ascend, Ctrl=descend, neither=hover
       const flyVertSpeed = this.isSprinting ? FLY_SPRINT_SPEED : FLY_SPEED;
@@ -171,7 +189,8 @@ export class PlayerController {
 
     // Crouch edge prevention (skip while flying)
     const savedX = this.position.x;
-    this.moveAxisSafe("x", this.velocity.x * dt, getBlock, registry);
+    const hitX = this.moveAxisSafe("x", (this.velocity.x + this.knockback.x) * dt, getBlock, registry);
+    if (hitX !== null) this.knockback.x = 0;
     if (!this.isFlying && this.isCrouching && this.onGround) {
       if (!this.hasGroundSupport(getBlock, registry)) {
         this.position.x = savedX;
@@ -180,7 +199,8 @@ export class PlayerController {
     }
 
     const savedZ = this.position.z;
-    this.moveAxisSafe("z", this.velocity.z * dt, getBlock, registry);
+    const hitZ = this.moveAxisSafe("z", (this.velocity.z + this.knockback.z) * dt, getBlock, registry);
+    if (hitZ !== null) this.knockback.z = 0;
     if (!this.isFlying && this.isCrouching && this.onGround) {
       if (!this.hasGroundSupport(getBlock, registry)) {
         this.position.z = savedZ;
@@ -190,6 +210,52 @@ export class PlayerController {
 
     // POST-COLLISION SAFETY: if player ended up inside a solid block, push them out
     this.resolveOverlap(getBlock, registry);
+
+    // Auto-jump: step up a one-block ledge that just blocked a grounded walk.
+    // Applied after resolveOverlap so it never competes with its downward-push
+    // candidate; Y resolves again first thing next frame.
+    if (!this.isFlying && !this.isCrouching && this.onGround && useSettingsStore.getState().autoJump) {
+      if (
+        (hitX !== null && this.isOneBlockLedge("x", hitX, getBlock, registry)) ||
+        (hitZ !== null && this.isOneBlockLedge("z", hitZ, getBlock, registry))
+      ) {
+        this.velocity.y = AUTO_JUMP_VELOCITY;
+        this.onGround = false;
+      }
+    }
+  }
+
+  /**
+   * True when `layer` (the block column that just stopped horizontal travel
+   * along `axis`) is a one-block ledge the player can step up onto: solid at
+   * foot level somewhere across the cross-axis span, with `ceil(height)`
+   * blocks of clearance above every solid cell in that span so the player
+   * actually fits on top. Uses `maxBlock` for the cross-axis max edge per the
+   * half-open AABB rule (CONCEPTS.md).
+   */
+  private isOneBlockLedge(
+    axis: "x" | "z",
+    layer: number,
+    getBlock: (wx: number, wy: number, wz: number) => number,
+    registry: BlockRegistry
+  ): boolean {
+    const footY = Math.floor(this.position.y);
+    const crossMin = axis === "x" ? this.position.z - HALF_WIDTH : this.position.x - HALF_WIDTH;
+    const crossMax = axis === "x" ? this.position.z + HALF_WIDTH : this.position.x + HALF_WIDTH;
+    const lo = Math.floor(crossMin);
+    const hi = maxBlock(crossMax);
+    const clearance = Math.ceil(this.height);
+
+    let ledge = false;
+    for (let c = lo; c <= hi; c++) {
+      const bx = axis === "x" ? layer : c;
+      const bz = axis === "x" ? c : layer;
+      if (registry.isSolid(getBlock(bx, footY, bz))) ledge = true;
+      for (let dy = 1; dy <= clearance; dy++) {
+        if (registry.isSolid(getBlock(bx, footY + dy, bz))) return false;
+      }
+    }
+    return ledge;
   }
 
   /** Checks if at least one solid block exists directly below the player AABB. */
@@ -211,33 +277,40 @@ export class PlayerController {
     return false;
   }
 
-  /** Move with sub-stepping: breaks large displacements into safe-sized steps */
+  /**
+   * Move with sub-stepping: breaks large displacements into safe-sized steps.
+   * Returns the block layer the first sub-step's collision resolved against
+   * (the blocking layer along `axis`), or null if nothing blocked.
+   */
   private moveAxisSafe(
     axis: "x" | "y" | "z",
     totalDelta: number,
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry
-  ): void {
-    if (totalDelta === 0) return;
+  ): number | null {
+    if (totalDelta === 0) return null;
 
     const absDelta = Math.abs(totalDelta);
     if (absDelta <= MAX_STEP_SIZE) {
       // Small enough — single step
-      this.moveAxis(axis, totalDelta, getBlock, registry);
-    } else {
-      // Break into sub-steps
-      const sign = totalDelta > 0 ? 1 : -1;
-      let remaining = absDelta;
-      while (remaining > 0.001) {
-        const step = Math.min(remaining, MAX_STEP_SIZE);
-        this.moveAxis(axis, step * sign, getBlock, registry);
-        remaining -= step;
-        // If collision stopped movement, don't continue
-        if (axis === "y" && this.velocity.y === 0) break;
-        if (axis === "x" && this.velocity.x === 0) break;
-        if (axis === "z" && this.velocity.z === 0) break;
-      }
+      return this.moveAxis(axis, totalDelta, getBlock, registry);
     }
+
+    // Break into sub-steps
+    const sign = totalDelta > 0 ? 1 : -1;
+    let remaining = absDelta;
+    let hit: number | null = null;
+    while (remaining > 0.001) {
+      const step = Math.min(remaining, MAX_STEP_SIZE);
+      const stepHit = this.moveAxis(axis, step * sign, getBlock, registry);
+      if (hit === null) hit = stepHit;
+      remaining -= step;
+      // If collision stopped movement, don't continue
+      if (axis === "y" && this.velocity.y === 0) break;
+      if (axis === "x" && this.velocity.x === 0) break;
+      if (axis === "z" && this.velocity.z === 0) break;
+    }
+    return hit;
   }
 
   /** Post-collision safety: if player AABB overlaps solid blocks, push along minimum penetration axis */
@@ -329,13 +402,14 @@ export class PlayerController {
     }
   }
 
+  /** Resolves one collision step. Returns the blocking layer along `axis`, or null if nothing blocked. */
   private moveAxis(
     axis: "x" | "y" | "z",
     delta: number,
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry
-  ): void {
-    if (delta === 0) return;
+  ): number | null {
+    if (delta === 0) return null;
 
     this.position[axis] += delta;
 
@@ -363,7 +437,7 @@ export class PlayerController {
       if (axis === "y" && delta < 0) {
         this.onGround = false;
       }
-      return;
+      return null;
     }
 
     if (axis === "y") {
@@ -381,5 +455,6 @@ export class PlayerController {
       this.position.z = delta < 0 ? layer + 1 + HALF_WIDTH : layer - HALF_WIDTH;
       this.velocity.z = 0;
     }
+    return layer;
   }
 }
