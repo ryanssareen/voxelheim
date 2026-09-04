@@ -301,13 +301,12 @@ export class StructureGenerator {
 
         // Place canopy blocks that fall in this chunk
         const canopyBase = surfaceY + trunkHeight + 1;
-        let treeIndex = 0;
         for (let ly = 0; ly < 2; ly++) {
           for (let lx = -1; lx <= 1; lx++) {
             for (let lz = -1; lz <= 1; lz++) {
               if (Math.abs(lx) === 1 && Math.abs(lz) === 1) {
                 const cornerRand =
-                  mixHash(wx + lx * 100 + ly * 200 + this.seedHash, wz + lz * 100 + treeIndex) / 4294967296;
+                  mixHash(wx + lx * 100 + ly * 200 + this.seedHash, wz + lz * 100) / 4294967296;
                 if (cornerRand < 0.5) continue;
               }
               const bx = wx + lx;
@@ -321,7 +320,6 @@ export class StructureGenerator {
             }
           }
         }
-        treeIndex++;
       }
     }
 

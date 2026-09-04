@@ -6,6 +6,7 @@ import { useInventoryStore } from "@store/useInventoryStore";
 import { ITEM_NAMES } from "@data/items";
 import { InventorySlot } from "@ui/ItemIcon";
 import {
+  availableForRequirement,
   canCraft,
   countAvailable,
   fillGridFromRecipe,
@@ -36,7 +37,7 @@ export function useRecipeFill(gridSize: GridSize) {
             ? inv.setCraftingSlot(index, blockId, count)
             : inv.setTableSlot(index, blockId, count),
         takeItems: (blockId, count) => hotbar.takeItems(blockId, count),
-        addItem: (blockId) => hotbar.addItem(blockId),
+        addItem: (blockId, durability) => hotbar.addItem(blockId, durability),
       };
       fillGridFromRecipe(entry, host);
     },
@@ -157,8 +158,8 @@ function RecipeRow({
           ok
             ? `Click to lay out ${entry.name}`
             : `Missing: ${needs
-                .filter(([id, n]) => (available.get(id) ?? 0) < n)
-                .map(([id, n]) => `${ITEM_NAMES[id] ?? `#${id}`} x${n - (available.get(id) ?? 0)}`)
+                .filter(([id, n]) => availableForRequirement(id, available) < n)
+                .map(([id, n]) => `${ITEM_NAMES[id] ?? `#${id}`} x${n - availableForRequirement(id, available)}`)
                 .join(", ")}`
         }
         className="w-full flex items-center gap-2 px-1.5 py-1 text-left hover:brightness-110 disabled:cursor-default"

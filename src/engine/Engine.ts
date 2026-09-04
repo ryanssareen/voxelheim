@@ -259,8 +259,12 @@ export class Engine {
     this.renderer.getScene().add(this.playerModel.group);
 
     // Hand (1st person)
-    this.handRenderer = new HandRenderer(this.renderer.getCamera(), skinColors.skinColor);
-    this.offhandRenderer = new OffhandRenderer(this.renderer.getCamera(), skinColors.skinColor);
+    this.handRenderer = new HandRenderer(this.renderer.getCamera(), skinColors.skinColor, this.renderer.getAtlas());
+    this.offhandRenderer = new OffhandRenderer(
+      this.renderer.getCamera(),
+      skinColors.skinColor,
+      this.renderer.getAtlas()
+    );
 
     // Break overlay
     this.breakOverlay = new BlockBreakOverlay();

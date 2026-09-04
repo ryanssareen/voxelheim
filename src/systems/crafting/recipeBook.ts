@@ -98,7 +98,7 @@ export function countAvailable(slots: ReadonlyArray<ItemStack>): Map<number, num
  * Available count for a requirement id: exact match, or — for a wood cell —
  * summed across every species of that part.
  */
-function availableForRequirement(blockId: number, available: ReadonlyMap<number, number>): number {
+export function availableForRequirement(blockId: number, available: ReadonlyMap<number, number>): number {
   const wood = BLOCK_DEFINITIONS[blockId]?.wood;
   if (!wood) return available.get(blockId) ?? 0;
   return WOOD_SPECIES.reduce((sum, species) => sum + (available.get(getWoodBlockId(species, wood.part)) ?? 0), 0);
@@ -126,8 +126,8 @@ export interface GridFillHost {
   setCell: (index: number, blockId: number, count: number) => void;
   /** Remove up to `count` of `blockId` from the inventory; returns how many. */
   takeItems: (blockId: number, count: number) => number;
-  /** Put one item back into the inventory. False when there is no room. */
-  addItem: (blockId: number) => boolean;
+  /** Put one item back into the inventory, preserving its durability. False when there is no room. */
+  addItem: (blockId: number, durability?: number) => boolean;
 }
 
 /** Returns everything currently in the grid to the inventory, cell by cell. */
@@ -137,7 +137,7 @@ function clearGridToInventory(host: GridFillHost): void {
     const cell = grid[i];
     if (cell.count <= 0 || cell.blockId === 0) continue;
     let left = cell.count;
-    while (left > 0 && host.addItem(cell.blockId)) left--;
+    while (left > 0 && host.addItem(cell.blockId, cell.durability)) left--;
     // Anything that would not fit stays put rather than vanishing.
     host.setCell(i, left > 0 ? cell.blockId : 0, left);
   }

@@ -29,7 +29,8 @@ interface HotbarState {
   getSelectedSlot: () => ItemStack;
   getOffhandBlockId: () => number;
   canAddItem: (blockId: number) => boolean;
-  addItem: (blockId: number) => boolean;
+  /** Adds one item. `durability` preserves a specific tool's wear; omitted, a tool gets fresh durability. */
+  addItem: (blockId: number, durability?: number) => boolean;
   removeSelectedItem: () => number;
   /**
    * Removes up to `count` of `blockId` from anywhere in the inventory and
@@ -117,7 +118,7 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
     return false;
   },
 
-  addItem: (blockId: number) => {
+  addItem: (blockId: number, durability?: number) => {
     let { slots } = get();
     // Guard against corrupted short arrays from old saves
     if (slots.length < TOTAL_SLOTS) {
@@ -143,7 +144,7 @@ export const useHotbarStore = create<HotbarState>((set, get) => ({
       if (slots[i].count === 0) {
         const newSlots = [...slots];
         const def = getToolDef(blockId);
-        newSlots[i] = { blockId, count: 1, durability: def?.durability };
+        newSlots[i] = { blockId, count: 1, durability: durability ?? def?.durability };
         set({ slots: newSlots });
         return true;
       }
