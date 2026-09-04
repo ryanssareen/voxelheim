@@ -7,6 +7,7 @@ import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 import { useWalkthroughStore } from "@store/useWalkthroughStore";
 import { useKeybindsStore } from "@store/useKeybindsStore";
+import { enterPlayCapture } from "@ui/playCapture";
 
 /**
  * Pause menu overlay. Shown when isPaused is true.
@@ -44,7 +45,7 @@ function PausePanel({
   const openControls = useKeybindsStore((s) => s.open);
 
   const handleResume = () => {
-    canvasRef.current?.requestPointerLock();
+    enterPlayCapture(canvasRef.current);
     setPaused(false);
   };
 
@@ -61,7 +62,7 @@ function PausePanel({
   // R11: replays from step one in any world, even once completed.
   const handleShowWalkthrough = () => {
     reopenWalkthrough();
-    canvasRef.current?.requestPointerLock();
+    enterPlayCapture(canvasRef.current);
     setPaused(false);
   };
 

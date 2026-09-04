@@ -39,6 +39,7 @@ import { BLOCK_ID, BLOCK_DEFINITIONS, getEatTimeSeconds } from "@data/blocks";
 import { getToolDef } from "@data/items";
 import type { MobType } from "@engine/entities/MobModel";
 import type { Biome } from "@engine/generation/TerrainGenerator";
+import { RandomTicker, createSurfaceSpreadRule, GRASS_SPREAD } from "@systems/simulation";
 
 const MOUSE_SENSITIVITY = 0.002;
 const DEFAULT_FOV = 75; // must match the Renderer's PerspectiveCamera
@@ -58,6 +59,7 @@ export class Engine {
   private readonly registry = BlockRegistry.getInstance();
   public renderer: Renderer | null = null;
   private chunkManager: ChunkManager | null = null;
+  private randomTicker: RandomTicker | null = null;
   private player: PlayerController | null = null;
   private playerModel: PlayerModel | null = null;
   private handRenderer: HandRenderer | null = null;
@@ -208,6 +210,13 @@ export class Engine {
       }
     }
 
+    // Budgeted random tick (grass spread); client-local, source "simulation".
+    this.randomTicker = new RandomTicker(
+      this.chunkManager,
+      [createSurfaceSpreadRule(GRASS_SPREAD, this.registry)],
+      this.seed
+    );
+
     // Always find safe Y on solid ground
     startPos.y = this.findSafeSpawnY(startPos.x, startPos.z);
 
@@ -234,7 +243,7 @@ export class Engine {
       this.camera.pitch = savedMeta.playerPitch;
     }
 
-    this.itemDrops = new ItemDropManager(this.renderer.getScene());
+    this.itemDrops = new ItemDropManager(this.renderer.getScene(), this.renderer.getAtlas());
     this.itemDrops.setGetBlock((x, y, z) => this.chunkManager!.getBlock(x, y, z));
     this.blockInteraction = new BlockInteraction(this.chunkManager, this.registry, this.itemDrops);
 
@@ -855,6 +864,8 @@ export class Engine {
       this.chunkManager.processMeshQueue();
     }
 
+    this.randomTicker?.update(dt);
+
     // E key: toggle inventory / close crafting table (single press)
     const eDown = this.input.isKeyDown("KeyE");
     if (eDown && !this.eWasDown) {
@@ -1342,6 +1353,7 @@ export class Engine {
     this.mobManager?.dispose();
     this.arrowManager?.dispose();
     this.playerModel?.dispose();
+    this.randomTicker = null;
     this.chunkManager?.dispose();
     this.renderer?.dispose();
     useGameStore.getState().resetObjective();
