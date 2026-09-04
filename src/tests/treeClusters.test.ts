@@ -2,11 +2,12 @@ import { describe, it, expect } from "vitest";
 import { TerrainGenerator, type Biome } from "@engine/generation/TerrainGenerator";
 import { StructureGenerator } from "@engine/generation/StructureGenerator";
 import { Chunk } from "@engine/world/Chunk";
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, woodBlockIds } from "@data/blocks";
 import { chunkKey } from "@lib/coords";
 import { CHUNK_SIZE } from "@engine/world/constants";
 
 const SEED = "voxelheim-mvp";
+const LOG_IDS = new Set(woodBlockIds("log"));
 
 describe("StructureGenerator cluster-noise tree placement", () => {
   it("decorateChunk is deterministic across two fresh generator instances", () => {
@@ -81,12 +82,13 @@ describe("StructureGenerator cluster-noise tree placement", () => {
           for (let x = 0; x < CHUNK_SIZE; x++) {
             for (let z = 0; z < CHUNK_SIZE; z++) {
               for (let y = 0; y < CHUNK_SIZE; y++) {
-                if (chunk.getBlock(x, y, z) !== BLOCK_ID.LOG) continue;
+                if (!LOG_IDS.has(chunk.getBlock(x, y, z))) continue;
                 const belowIsLog =
                   y > 0
-                    ? chunk.getBlock(x, y - 1, z) === BLOCK_ID.LOG
-                    : (chunks.get(chunkKey(cx, cy - 1, cz))?.getBlock(x, CHUNK_SIZE - 1, z) ?? BLOCK_ID.AIR) ===
-                      BLOCK_ID.LOG;
+                    ? LOG_IDS.has(chunk.getBlock(x, y - 1, z))
+                    : LOG_IDS.has(
+                        chunks.get(chunkKey(cx, cy - 1, cz))?.getBlock(x, CHUNK_SIZE - 1, z) ?? BLOCK_ID.AIR
+                      );
                 if (!belowIsLog) trunkBaseCount++;
               }
             }

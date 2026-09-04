@@ -1,5 +1,5 @@
 import { Chunk } from "@engine/world/Chunk";
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, getWoodBlockId, type WoodSpecies } from "@data/blocks";
 import { CHUNK_SIZE, SEA_LEVEL, CRYSTAL_MIN_DEPTH } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
 import { SeededNoise } from "@lib/noise";
@@ -45,16 +45,65 @@ const TREE_DENSITY: Record<Biome, TreeDensity> = {
 /** World-space scale (in blocks) of the cluster-noise field driving tree density. */
 const TREE_CLUSTER_SCALE = 32;
 
+/** World-space scale (in blocks) of the species-noise field; wider than the cluster scale so birch groves span several trees inside a forest. */
+const TREE_SPECIES_SCALE = 48;
+
+/**
+ * Per-biome wood species weights for trees placed via `decorateChunk`
+ * (infinite and flat worlds, which always have a real biome from
+ * `terrainGen.getBiome`). Cumulative-thresholded against a dedicated noise
+ * field in `treeSpecies`. Desert is unreachable in practice — `treeChance`
+ * is always 0 for desert — but every `Biome` needs an entry for the table
+ * to type-check.
+ */
+const BIOME_WOOD: Record<Biome, ReadonlyArray<{ species: WoodSpecies; weight: number }>> = {
+  forest: [{ species: "oak", weight: 0.7 }, { species: "birch", weight: 0.3 }],
+  plains: [{ species: "oak", weight: 1 }],
+  snowy: [{ species: "spruce", weight: 1 }],
+  mountains: [{ species: "spruce", weight: 0.6 }, { species: "oak", weight: 0.4 }],
+  desert: [{ species: "oak", weight: 1 }],
+};
+
+/**
+ * Wood species weights for `placeTrees` (island worlds only). Island
+ * generation has no biome concept — `TerrainGenerator.getBiome` is never
+ * called on that path — so this is a fixed, oak-dominant fallback table fed
+ * through the same species-noise field.
+ */
+const ISLAND_WOOD: ReadonlyArray<{ species: WoodSpecies; weight: number }> = [
+  { species: "oak", weight: 0.85 },
+  { species: "birch", weight: 0.15 },
+];
+
+/** Trunk height range for a wood species: `minHeight` to `minHeight + heightRange - 1`. */
+interface TreeShape {
+  minHeight: number;
+  heightRange: number;
+}
+
+/**
+ * Per-species trunk shape. Oak and birch reproduce today's exact
+ * `4 + floor(rand * 3)` formula (4-6) bit-for-bit; only spruce (a taller
+ * conifer silhouette) differs from the historical output.
+ */
+const WOOD_TREE_SHAPE: Record<WoodSpecies, TreeShape> = {
+  oak: { minHeight: 4, heightRange: 3 },
+  birch: { minHeight: 4, heightRange: 3 },
+  spruce: { minHeight: 5, heightRange: 4 },
+};
+
 /**
  * Places structures (trees) into an already-generated world.
  */
 export class StructureGenerator {
   private readonly seedHash: number;
   private readonly clusterNoise: SeededNoise;
+  private readonly speciesNoise: SeededNoise;
 
   constructor(seed: string) {
     this.seedHash = hashString(seed + ":structures");
     this.clusterNoise = new SeededNoise(hashString(seed + ":treeclusters"));
+    this.speciesNoise = new SeededNoise(hashString(seed + ":treespecies"));
   }
 
   /**
@@ -69,6 +118,31 @@ export class StructureGenerator {
     const f = (this.clusterNoise.noise2D(wx / TREE_CLUSTER_SCALE, wz / TREE_CLUSTER_SCALE) + 1) / 2;
     if (f < d.onset) return d.floor;
     return d.floor + (d.peak - d.floor) * ((f - d.onset) / (1 - d.onset));
+  }
+
+  /**
+   * Picks a tree's wood species at a world column: a dedicated `SeededNoise`
+   * field (seeded `seed + ":treespecies"`, scale `TREE_SPECIES_SCALE` so
+   * groves of one species span several trees) thresholded against the
+   * cumulative weights of the applicable species table. Pure function of
+   * (seed, wx, wz, biome).
+   *
+   * `biome` is only omitted by `placeTrees` (island worlds), which has no
+   * biome concept — it falls back to `ISLAND_WOOD`. `decorateChunk`
+   * (infinite and flat worlds) always passes the real biome it already
+   * computed via `terrainGen.getBiome`, and uses `BIOME_WOOD`.
+   */
+  treeSpecies(wx: number, wz: number, biome?: Biome): WoodSpecies {
+    const entries = biome !== undefined ? BIOME_WOOD[biome] : ISLAND_WOOD;
+    if (entries.length === 1) return entries[0].species;
+    const t = (this.speciesNoise.noise2D(wx / TREE_SPECIES_SCALE, wz / TREE_SPECIES_SCALE) + 1) / 2;
+    const total = entries.reduce((sum, e) => sum + e.weight, 0);
+    let cumulative = 0;
+    for (const entry of entries) {
+      cumulative += entry.weight / total;
+      if (t < cumulative) return entry.species;
+    }
+    return entries[entries.length - 1].species;
   }
 
   /**
@@ -122,13 +196,19 @@ export class StructureGenerator {
       const chance = mixHash(wx + this.seedHash, wz) / 4294967296;
       if (chance > 0.03) continue;
 
-      // Trunk height: 4-6 blocks
+      // Island worlds have no biome concept — falls back to ISLAND_WOOD.
+      const species = this.treeSpecies(wx, wz);
+      const shape = WOOD_TREE_SHAPE[species];
+      const logId = getWoodBlockId(species, "log");
+      const leavesId = getWoodBlockId(species, "leaves");
+
+      // Trunk height: species-dependent range (oak/birch 4-6, spruce 5-8)
       const trunkRand = mixHash(wx + this.seedHash + 1000, wz + 1000) / 4294967296;
-      const trunkHeight = 4 + Math.floor(trunkRand * 3); // 4, 5, or 6
+      const trunkHeight = shape.minHeight + Math.floor(trunkRand * shape.heightRange);
 
       // Place trunk
       for (let ty = 1; ty <= trunkHeight; ty++) {
-        this.setWorldBlock(chunks, wx, surfaceY + ty, wz, BLOCK_ID.LOG);
+        this.setWorldBlock(chunks, wx, surfaceY + ty, wz, logId);
       }
 
       // Place 3x3x2 canopy on top of trunk
@@ -150,7 +230,7 @@ export class StructureGenerator {
               wx + cx,
               canopyBase + cy,
               wz + cz,
-              BLOCK_ID.LEAVES
+              leavesId
             );
           }
         }
@@ -189,8 +269,13 @@ export class StructureGenerator {
         const chance = mixHash(wx + this.seedHash, wz) / 4294967296;
         if (chance > this.treeChance(wx, wz, biome)) continue;
 
+        const species = this.treeSpecies(wx, wz, biome);
+        const shape = WOOD_TREE_SHAPE[species];
+        const logId = getWoodBlockId(species, "log");
+        const leavesId = getWoodBlockId(species, "leaves");
+
         const trunkRand = mixHash(wx + this.seedHash + 1000, wz + 1000) / 4294967296;
-        const trunkHeight = 4 + Math.floor(trunkRand * 3);
+        const trunkHeight = shape.minHeight + Math.floor(trunkRand * shape.heightRange);
 
         // Write DIRT under the trunk (Minecraft-style) so the surface block
         // a tree stands on is never GRASS with an opaque block directly
@@ -211,7 +296,7 @@ export class StructureGenerator {
           const tc = worldToChunk(wx, by, wz);
           if (tc.cx !== cx || tc.cz !== cz) continue;
           const local = worldToLocal(wx, by, wz);
-          chunk.setBlock(local.lx, local.ly, local.lz, BLOCK_ID.LOG);
+          chunk.setBlock(local.lx, local.ly, local.lz, logId);
         }
 
         // Place canopy blocks that fall in this chunk
@@ -232,7 +317,7 @@ export class StructureGenerator {
               const tc = worldToChunk(bx, by, bz);
               if (tc.cx !== cx || tc.cy !== cy || tc.cz !== cz) continue;
               const local = worldToLocal(bx, by, bz);
-              chunk.setBlock(local.lx, local.ly, local.lz, BLOCK_ID.LEAVES);
+              chunk.setBlock(local.lx, local.ly, local.lz, leavesId);
             }
           }
         }

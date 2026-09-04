@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { TerrainGenerator } from "@engine/generation/TerrainGenerator";
 import { StructureGenerator } from "@engine/generation/StructureGenerator";
 import { Chunk } from "@engine/world/Chunk";
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, woodBlockIds } from "@data/blocks";
 import {
   CHUNK_SIZE,
   SEA_LEVEL,
@@ -181,13 +181,14 @@ describe("StructureGenerator", () => {
     const structGen = new StructureGenerator("tree-test");
     structGen.placeTrees(chunks, surfaceMap);
 
-    // Find at least one LOG block
+    // Find at least one LOG block (any species)
+    const LOG_IDS = new Set(woodBlockIds("log"));
     let foundLog = false;
     for (const chunk of chunks.values()) {
       for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let y = 0; y < CHUNK_SIZE; y++) {
           for (let z = 0; z < CHUNK_SIZE; z++) {
-            if (chunk.getBlock(x, y, z) === BLOCK_ID.LOG) {
+            if (LOG_IDS.has(chunk.getBlock(x, y, z))) {
               foundLog = true;
               break;
             }
