@@ -13,6 +13,7 @@ import {
   WORLD_HEIGHT_CHUNKS_INFINITE,
   CHUNK_GEN_BUDGET_MS,
   CHUNK_MESH_BUDGET_MS,
+  SEA_LEVEL,
   type WorldType,
 } from "@engine/world/constants";
 import { worldToChunk, worldToLocal, chunkKey } from "@lib/coords";
@@ -94,6 +95,7 @@ export class ChunkManager {
 
     this.terrainGen.placeCrystals(this.chunks, surfaceMap);
     this.structureGen.placeTrees(this.chunks, surfaceMap);
+    this.buildIslandBorder();
 
     for (const [key, chunk] of this.chunks) {
       const neighbors = this.getNeighbors(chunk.cx, chunk.cy, chunk.cz);
@@ -106,6 +108,77 @@ export class ChunkManager {
         chunk.cz * CHUNK_SIZE
       );
       this.meshedChunks.add(key);
+    }
+  }
+
+  /**
+   * C5 "visible barrier" fix: island worlds only ever generate chunks for
+   * cx, cz in [0, sizeChunks) — nothing exists beyond that fixed grid, and
+   * getBlock() returns bare air for anything outside it. A player walking
+   * past world x=0/islandSize-1 or z=0/islandSize-1 fell straight into
+   * ungenerated, uncollidable space with no visible warning. The terrain
+   * falloff (TerrainGenerator's island radius) already thins the surface
+   * toward the edges, but that shapes existing chunks — it does not stop
+   * movement past them.
+   *
+   * Rather than an invisible void-kill plane bolted on from outside
+   * ChunkManager, carve a real 1-block STONE perimeter ring into the
+   * outermost edge of the grid, as ordinary chunk voxel data, so it is
+   * meshed and collidable through the exact same pipeline as any other
+   * block — by construction it can never be the kind of invisible geometry
+   * this workstream exists to fix. The ring only rises to SEA_LEVEL + 6 (a
+   * coastal cliff/reef) rather than full world height, so it reads as
+   * terrain rather than a floor-to-sky curtain, and it never extends the
+   * generated grid itself (still exactly [0, sizeChunks) x [0, sizeChunks)).
+   *
+   * Runs after placeCrystals()/placeTrees() and explicitly skips any block
+   * that is already CRYSTAL, so a shard placed near the edge is never
+   * overwritten — the CRYSTAL count stays exactly CRYSTAL_SHARD_COUNT.
+   *
+   * Existing island saves: this ring is derived purely from seed-
+   * independent local coordinates, not persisted, so an unmodified edge
+   * chunk regenerates it on every load. A player-modified edge chunk loads
+   * its stored block data on top of this (see loadModifiedChunks) and keeps
+   * whatever the player left there instead — the ring can have gaps in
+   * edge chunks a player has already dug into. That is an accepted
+   * tradeoff of computing the ring at generation time rather than forcing
+   * it into every saved chunk.
+   */
+  private buildIslandBorder(): void {
+    const wallBottom = 1; // leave the y=0 bedrock layer alone
+    const wallTop = SEA_LEVEL + 6;
+
+    const placeIfNotCrystal = (chunk: Chunk, lx: number, ly: number, lz: number): void => {
+      if (chunk.getBlock(lx, ly, lz) === BLOCK_ID.CRYSTAL) return;
+      chunk.setBlock(lx, ly, lz, BLOCK_ID.STONE);
+    };
+
+    for (const chunk of this.chunks.values()) {
+      const chunkYStart = chunk.cy * CHUNK_SIZE;
+      const lyMin = Math.max(0, wallBottom - chunkYStart);
+      const lyMax = Math.min(CHUNK_SIZE - 1, wallTop - chunkYStart);
+      if (lyMin > lyMax) continue; // this cy layer is entirely above the wall
+
+      const isMinXEdge = chunk.cx === 0;
+      const isMaxXEdge = chunk.cx === this.sizeChunks - 1;
+      const isMinZEdge = chunk.cz === 0;
+      const isMaxZEdge = chunk.cz === this.sizeChunks - 1;
+      if (!isMinXEdge && !isMaxXEdge && !isMinZEdge && !isMaxZEdge) continue;
+
+      for (let ly = lyMin; ly <= lyMax; ly++) {
+        if (isMinXEdge) {
+          for (let lz = 0; lz < CHUNK_SIZE; lz++) placeIfNotCrystal(chunk, 0, ly, lz);
+        }
+        if (isMaxXEdge) {
+          for (let lz = 0; lz < CHUNK_SIZE; lz++) placeIfNotCrystal(chunk, CHUNK_SIZE - 1, ly, lz);
+        }
+        if (isMinZEdge) {
+          for (let lx = 0; lx < CHUNK_SIZE; lx++) placeIfNotCrystal(chunk, lx, ly, 0);
+        }
+        if (isMaxZEdge) {
+          for (let lx = 0; lx < CHUNK_SIZE; lx++) placeIfNotCrystal(chunk, lx, ly, CHUNK_SIZE - 1);
+        }
+      }
     }
   }
 
@@ -341,6 +414,13 @@ export class ChunkManager {
       this.pendingGeneration.delete(key);
       this.pendingMesh.delete(key);
     }
+    // The surviving neighbour columns built their meshes while this column
+    // was still a solid, face-culling neighbour. Now that it's gone, their
+    // boundary faces toward it must be re-drawn — otherwise a neighbour
+    // keeps a stale mesh with a hole where real, minable block data still
+    // sits (the "invisible wall" bug: drawn geometry never catches up with
+    // what getBlock()/collision already see once this column is gone).
+    this.markNeighborColumnsForRemesh(ccx, ccz);
   }
 
   // ──────────────────────────────────────────────
