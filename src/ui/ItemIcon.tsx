@@ -992,7 +992,7 @@ export function InventorySlot({
   tooltip = true,
 }: {
   item: { blockId: number; count: number; durability?: number };
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
   size?: number;
   highlight?: boolean;
   label?: string;

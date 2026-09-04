@@ -1,40 +1,42 @@
 import { create } from "zustand";
-import { useHotbarStore } from "@store/useHotbarStore";
+import { useHotbarStore, type ItemStack } from "@store/useHotbarStore";
+import { returnToPlayer } from "@systems/inventory/returns";
 
 interface InventoryState {
   isOpen: boolean;
-  /** 2x2 crafting grid: [TL, TR, BL, BR] as { blockId, count } */
-  craftingGrid: Array<{ blockId: number; count: number; durability?: number }>;
+  /** 2x2 crafting grid: [TL, TR, BL, BR] */
+  craftingGrid: ItemStack[];
   /** Currently held item on cursor (from clicking a slot) */
-  cursorItem: { blockId: number; count: number; durability?: number };
+  cursorItem: ItemStack;
   /** Whether the 3x3 crafting table UI is open */
   tableOpen: boolean;
   /** 3x3 crafting table grid (9 slots, row-major) */
-  tableGrid: Array<{ blockId: number; count: number; durability?: number }>;
+  tableGrid: ItemStack[];
   /** Whether the furnace UI is open */
   furnaceOpen: boolean;
   /** Furnace slots: [input, fuel] */
-  furnaceSlots: Array<{ blockId: number; count: number }>;
+  furnaceSlots: ItemStack[];
   /** Whether the creative inventory is open */
   creativeOpen: boolean;
   open: () => void;
   close: () => void;
-  toggle: () => void;
-  setCraftingSlot: (index: number, blockId: number, count: number) => void;
+  setCraftingSlot: (index: number, blockId: number, count: number, durability?: number) => void;
   clearCraftingGrid: () => void;
   setCursorItem: (blockId: number, count: number, durability?: number) => void;
   clearCursor: () => void;
   openTable: () => void;
   closeTable: () => void;
-  setTableSlot: (index: number, blockId: number, count: number) => void;
+  setTableSlot: (index: number, blockId: number, count: number, durability?: number) => void;
   openFurnace: () => void;
   closeFurnace: () => void;
-  setFurnaceSlot: (index: number, blockId: number, count: number) => void;
+  setFurnaceSlot: (index: number, blockId: number, count: number, durability?: number) => void;
   openCreative: () => void;
   closeCreative: () => void;
+  /** Resets every field to its initial value. Test hook. */
+  reset: () => void;
 }
 
-function emptyGrid() {
+function emptyGrid(): ItemStack[] {
   return [
     { blockId: 0, count: 0 },
     { blockId: 0, count: 0 },
@@ -43,59 +45,44 @@ function emptyGrid() {
   ];
 }
 
-function emptyTableGrid() {
+function emptyTableGrid(): ItemStack[] {
   return Array.from({ length: 9 }, () => ({ blockId: 0, count: 0 }));
 }
 
-function emptyFurnaceSlots() {
+function emptyFurnaceSlots(): ItemStack[] {
   return [{ blockId: 0, count: 0 }, { blockId: 0, count: 0 }];
 }
 
-/** Return all non-empty items to the player's hotbar/inventory. */
-function returnItemsToHotbar(
-  slots: Array<{ blockId: number; count: number; durability?: number }>,
-  cursor: { blockId: number; count: number; durability?: number }
-): void {
-  const hotbar = useHotbarStore.getState();
-  for (const slot of slots) {
-    for (let i = 0; i < slot.count; i++) {
-      if (slot.blockId !== 0) hotbar.addItem(slot.blockId);
-    }
-  }
-  for (let i = 0; i < cursor.count; i++) {
-    if (cursor.blockId !== 0) hotbar.addItem(cursor.blockId);
-  }
+function emptyCursor(): ItemStack {
+  return { blockId: 0, count: 0 };
 }
 
-export const useInventoryStore = create<InventoryState>((set) => ({
+const initialState = {
   isOpen: false,
   craftingGrid: emptyGrid(),
-  cursorItem: { blockId: 0, count: 0 },
+  cursorItem: emptyCursor(),
   tableOpen: false,
   tableGrid: emptyTableGrid(),
   furnaceOpen: false,
   furnaceSlots: emptyFurnaceSlots(),
   creativeOpen: false,
+};
+
+export const useInventoryStore = create<InventoryState>((set, get) => ({
+  ...initialState,
 
   open: () => set({ isOpen: true }),
-  close: () =>
-    set((state) => {
-      returnItemsToHotbar(state.craftingGrid, state.cursorItem);
-      return { isOpen: false, craftingGrid: emptyGrid(), cursorItem: { blockId: 0, count: 0 } };
-    }),
-  toggle: () =>
-    set((state) => {
-      if (state.isOpen) returnItemsToHotbar(state.craftingGrid, state.cursorItem);
-      return {
-        isOpen: !state.isOpen,
-        ...(!state.isOpen ? {} : { craftingGrid: emptyGrid(), cursorItem: { blockId: 0, count: 0 } }),
-      };
-    }),
+  close: () => {
+    const state = get();
+    const r = returnToPlayer(state.craftingGrid, state.cursorItem, useHotbarStore.getState().slots);
+    useHotbarStore.setState({ slots: r.player });
+    set({ isOpen: false, craftingGrid: r.container, cursorItem: r.cursor });
+  },
 
-  setCraftingSlot: (index, blockId, count) =>
+  setCraftingSlot: (index, blockId, count, durability) =>
     set((state) => {
       const grid = [...state.craftingGrid];
-      grid[index] = { blockId, count };
+      grid[index] = { blockId, count, durability };
       return { craftingGrid: grid };
     }),
 
@@ -104,38 +91,42 @@ export const useInventoryStore = create<InventoryState>((set) => ({
   setCursorItem: (blockId, count, durability) =>
     set({ cursorItem: { blockId, count, durability } }),
 
-  clearCursor: () => set({ cursorItem: { blockId: 0, count: 0 } }),
+  clearCursor: () => set({ cursorItem: emptyCursor() }),
 
-  openTable: () => set({ tableOpen: true, tableGrid: emptyTableGrid(), cursorItem: { blockId: 0, count: 0 } }),
-  closeTable: () =>
-    set((state) => {
-      returnItemsToHotbar(state.tableGrid, state.cursorItem);
-      return { tableOpen: false, tableGrid: emptyTableGrid(), cursorItem: { blockId: 0, count: 0 } };
-    }),
+  openTable: () => set({ tableOpen: true }),
+  closeTable: () => {
+    const state = get();
+    const r = returnToPlayer(state.tableGrid, state.cursorItem, useHotbarStore.getState().slots);
+    useHotbarStore.setState({ slots: r.player });
+    set({ tableOpen: false, tableGrid: r.container, cursorItem: r.cursor });
+  },
 
-  setTableSlot: (index, blockId, count) =>
+  setTableSlot: (index, blockId, count, durability) =>
     set((state) => {
       const grid = [...state.tableGrid];
-      grid[index] = { blockId, count };
+      grid[index] = { blockId, count, durability };
       return { tableGrid: grid };
     }),
 
-  openFurnace: () => set({ furnaceOpen: true, furnaceSlots: emptyFurnaceSlots(), cursorItem: { blockId: 0, count: 0 } }),
-  closeFurnace: () =>
-    set((state) => {
-      returnItemsToHotbar(state.furnaceSlots, state.cursorItem);
-      return { furnaceOpen: false, furnaceSlots: emptyFurnaceSlots(), cursorItem: { blockId: 0, count: 0 } };
-    }),
+  openFurnace: () => set({ furnaceOpen: true }),
+  closeFurnace: () => {
+    const state = get();
+    const r = returnToPlayer(state.furnaceSlots, state.cursorItem, useHotbarStore.getState().slots);
+    useHotbarStore.setState({ slots: r.player });
+    set({ furnaceOpen: false, furnaceSlots: r.container, cursorItem: r.cursor });
+  },
 
-  setFurnaceSlot: (index, blockId, count) =>
+  setFurnaceSlot: (index, blockId, count, durability) =>
     set((state) => {
       const slots = [...state.furnaceSlots];
-      slots[index] = { blockId, count };
+      slots[index] = { blockId, count, durability };
       return { furnaceSlots: slots };
     }),
 
   // Creative has infinite items, so any cursor item is simply discarded on
   // open/close (Minecraft-style creative trash) instead of returned.
-  openCreative: () => set({ creativeOpen: true, cursorItem: { blockId: 0, count: 0 } }),
-  closeCreative: () => set({ creativeOpen: false, cursorItem: { blockId: 0, count: 0 } }),
+  openCreative: () => set({ creativeOpen: true, cursorItem: emptyCursor() }),
+  closeCreative: () => set({ creativeOpen: false, cursorItem: emptyCursor() }),
+
+  reset: () => set({ ...initialState, craftingGrid: emptyGrid(), tableGrid: emptyTableGrid(), furnaceSlots: emptyFurnaceSlots(), cursorItem: emptyCursor() }),
 }));
