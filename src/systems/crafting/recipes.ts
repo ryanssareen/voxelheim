@@ -1,4 +1,4 @@
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS, getWoodBlockId, type WoodSpecies } from "@data/blocks";
 
 /**
  * A crafting recipe for the 2x2 grid.
@@ -313,6 +313,46 @@ function normalize2x2(grid: [number, number, number, number]): [number, number, 
   return [tl, tr, bl, br];
 }
 
+/**
+ * True when a recipe cell is satisfied by an actual grid cell: exact id, or —
+ * when the recipe cell is a wood block — any block sharing its wood.part
+ * (any species).
+ */
+function cellMatches(recipeCell: number, actualCell: number): boolean {
+  if (recipeCell === actualCell) return true;
+  if (recipeCell === 0 || actualCell === 0) return false;
+  const recipeWood = BLOCK_DEFINITIONS[recipeCell]?.wood;
+  const actualWood = BLOCK_DEFINITIONS[actualCell]?.wood;
+  return recipeWood !== undefined && actualWood !== undefined && recipeWood.part === actualWood.part;
+}
+
+/** Species of every wood ingredient the actual grid supplied against the recipe's wood cells. */
+function woodSpeciesUsed(recipeGrid: readonly number[], actualGrid: readonly number[]): WoodSpecies[] {
+  const species: WoodSpecies[] = [];
+  for (let i = 0; i < recipeGrid.length; i++) {
+    const recipeCell = recipeGrid[i];
+    if (recipeCell === 0) continue;
+    const recipeWood = BLOCK_DEFINITIONS[recipeCell]?.wood;
+    if (!recipeWood) continue;
+    const actualWood = BLOCK_DEFINITIONS[actualGrid[i]]?.wood;
+    if (actualWood) species.push(actualWood.species);
+  }
+  return species;
+}
+
+/**
+ * Resolves a matched recipe's canonical (oak) result to the species the
+ * ingredients actually used: single species -> that species' variant;
+ * mixed or no wood ingredient -> canonical.
+ */
+function resolveResult(canonicalResult: number, species: WoodSpecies[]): number {
+  const resultWood = BLOCK_DEFINITIONS[canonicalResult]?.wood;
+  if (!resultWood) return canonicalResult;
+  const unique = new Set(species);
+  if (unique.size !== 1) return canonicalResult;
+  return getWoodBlockId([...unique][0], resultWood.part);
+}
+
 /** Find a matching recipe for the given 2x2 grid. Returns null if no match. */
 export function findRecipe(
   grid: [number, number, number, number]
@@ -320,12 +360,13 @@ export function findRecipe(
   const n = normalize2x2(grid);
   for (const recipe of RECIPES) {
     if (
-      recipe.grid[0] === n[0] &&
-      recipe.grid[1] === n[1] &&
-      recipe.grid[2] === n[2] &&
-      recipe.grid[3] === n[3]
+      cellMatches(recipe.grid[0], n[0]) &&
+      cellMatches(recipe.grid[1], n[1]) &&
+      cellMatches(recipe.grid[2], n[2]) &&
+      cellMatches(recipe.grid[3], n[3])
     ) {
-      return recipe;
+      const result = resolveResult(recipe.result, woodSpeciesUsed(recipe.grid, n));
+      return { ...recipe, result };
     }
   }
   return null;
@@ -338,9 +379,12 @@ export function findRecipe3x3(
   for (const recipe of RECIPES_3x3) {
     let match = true;
     for (let i = 0; i < 9; i++) {
-      if (recipe.grid[i] !== grid[i]) { match = false; break; }
+      if (!cellMatches(recipe.grid[i], grid[i])) { match = false; break; }
     }
-    if (match) return recipe;
+    if (match) {
+      const result = resolveResult(recipe.result, woodSpeciesUsed(recipe.grid, grid));
+      return { ...recipe, result };
+    }
   }
   // Also check if it fits as a 2x2 recipe placed in any valid 2x2 subgrid
   const subgrids: [number, number, number, number, number, number, number, number, number][] = [
