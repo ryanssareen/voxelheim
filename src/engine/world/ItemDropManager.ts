@@ -3,8 +3,12 @@ import { useHotbarStore } from "@store/useHotbarStore";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { BLOCK_HEX_COLORS } from "@data/items";
 import type { MultiplayerDropState } from "@lib/multiplayer/types";
+import type { TextureAtlas } from "@engine/renderer/TextureAtlas";
 
 const DROP_COLORS = BLOCK_HEX_COLORS;
+
+/** BoxGeometry's 6 face groups, in construction order (px, nx, py, ny, pz, nz). */
+const BOX_FACE_OF_GROUP = ["side", "side", "top", "bottom", "side", "side"] as const;
 
 interface ItemDrop {
   dropId: string;
@@ -48,14 +52,20 @@ function createDropId(): string {
  */
 export class ItemDropManager {
   private readonly scene: THREE.Scene;
+  private readonly atlas: TextureAtlas | null;
   private readonly drops = new Map<string, ItemDrop>();
   private readonly registry = BlockRegistry.getInstance();
   private getBlock: ((x: number, y: number, z: number) => number) | null = null;
   private onDropSpawn: ((drop: MultiplayerDropState) => void) | null = null;
   private claimDrop: ((dropId: string) => Promise<boolean>) | null = null;
 
-  constructor(scene: THREE.Scene) {
+  /** Shared, lazily created — one material per sheet for every atlas-textured drop. */
+  private blockMaterial: THREE.MeshLambertMaterial | null = null;
+  private itemMaterial: THREE.MeshLambertMaterial | null = null;
+
+  constructor(scene: THREE.Scene, atlas: TextureAtlas | null = null) {
     this.scene = scene;
+    this.atlas = atlas;
   }
 
   setGetBlock(fn: (x: number, y: number, z: number) => number): void {
@@ -199,11 +209,77 @@ export class ItemDropManager {
     };
   }
 
-  private addDropFromState(state: MultiplayerDropState): void {
-    const color = DROP_COLORS[state.blockId] ?? 0xffffff;
+  private getBlockMaterial(): THREE.MeshLambertMaterial {
+    if (!this.blockMaterial) {
+      this.blockMaterial = new THREE.MeshLambertMaterial({
+        map: this.atlas?.getTexture() ?? null,
+        alphaTest: 0.5,
+      });
+    }
+    return this.blockMaterial;
+  }
+
+  private getItemMaterial(): THREE.MeshLambertMaterial {
+    if (!this.itemMaterial) {
+      this.itemMaterial = new THREE.MeshLambertMaterial({
+        map: this.atlas?.getItemTexture() ?? null,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+      });
+    }
+    return this.itemMaterial;
+  }
+
+  /** Remaps a geometry's default `uv` attribute onto one atlas sub-rectangle. */
+  private static remapUVs(
+    geometry: THREE.BufferGeometry,
+    rect: { u0: number; v0: number; u1: number; v1: number },
+    start: number,
+    count: number
+  ): void {
+    const uvAttr = geometry.getAttribute("uv") as THREE.BufferAttribute;
+    for (let i = start; i < start + count; i++) {
+      const u = uvAttr.getX(i);
+      const v = uvAttr.getY(i);
+      uvAttr.setXY(i, rect.u0 + u * (rect.u1 - rect.u0), rect.v1 - v * (rect.v1 - rect.v0));
+    }
+    uvAttr.needsUpdate = true;
+  }
+
+  /**
+   * Chooses the drop's mesh by data, never a switch on the block id: a block
+   * with a side texture and a loaded block atlas gets an atlas-UV'd cube; a
+   * block-less item with an icon tile and a loaded item sheet gets a
+   * spinning quad (Minecraft-style); anything else falls back to the
+   * original flat-coloured cube so tests and the no-atlas case still work.
+   */
+  private buildDropMesh(blockId: number): THREE.Mesh {
+    const def = this.registry.getBlock(blockId);
+
+    if (def && def.textures.side !== "" && this.atlas?.getTexture()) {
+      const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+      for (let group = 0; group < BOX_FACE_OF_GROUP.length; group++) {
+        const rect = this.atlas.getBlockFaceUVs(blockId, BOX_FACE_OF_GROUP[group]);
+        ItemDropManager.remapUVs(geometry, rect, group * 4, 4);
+      }
+      return new THREE.Mesh(geometry, this.getBlockMaterial());
+    }
+
+    const itemRect = this.atlas?.getItemUVs(blockId);
+    if (itemRect && this.atlas?.getItemTexture()) {
+      const geometry = new THREE.PlaneGeometry(0.4, 0.4);
+      ItemDropManager.remapUVs(geometry, itemRect, 0, 4);
+      return new THREE.Mesh(geometry, this.getItemMaterial());
+    }
+
+    const color = DROP_COLORS[blockId] ?? 0xffffff;
     const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
     const material = new THREE.MeshBasicMaterial({ color });
-    const mesh = new THREE.Mesh(geometry, material);
+    return new THREE.Mesh(geometry, material);
+  }
+
+  private addDropFromState(state: MultiplayerDropState): void {
+    const mesh = this.buildDropMesh(state.blockId);
 
     const initialAge = Math.max(0, (Date.now() - state.createdAt) / 1000);
     const settled = initialAge > 1;
@@ -234,6 +310,12 @@ export class ItemDropManager {
     state: MultiplayerDropState
   ): void {
     const initialAge = Math.max(0, (Date.now() - state.createdAt) / 1000);
+    if (state.blockId !== drop.blockId) {
+      this.scene.remove(drop.mesh);
+      drop.mesh.geometry.dispose();
+      drop.mesh = this.buildDropMesh(state.blockId);
+      this.scene.add(drop.mesh);
+    }
     drop.blockId = state.blockId;
     drop.position.set(state.x, state.y, state.z);
     drop.velocity.set(state.vx, state.vy, state.vz);
@@ -244,9 +326,6 @@ export class ItemDropManager {
     drop.pendingClaim = false;
     drop.settled = initialAge > 1 || drop.velocity.lengthSq() === 0;
     drop.mesh.position.copy(drop.position);
-    (drop.mesh.material as THREE.MeshBasicMaterial).color.setHex(
-      DROP_COLORS[state.blockId] ?? 0xffffff
-    );
   }
 
   private async tryPickup(dropId: string): Promise<void> {
@@ -330,7 +409,10 @@ export class ItemDropManager {
 
     this.scene.remove(drop.mesh);
     drop.mesh.geometry.dispose();
-    (drop.mesh.material as THREE.Material).dispose();
+    const material = drop.mesh.material as THREE.Material;
+    if (material !== this.blockMaterial && material !== this.itemMaterial) {
+      material.dispose();
+    }
     this.drops.delete(dropId);
   }
 
@@ -338,5 +420,9 @@ export class ItemDropManager {
     for (const dropId of [...this.drops.keys()]) {
       this.removeDrop(dropId);
     }
+    this.blockMaterial?.dispose();
+    this.itemMaterial?.dispose();
+    this.blockMaterial = null;
+    this.itemMaterial = null;
   }
 }
