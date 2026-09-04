@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   BREAK_STAGE_COUNT,
+  CRACK_HIGHLIGHT_RGBA,
   breakStageForProgress,
   buildCrackStages,
   BlockBreakOverlay,
@@ -47,6 +48,15 @@ describe("breakStageForProgress", () => {
       expect(stage).toBeGreaterThanOrEqual(prev);
       prev = stage;
     }
+  });
+});
+
+describe("CRACK_HIGHLIGHT_RGBA", () => {
+  it("is a darken-only blend, never a light-independent highlight color", () => {
+    // The overlay is a MeshBasicMaterial and ignores scene lighting, so the
+    // highlight must stay in the same rgba(0,0,0,a) darken family as the
+    // dark core pass to read consistently under day/night Lambert dimming.
+    expect(CRACK_HIGHLIGHT_RGBA.startsWith("rgba(0,0,0,")).toBe(true);
   });
 });
 
