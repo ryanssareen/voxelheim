@@ -395,7 +395,7 @@ function createZombie(): MobModelData {
     const armPivot = new THREE.Group();
     armPivot.position.set(0, 1.15, z);
     const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.15), shirtCyan);
-    arm.position.set(0.2, 0, 0);
+    arm.position.set(0, -0.3, 0);
     armPivot.add(arm);
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.12, 0.15), skinGreen);
     hand.position.set(0, -0.36, 0);
@@ -404,7 +404,8 @@ function createZombie(): MobModelData {
     const tear = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.16), detail(0x4f7d4f));
     tear.position.set(0, -0.24, 0);
     arm.add(tear);
-    armPivot.rotation.x = -Math.PI / 2.5;
+    // Model forward is local +X: pivoting about Z reaches the arms that way.
+    armPivot.rotation.z = Math.PI / 2.5;
     group.add(armPivot);
   }
 
@@ -422,75 +423,76 @@ function createZombie(): MobModelData {
 function createSkeleton(): MobModelData {
   const group = new THREE.Group();
   const boneTex = BONE();
-  const bone = surf(0xd4cfc4, boneTex);
+  const bone = surf(0xd6d6d6, boneTex);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.18), bone);
-  body.position.set(0, 0.95, 0);
+  // Minecraft's 8/12/2-px head/body/limb ratios, scaled to the 1.6 hitbox.
+  // +X stays the face, matching the other five models and Mob.ts's yaw
+  // offset; z is the shoulder axis.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.4), bone);
+  body.position.set(0, 0.9, 0);
   group.add(body);
 
-  // Ribs on both sides of the chest, recessed rather than stripes wrapped round.
-  for (let i = 0; i < 3; i++) {
-    for (const z of [0.091, -0.091]) {
-      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, 0.01), detail(0x9d9484));
-      rib.position.set(0, 0.15 - i * 0.15, z);
-      body.add(rib);
-    }
+  // Ribs on the chest (+x face), not the flanks.
+  for (let i = 0; i < 4; i++) {
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.34), detail(0x8f8f8f));
+    rib.position.set(0.105, 0.18 - i * 0.11, 0);
+    body.add(rib);
   }
-  const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.42, 0.01), detail(0xe4dfd2));
-  sternum.position.set(0, 0.06, 0.091);
+  const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.4, 0.04), detail(0xf0f0f0));
+  sternum.position.set(0.105, 0.04, 0);
   body.add(sternum);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), bone);
-  head.position.set(0, 1.52, 0);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), bone);
+  head.position.set(0, 1.4, 0);
   group.add(head);
 
-  for (const z of [0.1, -0.1]) {
-    const socket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.07), detail(0x121212));
-    socket.position.set(0.24, 0.06, z);
+  for (const z of [0.09, -0.09]) {
+    const socket = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.09, 0.09), detail(0x0a0a0a));
+    socket.position.set(0.2, 0.04, z);
     head.add(socket);
   }
-  const noseHole = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.04), detail(0x171717));
-  noseHole.position.set(0.255, -0.03, 0);
+  const noseHole = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.05), detail(0x0a0a0a));
+  noseHole.position.set(0.205, -0.04, 0);
   head.add(noseHole);
   // Jaw with gaps between the teeth instead of one grey bar.
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.03), detail(0x2a2a2a));
-  jaw.position.set(0.256, -0.13, 0);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.24), detail(0x2a2a2a));
+  jaw.position.set(0.206, -0.13, 0);
   head.add(jaw);
-  for (const z of [0.075, 0.025, -0.025, -0.075]) {
-    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.02), detail(0xece8dd));
-    tooth.position.set(0.259, -0.115, z);
+  for (const z of [0.09, 0.03, -0.03, -0.09]) {
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.03), detail(0xf4f4f4));
+    tooth.position.set(0.208, -0.115, z);
     head.add(tooth);
   }
 
-  for (const z of [0.18, -0.18]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.08), bone);
-    arm.position.set(0, 0.95, z);
+  for (const z of [0.25, -0.25]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), bone);
+    arm.position.set(0, 0.9, z);
     group.add(arm);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.1), detail(0xb0a898));
-    hand.position.set(0, -0.3, 0);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.1), detail(0xa8a8a8));
+    hand.position.set(0, -0.27, 0);
     arm.add(hand);
     // elbow knuckle, so the limb is not a featureless stick
-    const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.05, 0.095), detail(0xc2bbac));
-    elbow.position.set(0, 0.02, 0);
+    const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.04, 0.105), detail(0xb4b4b4));
+    elbow.position.set(0, 0, 0);
     arm.add(elbow);
   }
 
   const bowStick = new THREE.Mesh(
-    new THREE.BoxGeometry(0.04, 0.5, 0.04),
-    surf(0x5d4037, hideMap(83, 0.9))
+    new THREE.BoxGeometry(0.04, 0.6, 0.04),
+    surf(0x6b4a2b, hideMap(83, 0.9))
   );
-  bowStick.position.set(0.08, 0.75, -0.28);
-  bowStick.rotation.z = 0.2;
+  bowStick.position.set(0.28, 0.95, -0.25);
+  bowStick.rotation.z = 0.15;
   group.add(bowStick);
-  const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.4, 0.01), detail(0xcccccc));
-  bowString.position.set(0.04, 0, 0.03);
+  const bowString = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.5, 0.01), detail(0xeeeeee));
+  bowString.position.set(-0.05, 0, 0);
   bowStick.add(bowString);
 
   const legs: THREE.Mesh[] = [];
-  for (const z of [0.06, -0.06]) {
+  for (const z of [0.1, -0.1]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), bone);
     leg.position.set(0, 0.3, z);
-    const knee = new THREE.Mesh(new THREE.BoxGeometry(0.115, 0.05, 0.115), detail(0xc2bbac));
+    const knee = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.04, 0.105), detail(0xb4b4b4));
     knee.position.set(0, 0.0, 0);
     leg.add(knee);
     group.add(leg);
@@ -566,6 +568,14 @@ function createCreeper(): MobModelData {
   return { group, legs, head, body };
 }
 
+/** Shadow radius per species; anything not listed uses the default below. */
+const SHADOW_RADIUS: Partial<Record<MobType, number>> = {
+  cow: 0.4,
+  sheep: 0.35,
+  skeleton: 0.25,
+};
+const DEFAULT_SHADOW_RADIUS = 0.3;
+
 function addShadow(group: THREE.Group, radius: number): void {
   const geo = new THREE.CircleGeometry(radius, 16);
   const shadowMat = new THREE.MeshBasicMaterial({
@@ -603,7 +613,6 @@ export function createMobModel(type: MobType): MobModelData {
       result = createCreeper();
       break;
   }
-  const shadowRadius = type === "cow" ? 0.4 : type === "sheep" ? 0.35 : 0.3;
-  addShadow(result.group, shadowRadius);
+  addShadow(result.group, SHADOW_RADIUS[type] ?? DEFAULT_SHADOW_RADIUS);
   return result;
 }
