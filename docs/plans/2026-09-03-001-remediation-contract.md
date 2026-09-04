@@ -354,7 +354,14 @@ fix, `6124639` Engine/PauseMenu wiring.
 Browser smoke test (Chrome pane, demo island): home page and Options toggles
 render, world loads with cutout leaves, both texture sheets fetched with their
 new hashes, no console errors except pointer-lock rejections that the embedded
-pane does not permit (pre-existing call, environment limitation).
+pane does not permit (pre-existing call, environment limitation). Keyboard
+input is gated on pointer lock in `InputManager`, so the inventory, crafting
+table and furnace screens could not be opened in the pane; they are covered
+by G's headless tests and a clean `tsc`. One hook-order error seen in the pane
+was Fast Refresh re-rendering the always-mounted `InventoryUI` across the
+module swap when G merged under a running dev server; a server restart and
+fresh load reproduced no error, and all four screens keep every hook above
+their early return.
 
 ### Follow-ups not done in this pass
 
