@@ -18,6 +18,23 @@ import * as THREE from "three";
 /** Number of discrete damage stages, matching vanilla. */
 export const BREAK_STAGE_COUNT = 10;
 
+/**
+ * Chisel-highlight fill for the raised rim beside each crack texel.
+ *
+ * The overlay is a `THREE.MeshBasicMaterial`, so it ignores scene lighting
+ * entirely — unlike the terrain's `MeshLambertMaterial`, which the
+ * day/night cycle dims from ambient 0.6/directional 0.8 (day) down to
+ * 0.15/0.1 (night). A highlight that blends in flat white adds the same
+ * absolute brightness regardless of that dimming, so it reads as a faint
+ * bump in daylight but an unnaturally bright fleck at night. Keeping the
+ * highlight in the same darken-only rgba(0,0,0,a) family as the dark core
+ * below makes it scale with the destination pixel's lit brightness instead,
+ * so it stays consistent day or night. The alpha is kept below the dark
+ * core's minimum (0.52) so the rim still reads as raised relative to the
+ * crack next to it.
+ */
+export const CRACK_HIGHLIGHT_RGBA = "rgba(0,0,0,0.22)";
+
 /** Texture resolution; 16px keeps the chunky pixel-art crack look. */
 const CRACK_TEX_SIZE = 16;
 
@@ -183,7 +200,7 @@ function drawStage(grid: Int8Array, size: number, stage: number): HTMLCanvasElem
       if (bx >= size || by >= size) continue;
       const below = grid[by * size + bx];
       if (below !== -1 && below <= stage) continue;
-      g.fillStyle = "rgba(255,255,255,0.14)";
+      g.fillStyle = CRACK_HIGHLIGHT_RGBA;
       g.fillRect(bx, by, 1, 1);
     }
   }
