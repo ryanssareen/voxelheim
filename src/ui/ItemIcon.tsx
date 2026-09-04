@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
-import { BLOCK_ID } from "@data/blocks";
+import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import {
   ITEM_COLORS,
   ITEM_NAMES,
@@ -30,6 +30,7 @@ import {
   type ToolType,
   type ArmorSlot,
 } from "@data/items";
+import { WOOD_PALETTE } from "@data/woodPalette";
 
 const RAW_FOOD_IDS: number[] = [BLOCK_ID.RAW_PORK, BLOCK_ID.RAW_BEEF, BLOCK_ID.RAW_MUTTON];
 const COOKED_FOOD_IDS: number[] = [
@@ -426,17 +427,16 @@ function grit(
 const flat = (color: string) => <rect x="0" y="0" width="16" height="16" fill={color} />;
 
 /** Horizontal boards with seams, staggered butt joints and grain ticks. */
-function planksFace(base: string): ReactNode {
-  const seam = darken(base, 0.5);
-  const grain = darken(base, 0.22);
-  const hi = lighten(base, 0.2);
+function planksFace(board: string, seam: string): ReactNode {
+  const grain = darken(board, 0.22);
+  const hi = lighten(board, 0.2);
   const butt = [6.5, 11, 4, 9.5];
   return (
     <>
-      {flat(base)}
+      {flat(board)}
       {[0, 4, 8, 12].map((y, i) => (
         <g key={y}>
-          <rect x="0" y={y} width="16" height="3.6" fill={i % 2 === 1 ? darken(base, 0.08) : base} />
+          <rect x="0" y={y} width="16" height="3.6" fill={i % 2 === 1 ? darken(board, 0.08) : board} />
           <rect x="0" y={y + 0.4} width="16" height="0.6" fill={hi} opacity="0.55" />
           <rect x={butt[i]} y={y} width="0.7" height="3.6" fill={seam} />
           <rect x="1.4" y={y + 2.2} width="4.6" height="0.45" fill={grain} opacity="0.6" />
@@ -496,6 +496,7 @@ function oreFace(mineral: string, seed: number): ReactNode {
 }
 
 const CRAFT_WOOD = "#a9793f";
+const CRAFT_WOOD_SEAM = darken(CRAFT_WOOD, 0.5);
 
 function craftingTopFace(): ReactNode {
   const cell = darken(CRAFT_WOOD, 0.46);
@@ -515,7 +516,7 @@ function craftingTopFace(): ReactNode {
   }
   return (
     <>
-      {planksFace(CRAFT_WOOD)}
+      {planksFace(CRAFT_WOOD, CRAFT_WOOD_SEAM)}
       <rect x="1.6" y="1.6" width="12.8" height="12.8" fill="#39281a" />
       <rect x="2.3" y="2.3" width="11.4" height="11.4" fill={darken(CRAFT_WOOD, 0.18)} />
       {cells}
@@ -526,7 +527,7 @@ function craftingTopFace(): ReactNode {
 function craftingSideFace(): ReactNode {
   return (
     <>
-      {planksFace(CRAFT_WOOD)}
+      {planksFace(CRAFT_WOOD, CRAFT_WOOD_SEAM)}
       {/* darker apron so the workbench reads as a table, not a plank cube */}
       <rect x="0" y="0" width="16" height="4.2" fill={darken(CRAFT_WOOD, 0.34)} />
       <rect x="0" y="4.2" width="16" height="0.6" fill="#2f2013" />
@@ -600,30 +601,27 @@ function furnaceTopFace(): ReactNode {
   );
 }
 
-function barkFace(): ReactNode {
-  const base = "#5D4037";
-  const groove = darken(base, 0.42);
-  const ridge = lighten(base, 0.2);
+function barkFace(bark: string, streak: string): ReactNode {
+  const groove = darken(bark, 0.42);
   return (
     <>
-      {flat(base)}
+      {flat(bark)}
       {[0.6, 3.6, 6.6, 9.8, 13].map((x) => (
         <rect key={x} x={x} y="0" width="1.1" height="16" fill={groove} />
       ))}
       {[2.2, 5.2, 8.3, 11.4, 14.6].map((x) => (
-        <rect key={x} x={x} y="0" width="0.8" height="16" fill={ridge} opacity="0.55" />
+        <rect key={x} x={x} y="0" width="0.8" height="16" fill={streak} opacity="0.55" />
       ))}
-      {grit(5, base, 6, 0.6, 1.4, 0.4)}
+      {grit(5, bark, 6, 0.6, 1.4, 0.4)}
     </>
   );
 }
 
-function endGrainFace(): ReactNode {
-  const base = "#D7CCC8";
-  const ring = darken(base, 0.34);
+function endGrainFace(endGrain: string): ReactNode {
+  const ring = darken(endGrain, 0.34);
   return (
     <>
-      {flat(base)}
+      {flat(endGrain)}
       {[6.4, 4.7, 3.1, 1.7].map((r, i) => (
         <circle
           key={r}
@@ -636,17 +634,16 @@ function endGrainFace(): ReactNode {
           opacity="0.8"
         />
       ))}
-      <circle cx="8" cy="8" r="0.9" fill={darken(base, 0.5)} />
-      {grit(6, base, 5, 0.5, 1.1, 0.35)}
+      <circle cx="8" cy="8" r="0.9" fill={darken(endGrain, 0.5)} />
+      {grit(6, endGrain, 5, 0.5, 1.1, 0.35)}
     </>
   );
 }
 
-function leavesFace(): ReactNode {
-  const base = "#2E7D32";
+function leavesFace(base: string, dark: string, light: string): ReactNode {
   const r = rand(7);
   const clumps: ReactNode[] = [];
-  const tones = [base, lighten(base, 0.24), darken(base, 0.16), lighten(base, 0.12)];
+  const tones = [base, light, dark, lighten(base, 0.12)];
   for (let i = 0; i < 16; i++) {
     const cx = 1.2 + r() * 13.6;
     const cy = 1.2 + r() * 13.6;
@@ -839,6 +836,22 @@ interface CubeFaces {
 }
 
 function cubeFaces(blockId: number): CubeFaces {
+  // Wood blocks (any species) are resolved from the palette by part rather
+  // than by id, so birch/spruce automatically get the same bark/end-grain/
+  // plank-board/leaf-clump structure as oak, just recolored.
+  const wood = BLOCK_DEFINITIONS[blockId]?.wood;
+  if (wood) {
+    const palette = WOOD_PALETTE[wood.species];
+    if (wood.part === "log") {
+      return { top: endGrainFace(palette.log.endGrain), side: barkFace(palette.log.bark, palette.log.streak) };
+    }
+    if (wood.part === "leaves") {
+      const { base, dark, light } = palette.leaves;
+      return { top: leavesFace(base, dark, light), side: leavesFace(base, dark, light) };
+    }
+    const { board, seam } = palette.planks;
+    return { top: planksFace(board, seam), side: planksFace(board, seam) };
+  }
   switch (blockId) {
     case BLOCK_ID.GRASS:
       return { top: grassTopFace(), side: grassSideFace() };
@@ -846,14 +859,8 @@ function cubeFaces(blockId: number): CubeFaces {
       return { top: stoneFace("#a8a8a8"), side: stoneFace("#a8a8a8") };
     case BLOCK_ID.SAND:
       return { top: sandFace(), side: sandFace() };
-    case BLOCK_ID.LOG:
-      return { top: endGrainFace(), side: barkFace() };
-    case BLOCK_ID.LEAVES:
-      return { top: leavesFace(), side: leavesFace() };
     case BLOCK_ID.CRYSTAL:
       return { top: crystalFace(), side: crystalFace() };
-    case BLOCK_ID.PLANKS:
-      return { top: planksFace("#c8a55a"), side: planksFace("#c8a55a") };
     case BLOCK_ID.CRAFTING_TABLE:
       return { top: craftingTopFace(), side: craftingSideFace() };
     case BLOCK_ID.FURNACE:
