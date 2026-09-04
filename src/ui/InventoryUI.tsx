@@ -8,8 +8,10 @@ import {
   TOTAL_SLOTS,
   MAX_STACK,
 } from "@store/useHotbarStore";
-import { getToolDef } from "@data/items";
 import { findRecipe } from "@systems/crafting/recipes";
+import { resolveCraft } from "@systems/crafting/craft";
+import { quickMoveAt } from "@systems/inventory/craft";
+import { inventoryScreen } from "@systems/inventory/screens";
 import { InventorySlot, CursorItemOverlay } from "@ui/ItemIcon";
 import { RecipeBook, useRecipeFill } from "@ui/RecipeBook";
 import { usePanelMetrics } from "@ui/usePanelMetrics";
@@ -46,11 +48,11 @@ export function InventoryUI() {
         invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
         invStore.setCraftingSlot(index, 0, 0);
       } else if (cursor.count > 0 && slot.count === 0) {
-        invStore.setCraftingSlot(index, cursor.blockId, 1);
+        invStore.setCraftingSlot(index, cursor.blockId, 1, cursor.durability);
         if (cursor.count === 1) invStore.clearCursor();
         else invStore.setCursorItem(cursor.blockId, cursor.count - 1, cursor.durability);
       } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId === slot.blockId) {
-        invStore.setCraftingSlot(index, slot.blockId, slot.count + 1);
+        invStore.setCraftingSlot(index, slot.blockId, slot.count + 1, cursor.durability);
         if (cursor.count === 1) invStore.clearCursor();
         else invStore.setCursorItem(cursor.blockId, cursor.count - 1, cursor.durability);
       }
@@ -58,28 +60,20 @@ export function InventoryUI() {
     []
   );
 
-  const handleCraftResult = useCallback(() => {
-    if (!recipe) return;
-    const invStore = useInventoryStore.getState();
-    const newGrid = invStore.craftingGrid.map((slot) => {
-      if (slot.count <= 1) return { blockId: 0, count: 0 };
-      return { blockId: slot.blockId, count: slot.count - 1 };
-    });
-
-    const cursor = invStore.cursorItem;
-    const isTool = !!getToolDef(recipe.result);
-    const craftDur = getToolDef(recipe.result)?.durability;
-    if (cursor.count === 0) {
-      invStore.setCursorItem(recipe.result, recipe.count, craftDur);
-    } else if (!isTool && cursor.blockId === recipe.result && cursor.count + recipe.count <= MAX_STACK) {
-      invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
-    } else {
-      for (let i = 0; i < recipe.count; i++) {
-        useHotbarStore.getState().addItem(recipe.result);
-      }
+  const handleCraftResult = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.shiftKey) {
+      const screen = inventoryScreen();
+      const outputIndex = screen.layout.ranges.container[1] - 1;
+      const next = quickMoveAt(screen.layout, screen.regions, outputIndex, screen.find, MAX_STACK);
+      if (next) screen.write(next);
+      return;
     }
-    useInventoryStore.setState({ craftingGrid: newGrid });
-  }, [recipe]);
+    useInventoryStore.setState((state) => {
+      const outcome = resolveCraft(state.craftingGrid, state.cursorItem, MAX_STACK);
+      if (!outcome) return state;
+      return { ...state, craftingGrid: outcome.grid, cursorItem: outcome.cursor };
+    });
+  }, []);
 
   if (!isOpen) return null;
 
@@ -116,7 +110,7 @@ export function InventoryUI() {
               <InventorySlot
                 key={`armor-${i}`}
                 item={slot}
-                onClick={() => handleArmorClick(i)}
+                onClick={(e) => handleArmorClick(e, i)}
                 size={S}
                 label={ARMOR_LABELS[i]}
               />
@@ -185,7 +179,7 @@ export function InventoryUI() {
               <InventorySlot
                 key={`inv-${i}`}
                 item={slot}
-                onClick={() => handleSlotClick(HOTBAR_SLOTS + i)}
+                onClick={(e) => handleSlotClick(e, HOTBAR_SLOTS + i)}
                 size={S}
               />
             ))}
@@ -201,7 +195,7 @@ export function InventoryUI() {
             <InventorySlot
               key={`hot-${i}`}
               item={slot}
-              onClick={() => handleSlotClick(i)}
+              onClick={(e) => handleSlotClick(e, i)}
               size={S}
               highlight={i === selectedIndex}
             />

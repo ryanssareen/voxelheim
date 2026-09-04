@@ -142,8 +142,8 @@ function CreativePanel() {
 
   // Cursor mechanics on the hotbar, plus keep click-to-select working
   const handleHotbarClick = useCallback(
-    (index: number) => {
-      handleSlotClick(index);
+    (e: React.MouseEvent<HTMLDivElement>, index: number) => {
+      handleSlotClick(e, index);
       useHotbarStore.getState().select(index);
     },
     [handleSlotClick]
@@ -251,7 +251,7 @@ function CreativePanel() {
               <InventorySlot
                 key={`armor-${i}`}
                 item={slot}
-                onClick={() => handleArmorClick(i)}
+                onClick={(e) => handleArmorClick(e, i)}
                 size={S}
                 label={ARMOR_LABELS[i]}
               />
@@ -275,7 +275,7 @@ function CreativePanel() {
                   <InventorySlot
                     key={`inv-${i}`}
                     item={slot}
-                    onClick={() => handleSlotClick(HOTBAR_SLOTS + i)}
+                    onClick={(e) => handleSlotClick(e, HOTBAR_SLOTS + i)}
                     size={S}
                   />
                 ))}
@@ -288,7 +288,7 @@ function CreativePanel() {
                 <InventorySlot
                   key={`hot-${i}`}
                   item={slot}
-                  onClick={() => handleHotbarClick(i)}
+                  onClick={(e) => handleHotbarClick(e, i)}
                   size={S}
                   highlight={i === selectedIndex}
                 />

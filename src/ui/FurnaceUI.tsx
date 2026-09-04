@@ -8,11 +8,13 @@ import {
   MAX_STACK,
   TOTAL_SLOTS,
 } from "@store/useHotbarStore";
-import { BLOCK_ID } from "@data/blocks";
-import { getToolDef } from "@data/items";
 import { findSmeltingRecipe, isFuel } from "@systems/crafting/smelting";
+import { resolveCraft } from "@systems/crafting/craft";
+import { quickMoveAt } from "@systems/inventory/craft";
+import { furnaceScreen, furnaceFinder } from "@systems/inventory/screens";
 import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
 import { usePanelMetrics } from "@ui/usePanelMetrics";
+import { useSlotInteractions } from "@ui/useSlotInteractions";
 
 export function FurnaceUI() {
   const furnaceOpen = useInventoryStore((s) => s.furnaceOpen);
@@ -30,6 +32,8 @@ export function FurnaceUI() {
     return () => window.removeEventListener("mousemove", handler);
   }, [furnaceOpen]);
 
+  const { handleSlotClick } = useSlotInteractions();
+
   // furnaceSlots[0] = input, furnaceSlots[1] = fuel
   const recipe = useMemo(() => {
     const inputSlot = furnaceSlots[0];
@@ -39,91 +43,48 @@ export function FurnaceUI() {
     return findSmeltingRecipe(inputSlot.blockId);
   }, [furnaceSlots]);
 
-  const handleSlotClick = useCallback((slotIndex: number) => {
+  const handleFurnaceSlotClick = useCallback((slotIndex: number) => {
     const invStore = useInventoryStore.getState();
     const slot = invStore.furnaceSlots[slotIndex];
     const cursor = invStore.cursorItem;
 
     if (cursor.count === 0 && slot.count > 0) {
       // Pick up whole slot
-      invStore.setCursorItem(slot.blockId, slot.count);
+      invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       invStore.setFurnaceSlot(slotIndex, 0, 0);
     } else if (cursor.count > 0 && slot.count === 0) {
       // Drop whole cursor stack into empty slot
-      invStore.setFurnaceSlot(slotIndex, cursor.blockId, cursor.count);
+      invStore.setFurnaceSlot(slotIndex, cursor.blockId, cursor.count, cursor.durability);
       invStore.clearCursor();
     } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId === slot.blockId) {
       // Merge cursor stack onto slot (cap at MAX_STACK)
       const total = slot.count + cursor.count;
       const fit = Math.min(total, MAX_STACK);
       const leftover = total - fit;
-      invStore.setFurnaceSlot(slotIndex, slot.blockId, fit);
+      invStore.setFurnaceSlot(slotIndex, slot.blockId, fit, cursor.durability);
       if (leftover > 0) invStore.setCursorItem(cursor.blockId, leftover);
       else invStore.clearCursor();
     } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId !== slot.blockId) {
       // Swap cursor and slot
-      invStore.setFurnaceSlot(slotIndex, cursor.blockId, cursor.count);
-      invStore.setCursorItem(slot.blockId, slot.count);
-    }
-  }, []);
-
-  const handleInventoryClick = useCallback((index: number) => {
-    const store = useHotbarStore.getState();
-    const invStore = useInventoryStore.getState();
-    const slot = store.slots[index];
-    const cursor = invStore.cursorItem;
-
-    if (cursor.count === 0 && slot.count > 0) {
+      invStore.setFurnaceSlot(slotIndex, cursor.blockId, cursor.count, cursor.durability);
       invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
-      const newSlots = [...store.slots];
-      newSlots[index] = { blockId: BLOCK_ID.AIR, count: 0 };
-      useHotbarStore.setState({ slots: newSlots });
-    } else if (cursor.count > 0 && slot.count === 0) {
-      const newSlots = [...store.slots];
-      newSlots[index] = { blockId: cursor.blockId, count: cursor.count, durability: cursor.durability };
-      useHotbarStore.setState({ slots: newSlots });
-      invStore.clearCursor();
-    } else if (cursor.count > 0 && slot.count > 0) {
-      if (cursor.blockId === slot.blockId && !getToolDef(cursor.blockId)) {
-        const total = slot.count + cursor.count;
-        const fit = Math.min(total, MAX_STACK);
-        const leftover = total - fit;
-        const newSlots = [...store.slots];
-        newSlots[index] = { blockId: slot.blockId, count: fit };
-        useHotbarStore.setState({ slots: newSlots });
-        if (leftover > 0) invStore.setCursorItem(cursor.blockId, leftover);
-        else invStore.clearCursor();
-      } else {
-        const newSlots = [...store.slots];
-        newSlots[index] = { blockId: cursor.blockId, count: cursor.count, durability: cursor.durability };
-        useHotbarStore.setState({ slots: newSlots });
-        invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
-      }
     }
   }, []);
 
-  const handleSmeltResult = useCallback(() => {
-    if (!recipe) return;
-    const invStore = useInventoryStore.getState();
-    const [input, fuel] = invStore.furnaceSlots;
-
-    const newInput = input.count <= 1
-      ? { blockId: 0, count: 0 }
-      : { blockId: input.blockId, count: input.count - 1 };
-    const newFuel = fuel.count <= 1
-      ? { blockId: 0, count: 0 }
-      : { blockId: fuel.blockId, count: fuel.count - 1 };
-
-    const cursor = invStore.cursorItem;
-    if (cursor.count === 0) {
-      invStore.setCursorItem(recipe.result, recipe.count);
-    } else if (cursor.blockId === recipe.result && cursor.count + recipe.count <= MAX_STACK) {
-      invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
-    } else {
-      useHotbarStore.getState().addItem(recipe.result);
+  const handleSmeltResult = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.shiftKey) {
+      const screen = furnaceScreen();
+      const outputIndex = screen.layout.ranges.container[1] - 1;
+      const next = quickMoveAt(screen.layout, screen.regions, outputIndex, screen.find, MAX_STACK);
+      if (next) screen.write(next);
+      return;
     }
-    useInventoryStore.setState({ furnaceSlots: [newInput, newFuel] });
-  }, [recipe]);
+    useInventoryStore.setState((state) => {
+      const outcome = resolveCraft(state.furnaceSlots, state.cursorItem, MAX_STACK, furnaceFinder);
+      if (!outcome) return state;
+      return { ...state, furnaceSlots: outcome.grid, cursorItem: outcome.cursor };
+    });
+  }, []);
 
   if (!furnaceOpen) return null;
 
@@ -158,7 +119,7 @@ export function FurnaceUI() {
               <p className="text-[10px] font-mono text-[#707070] mb-1">Input</p>
               <InventorySlot
                 item={furnaceSlots[0]}
-                onClick={() => handleSlotClick(0)}
+                onClick={() => handleFurnaceSlotClick(0)}
                 size={S}
               />
             </div>
@@ -167,7 +128,7 @@ export function FurnaceUI() {
               <p className="text-[10px] font-mono text-[#707070] mb-1">Fuel</p>
               <InventorySlot
                 item={furnaceSlots[1]}
-                onClick={() => handleSlotClick(1)}
+                onClick={() => handleFurnaceSlotClick(1)}
                 size={S}
               />
             </div>
@@ -205,7 +166,7 @@ export function FurnaceUI() {
             <InventorySlot
               key={`inv-${i}`}
               item={slot}
-              onClick={() => handleInventoryClick(HOTBAR_SLOTS + i)}
+              onClick={(e) => handleSlotClick(e, HOTBAR_SLOTS + i)}
               size={S}
             />
           ))}
@@ -220,7 +181,7 @@ export function FurnaceUI() {
             <InventorySlot
               key={`hot-${i}`}
               item={slot}
-              onClick={() => handleInventoryClick(i)}
+              onClick={(e) => handleSlotClick(e, i)}
               size={S}
               highlight={i === selectedIndex}
             />

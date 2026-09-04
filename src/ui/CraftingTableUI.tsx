@@ -8,12 +8,14 @@ import {
   MAX_STACK,
   TOTAL_SLOTS,
 } from "@store/useHotbarStore";
-import { BLOCK_ID } from "@data/blocks";
-import { getToolDef } from "@data/items";
 import { findRecipe3x3 } from "@systems/crafting/recipes";
+import { resolveCraft } from "@systems/crafting/craft";
+import { quickMoveAt } from "@systems/inventory/craft";
+import { tableScreen } from "@systems/inventory/screens";
 import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
 import { RecipeBook, useRecipeFill } from "@ui/RecipeBook";
 import { usePanelMetrics } from "@ui/usePanelMetrics";
+import { useSlotInteractions } from "@ui/useSlotInteractions";
 
 export function CraftingTableUI() {
   const tableOpen = useInventoryStore((s) => s.tableOpen);
@@ -30,6 +32,7 @@ export function CraftingTableUI() {
     return () => window.removeEventListener("mousemove", handler);
   }, [tableOpen]);
 
+  const { handleSlotClick } = useSlotInteractions();
   const fillFromRecipe = useRecipeFill(3);
   const metrics = usePanelMetrics();
 
@@ -49,73 +52,30 @@ export function CraftingTableUI() {
       invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       invStore.setTableSlot(index, 0, 0);
     } else if (cursor.count > 0 && slot.count === 0) {
-      invStore.setTableSlot(index, cursor.blockId, 1);
+      invStore.setTableSlot(index, cursor.blockId, 1, cursor.durability);
       if (cursor.count === 1) invStore.clearCursor();
       else invStore.setCursorItem(cursor.blockId, cursor.count - 1, cursor.durability);
     } else if (cursor.count > 0 && slot.count > 0 && cursor.blockId === slot.blockId) {
-      invStore.setTableSlot(index, slot.blockId, slot.count + 1);
+      invStore.setTableSlot(index, slot.blockId, slot.count + 1, cursor.durability);
       if (cursor.count === 1) invStore.clearCursor();
       else invStore.setCursorItem(cursor.blockId, cursor.count - 1, cursor.durability);
     }
   }, []);
 
-  const handleSlotClick = useCallback((index: number) => {
-    const store = useHotbarStore.getState();
-    const invStore = useInventoryStore.getState();
-    const slot = store.slots[index];
-    const cursor = invStore.cursorItem;
-
-    if (cursor.count === 0 && slot.count > 0) {
-      invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
-      const newSlots = [...store.slots];
-      newSlots[index] = { blockId: BLOCK_ID.AIR, count: 0 };
-      useHotbarStore.setState({ slots: newSlots });
-    } else if (cursor.count > 0 && slot.count === 0) {
-      const newSlots = [...store.slots];
-      newSlots[index] = { blockId: cursor.blockId, count: cursor.count, durability: cursor.durability };
-      useHotbarStore.setState({ slots: newSlots });
-      invStore.clearCursor();
-    } else if (cursor.count > 0 && slot.count > 0) {
-      if (cursor.blockId === slot.blockId && !getToolDef(cursor.blockId)) {
-        const total = slot.count + cursor.count;
-        const fit = Math.min(total, MAX_STACK);
-        const leftover = total - fit;
-        const newSlots = [...store.slots];
-        newSlots[index] = { blockId: slot.blockId, count: fit };
-        useHotbarStore.setState({ slots: newSlots });
-        if (leftover > 0) invStore.setCursorItem(cursor.blockId, leftover);
-        else invStore.clearCursor();
-      } else {
-        const newSlots = [...store.slots];
-        newSlots[index] = { blockId: cursor.blockId, count: cursor.count, durability: cursor.durability };
-        useHotbarStore.setState({ slots: newSlots });
-        invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
-      }
+  const handleCraftResult = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.shiftKey) {
+      const screen = tableScreen();
+      const outputIndex = screen.layout.ranges.container[1] - 1;
+      const next = quickMoveAt(screen.layout, screen.regions, outputIndex, screen.find, MAX_STACK);
+      if (next) screen.write(next);
+      return;
     }
-  }, []);
-
-  const handleCraftResult = useCallback(() => {
-    if (!recipe) return;
-    const invStore = useInventoryStore.getState();
-    const newGrid = invStore.tableGrid.map((slot) => {
-      if (slot.count <= 1) return { blockId: 0, count: 0 };
-      return { blockId: slot.blockId, count: slot.count - 1 };
+    useInventoryStore.setState((state) => {
+      const outcome = resolveCraft(state.tableGrid, state.cursorItem, MAX_STACK);
+      if (!outcome) return state;
+      return { ...state, tableGrid: outcome.grid, cursorItem: outcome.cursor };
     });
-
-    const cursor = invStore.cursorItem;
-    const isTool = !!getToolDef(recipe.result);
-    const craftDur = getToolDef(recipe.result)?.durability;
-    if (cursor.count === 0) {
-      invStore.setCursorItem(recipe.result, recipe.count, craftDur);
-    } else if (!isTool && cursor.blockId === recipe.result && cursor.count + recipe.count <= MAX_STACK) {
-      invStore.setCursorItem(recipe.result, cursor.count + recipe.count);
-    } else {
-      for (let i = 0; i < recipe.count; i++) {
-        useHotbarStore.getState().addItem(recipe.result);
-      }
-    }
-    useInventoryStore.setState({ tableGrid: newGrid });
-  }, [recipe]);
+  }, []);
 
   if (!tableOpen) return null;
 
@@ -194,7 +154,7 @@ export function CraftingTableUI() {
             <InventorySlot
               key={`inv-${i}`}
               item={slot}
-              onClick={() => handleSlotClick(HOTBAR_SLOTS + i)}
+              onClick={(e) => handleSlotClick(e, HOTBAR_SLOTS + i)}
               size={S}
             />
           ))}
@@ -209,7 +169,7 @@ export function CraftingTableUI() {
             <InventorySlot
               key={`hot-${i}`}
               item={slot}
-              onClick={() => handleSlotClick(i)}
+              onClick={(e) => handleSlotClick(e, i)}
               size={S}
               highlight={i === selectedIndex}
             />

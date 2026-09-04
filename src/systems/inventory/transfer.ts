@@ -82,9 +82,63 @@ export function quickMove(
   regions: ReadonlyArray<Region>,
   ctx: QuickMoveContext
 ): TransferPlan {
-  void item;
-  void fromRegion;
-  void regions;
-  void ctx;
-  throw new Error("quickMove is not implemented yet (Workstream G)");
+  const dests = regions
+    .filter((r) => r !== fromRegion && r.role !== "output" && r.priority >= 0 && r.accepts(item))
+    .sort((a, b) => b.priority - a.priority); // Array#sort is stable: ties keep declaration order.
+
+  const moves: TransferMove[] = [];
+  let left = item.count;
+  const canStack = ctx.stackable(item);
+
+  // Pass 1: merge into existing partial stacks of the same item, ascending index.
+  if (canStack) {
+    for (const region of dests) {
+      if (left === 0) break;
+      for (let i = region.range[0]; i < region.range[1] && left > 0; i++) {
+        const slot = ctx.slots[i];
+        if (slot.blockId !== item.blockId || slot.count === 0 || slot.count >= ctx.maxStack) continue;
+        const count = Math.min(left, ctx.maxStack - slot.count);
+        moves.push({ from: ctx.fromSlot, to: i, count });
+        left -= count;
+      }
+    }
+  }
+
+  // Pass 2: fill empty slots, ascending index.
+  for (const region of dests) {
+    if (left === 0) break;
+    for (let i = region.range[0]; i < region.range[1] && left > 0; i++) {
+      const slot = ctx.slots[i];
+      if (slot.count !== 0) continue;
+      const count = canStack ? Math.min(left, ctx.maxStack) : 1;
+      moves.push({ from: ctx.fromSlot, to: i, count });
+      left -= count;
+    }
+  }
+
+  return { moves, remainder: left };
+}
+
+/**
+ * Applies a TransferPlan to a flat slot array, returning a new array. Pure —
+ * never mutates `slots`. Preserves durability: a stack moving into an empty
+ * slot carries its source's durability; merging into a partial stack keeps
+ * the destination's (stackable items never carry durability anyway).
+ */
+export function applyPlan(slots: ReadonlyArray<ItemStack>, plan: TransferPlan): ItemStack[] {
+  const next = slots.map((s) => ({ ...s }));
+  for (const move of plan.moves) {
+    const from = next[move.from];
+    const to = next[move.to];
+    next[move.to] =
+      to.count === 0
+        ? { blockId: from.blockId, count: move.count, durability: from.durability }
+        : { blockId: to.blockId, count: to.count + move.count, durability: to.durability };
+    const remaining = from.count - move.count;
+    next[move.from] =
+      remaining <= 0
+        ? { blockId: 0, count: 0 }
+        : { blockId: from.blockId, count: remaining, durability: from.durability };
+  }
+  return next;
 }
