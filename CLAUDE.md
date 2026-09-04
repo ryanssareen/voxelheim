@@ -13,6 +13,13 @@ At the start of every conversation, also read the compound engineering artifacts
 
 These contain institutional knowledge (resolved gotchas, architecture decisions, prevention strategies) that should inform implementation choices.
 
+## Conventions
+- Block ids are append-only (chunk data and hotbar saves store raw ids); never renumber. Wood blocks carry `wood: { species, part }`; recipes use the oak id to mean "any species of that part".
+- Recipes must satisfy `src/tests/economy.test.ts` (value potential); price a new block id there before adding recipes.
+- Atlas art is generated: edit `scripts/buildAtlas.ts` (or drop `public/textures/blocks/<name>.png` overrides), run `npx tsx scripts/buildAtlas.ts`, commit `atlas.png`, `items.png` and `src/data/atlasUVs.ts` together.
+- Agent worktrees live under `.claude/worktrees/` (excluded from tsc, eslint, git); symlink `node_modules` there instead of installing.
+- The in-app Browser pane refuses pointer lock (mouse-look needs it) and keypress-driven screens did not open there, so game screens are verified headless.
+
 ## Common Commands
 ```bash
 npx ai-codex            # regenerate .ai-codex/ indexes
