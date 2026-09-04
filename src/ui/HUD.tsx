@@ -8,6 +8,20 @@ import { useHudMetrics, type HudMetrics } from "@ui/useHudScale";
 
 type DebugInfo = NonNullable<ReturnType<Engine["getDebugInfo"]>>;
 
+/** Size and position of the pill-shaped bar drawn under the crosshair (break progress, eat progress). */
+export function crosshairBarMetrics(m: HudMetrics): { marginTop: number; width: number; height: number } {
+  return {
+    marginTop: Math.round(m.crosshair * 0.85),
+    width: Math.round(m.crosshair * 4.6),
+    height: Math.max(3, Math.round(m.scale * 5)),
+  };
+}
+
+/** Clamps a 0-1 progress fraction to an integer percent. */
+export function progressPercent(progress: number): number {
+  return Math.round(Math.max(0, Math.min(1, progress)) * 100);
+}
+
 const HEART_PATH = "M6.5 11.5L1.5 6.5C0.2 5.2 0.2 3.1 1.5 1.8C2.8 0.5 4.9 0.5 6.2 1.8L6.5 2.1L6.8 1.8C8.1 0.5 10.2 0.5 11.5 1.8C12.8 3.1 12.8 5.2 11.5 6.5L6.5 11.5Z";
 
 function HeartIcon({ fill, index, size }: { fill: "full" | "half" | "empty"; index: number; size: number }) {
@@ -144,6 +158,7 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
   const shardsCollected = useGameStore((s) => s.shardsCollected);
   const shardsTotal = useGameStore((s) => s.shardsTotal);
   const breakProgress = useGameStore((s) => s.breakProgress);
+  const eatProgress = useGameStore((s) => s.eatProgress);
   const timeOfDay = useGameStore((s) => s.timeOfDay);
   const gameMode = useGameStore((s) => s.gameMode);
   const health = useGameStore((s) => s.health);
@@ -193,15 +208,25 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
       {breakProgress > 0 && (
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 bg-black/40 rounded-full overflow-hidden"
-          style={{
-            marginTop: Math.round(m.crosshair * 0.85),
-            width: Math.round(m.crosshair * 4.6),
-            height: Math.max(3, Math.round(m.scale * 5)),
-          }}
+          style={crosshairBarMetrics(m)}
         >
           <div
             className="h-full bg-white/80 transition-none"
-            style={{ width: `${breakProgress * 100}%` }}
+            style={{ width: `${progressPercent(breakProgress)}%` }}
+          />
+        </div>
+      )}
+
+      {/* Eat progress bar — same slot as the break bar; the two are mutually
+          exclusive (breaking needs a targeted block, eating needs none). */}
+      {eatProgress > 0 && (
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 bg-black/40 rounded-full overflow-hidden"
+          style={crosshairBarMetrics(m)}
+        >
+          <div
+            className="h-full bg-amber-400/90 transition-none"
+            style={{ width: `${progressPercent(eatProgress)}%` }}
           />
         </div>
       )}
