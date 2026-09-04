@@ -22,6 +22,7 @@ export const SMELTING_RECIPES: SmeltingRecipe[] = [
   { input: BLOCK_ID.RAW_MUTTON, result: BLOCK_ID.COOKED_MUTTON, count: 1, name: "Cooked Mutton" },
   { input: BLOCK_ID.SAND, result: BLOCK_ID.STONE, count: 1, name: "Stone (Smelted)" },
   { input: BLOCK_ID.IRON_ORE, result: BLOCK_ID.IRON_INGOT, count: 1, name: "Iron Ingot" },
+  { input: BLOCK_ID.DIAMOND_ORE, result: BLOCK_ID.DIAMOND, count: 1, name: "Diamond" },
 ];
 
 /** Find a smelting recipe for the given input item. */
