@@ -64,40 +64,12 @@ export const RECIPES: CraftingRecipe[] = [
     count: 4,
     name: "Sticks",
   },
-  // 2 sand + 2 stone → 2 crystal (rare synthesis)
-  {
-    grid: [BLOCK_ID.SAND, BLOCK_ID.CRYSTAL, BLOCK_ID.CRYSTAL, BLOCK_ID.SAND],
-    result: BLOCK_ID.CRYSTAL,
-    count: 3,
-    name: "Crystal Synthesis",
-  },
-  // 4 sand → 1 stone (smelting)
-  {
-    grid: [BLOCK_ID.SAND, BLOCK_ID.SAND, BLOCK_ID.SAND, BLOCK_ID.SAND],
-    result: BLOCK_ID.STONE,
-    count: 1,
-    name: "Stone",
-  },
-  // 4 leaves → 1 log
-  {
-    grid: [BLOCK_ID.LEAVES, BLOCK_ID.LEAVES, BLOCK_ID.LEAVES, BLOCK_ID.LEAVES],
-    result: BLOCK_ID.LOG,
-    count: 1,
-    name: "Log",
-  },
   // grass + dirt → 2 sand (erosion)
   {
     grid: [BLOCK_ID.GRASS, BLOCK_ID.DIRT, 0, 0],
     result: BLOCK_ID.SAND,
     count: 2,
     name: "Sand (Erosion)",
-  },
-  // 2 stone → 1 crystal (rare find)
-  {
-    grid: [BLOCK_ID.STONE, BLOCK_ID.STONE, 0, 0],
-    result: BLOCK_ID.CRYSTAL,
-    count: 1,
-    name: "Crystal (Rare Find)",
   },
   // stone + sand → 2 dirt (mixing)
   {
@@ -113,45 +85,21 @@ export const RECIPES: CraftingRecipe[] = [
     count: 1,
     name: "Grass (Composting)",
   },
-  // crystal + 3 stone → 2 crystal (polishing)
-  {
-    grid: [BLOCK_ID.CRYSTAL, BLOCK_ID.STONE, BLOCK_ID.STONE, BLOCK_ID.STONE],
-    result: BLOCK_ID.CRYSTAL,
-    count: 2,
-    name: "Crystal (Polishing)",
-  },
 ];
 
 const _ = 0;
 const P = BLOCK_ID.PLANKS;
-const F = BLOCK_ID.FURNACE;
 const S = BLOCK_ID.STONE;
 const L = BLOCK_ID.LOG;
 const D = BLOCK_ID.DIRT;
 const G = BLOCK_ID.GRASS;
-const C = BLOCK_ID.CRYSTAL;
 const SN = BLOCK_ID.SAND;
-const LV = BLOCK_ID.LEAVES;
 const ST = BLOCK_ID.STICK;
 const I = BLOCK_ID.IRON_INGOT;
 const DM = BLOCK_ID.DIAMOND;
 
 /** All 3x3 crafting table recipes. */
 export const RECIPES_3x3: CraftingRecipe3x3[] = [
-  // 8 planks around center → chest (gives stone for now)
-  {
-    grid: [P, P, P, P, _, P, P, P, P],
-    result: BLOCK_ID.STONE,
-    count: 4,
-    name: "Stonework",
-  },
-  // 3 planks top row → slab equivalent (gives 6 planks)
-  {
-    grid: [_, _, _, _, _, _, P, P, P],
-    result: BLOCK_ID.PLANKS,
-    count: 6,
-    name: "Planks (Efficient)",
-  },
   // 9 dirt → 4 grass
   {
     grid: [D, D, D, D, D, D, D, D, D],
@@ -159,39 +107,11 @@ export const RECIPES_3x3: CraftingRecipe3x3[] = [
     count: 4,
     name: "Grass Block (Bulk)",
   },
-  // 9 sand → 4 stone
-  {
-    grid: [SN, SN, SN, SN, SN, SN, SN, SN, SN],
-    result: BLOCK_ID.STONE,
-    count: 4,
-    name: "Stone (Bulk Smelt)",
-  },
-  // 9 stone → 4 crystal
-  {
-    grid: [S, S, S, S, S, S, S, S, S],
-    result: BLOCK_ID.CRYSTAL,
-    count: 4,
-    name: "Crystal (Compression)",
-  },
-  // 9 leaves → 3 log
-  {
-    grid: [LV, LV, LV, LV, LV, LV, LV, LV, LV],
-    result: BLOCK_ID.LOG,
-    count: 3,
-    name: "Log (Bulk)",
-  },
-  // Cross of stone + 4 crystal corners → 8 crystal
-  {
-    grid: [C, S, C, S, C, S, C, S, C],
-    result: BLOCK_ID.CRYSTAL,
-    count: 8,
-    name: "Crystal Matrix",
-  },
-  // Diamond of planks → crafting table
+  // Diamond of planks around a log → 2 crafting tables
   {
     grid: [_, P, _, P, L, P, _, P, _],
     result: BLOCK_ID.CRAFTING_TABLE,
-    count: 4,
+    count: 2,
     name: "Crafting Tables (Bulk)",
   },
   // Grass border with sand center → 4 dirt
@@ -436,5 +356,12 @@ export function findRecipe3x3(
     const match2x2 = findRecipe(sub);
     if (match2x2) return { grid, result: match2x2.result, count: match2x2.count, name: match2x2.name };
   }
+  return null;
+}
+
+/** Matches a grid of any supported size by its length: 4 = 2x2, 9 = 3x3. */
+export function findRecipeForCells(cells: number[]): { result: number; count: number; name: string } | null {
+  if (cells.length === 9) return findRecipe3x3(cells as CraftingRecipe3x3["grid"]);
+  if (cells.length === 4) return findRecipe(cells as CraftingRecipe["grid"]);
   return null;
 }
