@@ -1,10 +1,39 @@
+/**
+ * Generates the two texture sheets the renderer loads at runtime:
+ *
+ *   - public/textures/atlas.png  — 16px block face tiles (terrain, ores, wood, ...)
+ *   - public/textures/items.png  — 32px icons for every non-block item (tools,
+ *     food, ingots, gems, armor — anything with `textures.side === ""` in
+ *     BLOCK_DEFINITIONS), pre-rendered from the same React/SVG art the
+ *     inventory UI (`src/ui/ItemIcon.tsx`) uses, via `renderToStaticMarkup` +
+ *     sharp. This is a build-time raster only: ItemIcon.tsx stays React/DOM
+ *     free at runtime, nothing in the client bundle imports react-dom/server.
+ *
+ * Decision (remediation contract, workstream F): KEEP GENERATING both sheets
+ * procedurally. Per-tile hand authoring is still allowed — drop a PNG at
+ * `public/textures/blocks/<texture-name>.png` (16x16 or any size, nearest-
+ * resized down to TILE) and it silently replaces that block tile's generator
+ * output. There is no equivalent override for item icons.
+ *
+ * Run with `npx tsx scripts/buildAtlas.ts` from the repo root. No npm script
+ * and no new dependency were added for this — tsx runs from the npx cache.
+ * Regenerate and commit atlas.png, items.png and atlasUVs.ts together
+ * whenever any tile or icon art changes (both hashes change together).
+ */
 import sharp from "sharp";
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { ItemIcon } from "../src/ui/ItemIcon";
+import { BLOCK_DEFINITIONS } from "../src/data/blocks";
 
 const TILE = 16;
 const COLS = 4;
+const ICON_PX = 32;
+const ICON_COLS = 8;
+const BLOCKS_OVERRIDE_DIR = path.resolve(__dirname, "../public/textures/blocks");
 
 type RGB = { r: number; g: number; b: number };
 
@@ -215,6 +244,9 @@ function lavaTexture(buf: Buffer): void {
 
 // ---------------------------------------------------------------- wood
 
+/** Columns that get a carved bark groove, each broken into intermittent runs by hash. */
+const LOG_GROOVE_COLS = [0, 3, 7, 10, 13];
+
 function logSide(buf: Buffer): void {
   // vertical bark: per-column tone, then fine vertical streaking
   const pal = ["#6b5335", "#6b5335", "#7a6039", "#5b452b", "#87703f", "#4d3a23"].map(hexToRGB);
@@ -226,19 +258,54 @@ function logSide(buf: Buffer): void {
       setPixel(buf, x, y, { r: clampByte(base.r + d), g: clampByte(base.g + d), b: clampByte(base.b + d) });
     }
   }
-  for (const [x, y] of [[5, 6], [5, 7], [10, 11], [11, 11], [2, 2]]) setHex(buf, x, y, "#3f2f1c");
+  // bark grooves: a dark 1px column with a lighter ridge on its right,
+  // broken into runs so it reads as fissured bark rather than a straight cut.
+  for (const gx of LOG_GROOVE_COLS) {
+    for (let y = 0; y < 16; y++) {
+      if (hash2(gx, Math.floor(y / 4), 25) > 0.2) {
+        setHex(buf, gx, y, "#3f2f1c");
+        if (gx + 1 < 16 && hash2(gx, y, 26) > 0.5) setHex(buf, gx + 1, y, "#8a7145");
+      }
+    }
+  }
+  // one knot, darker centre inside a lighter ring
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = 11 + dx, y = 7 + dy;
+      if (x < 0 || y < 0 || x > 15 || y > 15) continue;
+      setHex(buf, x, y, dx === 0 && dy === 0 ? "#2f2113" : "#4a3722");
+    }
+  }
 }
 
 function logTop(buf: Buffer): void {
   speckle(buf, ["#b39058", "#b39058", "#bd9b63", "#a8854e", "#c6a56e"], 23, 2);
+  // continuous growth rings: for each pixel, test its angular slice against
+  // each target radius with a per-slice wobble, instead of rounding distance
+  // to an integer (which breaks the ring into disconnected pixels).
+  const RING_RADII = [2, 4, 6];
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
       const dx = x - 7.5, dy = y - 7.5;
-      const rd = Math.round(Math.sqrt(dx * dx + dy * dy));
-      if (rd === 3 || rd === 6) setHex(buf, x, y, hash2(x, y, 24) > 0.35 ? "#8e6f40" : "#9c7d4c");
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const slice = Math.round(Math.atan2(dy, dx) * 12);
+      for (const radius of RING_RADII) {
+        const wobble = (hash2(slice, radius, 24) - 0.5) * 1.2;
+        if (Math.abs(dist - (radius + wobble)) < 0.55) {
+          setHex(buf, x, y, hash2(x, y, 24) > 0.35 ? "#8e6f40" : "#9c7d4c");
+          break;
+        }
+      }
     }
   }
   for (const [x, y] of [[7, 7], [8, 7], [7, 8], [8, 8]]) setHex(buf, x, y, "#7d6035");
+  // bark rim around the cut face
+  for (let i = 0; i < 16; i++) {
+    if (hash2(i, 0, 27) > 0.15) setHex(buf, i, 0, "#5b452b");
+    if (hash2(i, 15, 27) > 0.15) setHex(buf, i, 15, "#5b452b");
+    if (hash2(0, i, 28) > 0.15) setHex(buf, 0, i, "#5b452b");
+    if (hash2(15, i, 28) > 0.15) setHex(buf, 15, i, "#5b452b");
+  }
 }
 
 function planksTexture(buf: Buffer): void {
@@ -246,7 +313,7 @@ function planksTexture(buf: Buffer): void {
   for (let y = 0; y < 16; y++) {
     const band = Math.floor(y / 4);
     const pal = [bases[band], bases[band], bases[band],
-      shift(bases[band], 14), shift(bases[band], -16)];
+      shift(bases[band], 14), shift(bases[band], -20)];
     for (let x = 0; x < 16; x++) setHex(buf, x, y, ramp(pal, clump(x, y, 50 + band, 2)));
   }
   // grain streaks inside each plank
@@ -261,12 +328,24 @@ function planksTexture(buf: Buffer): void {
   for (let y = 4; y < 7; y++) setHex(buf, 3, y, "#71512a");
   for (let y = 8; y < 11; y++) setHex(buf, 12, y, "#71512a");
   for (let y = 12; y < 15; y++) setHex(buf, 6, y, "#71512a");
+  // nail heads, one pair per plank board
+  for (let band = 0; band < 4; band++) {
+    setHex(buf, 1, band * 4 + 1, "#4a3a24");
+    setHex(buf, 14, band * 4 + 2, "#4a3a24");
+  }
 }
 
 function leavesTexture(buf: Buffer): void {
-  speckle(buf, ["#4a8a34", "#4a8a34", "#3d7529", "#579b3f", "#2f5f20", "#63aa49"], 30, 2);
-  scatter(buf, "#25491a", 31, 0.90);
+  speckle(buf, ["#2a5f1e", "#2a5f1e", "#397b29", "#1f4716", "#4f9636", "#6fbc52"], 30, 2);
+  scatter(buf, "#1a3811", 31, 0.90);
   scatter(buf, "#79bd5b", 32, 0.93);
+  // clumped alpha-0 holes with dark green showing through underneath, so the
+  // cutout reads as gaps in a canopy rather than a bleeding transparent edge.
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      if (clump(x, y, 33, 2) > 0.685) setHex(buf, x, y, "#173410", 0);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- crafted
@@ -412,6 +491,85 @@ function splitTile(topHex: string, bottomHex: string): Buffer {
   return buf;
 }
 
+/**
+ * Builds one block tile: a hand-authored PNG override at
+ * public/textures/blocks/<name>.png if present, otherwise the generator.
+ * Keyed by texture name, not block id — data-driven, no id switch.
+ */
+async function buildTile(tex: TextureDef): Promise<Buffer> {
+  const overridePath = path.join(BLOCKS_OVERRIDE_DIR, `${tex.name}.png`);
+  if (fs.existsSync(overridePath)) {
+    return sharp(overridePath)
+      .ensureAlpha()
+      .resize(TILE, TILE, { kernel: "nearest" })
+      .raw()
+      .toBuffer();
+  }
+  if (tex.custom) {
+    const tile = Buffer.alloc(TILE * TILE * 4);
+    tex.custom(tile);
+    return tile;
+  }
+  if (tex.split) return splitTile(tex.split.topColor, tex.split.bottomColor);
+  return solidTile(tex.color);
+}
+
+type UvRect = { u0: number; v0: number; u1: number; v1: number };
+
+/**
+ * Rasterises every non-block item's inventory icon (BLOCK_DEFINITIONS entries
+ * with id !== 0 and textures.side === "") into one RGBA sheet, via the same
+ * React/SVG art the inventory UI renders — ItemIcon is only ever imported
+ * here, at build time; nothing at runtime pulls react-dom/server into the
+ * client bundle.
+ */
+async function buildItemSheet(): Promise<{
+  buf: Buffer;
+  width: number;
+  height: number;
+  uvs: Record<number, UvRect>;
+}> {
+  const itemIds = BLOCK_DEFINITIONS.filter((b) => b.id !== 0 && b.textures.side === "").map((b) => b.id);
+  const rows = Math.ceil(itemIds.length / ICON_COLS);
+  const width = ICON_COLS * ICON_PX;
+  const height = rows * ICON_PX;
+  const buf = Buffer.alloc(width * height * 4);
+  const uvs: Record<number, UvRect> = {};
+
+  for (let i = 0; i < itemIds.length; i++) {
+    const id = itemIds[i];
+    const col = i % ICON_COLS;
+    const row = Math.floor(i / ICON_COLS);
+
+    let svg = renderToStaticMarkup(createElement(ItemIcon, { blockId: id, size: ICON_PX }));
+    svg = svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+    const { data } = await sharp(Buffer.from(svg))
+      .resize(ICON_PX, ICON_PX, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    for (let y = 0; y < ICON_PX; y++) {
+      for (let x = 0; x < ICON_PX; x++) {
+        const srcIdx = (y * ICON_PX + x) * 4;
+        const dstIdx = ((row * ICON_PX + y) * width + (col * ICON_PX + x)) * 4;
+        buf[dstIdx] = data[srcIdx];
+        buf[dstIdx + 1] = data[srcIdx + 1];
+        buf[dstIdx + 2] = data[srcIdx + 2];
+        buf[dstIdx + 3] = data[srcIdx + 3];
+      }
+    }
+
+    uvs[id] = {
+      u0: (col * ICON_PX) / width,
+      v0: (row * ICON_PX) / height,
+      u1: ((col + 1) * ICON_PX) / width,
+      v1: ((row + 1) * ICON_PX) / height,
+    };
+  }
+
+  return { buf, width, height, uvs };
+}
+
 async function main() {
   const rows = Math.ceil(TEXTURES.length / COLS);
   const atlasW = COLS * TILE;
@@ -420,22 +578,13 @@ async function main() {
   // Build atlas pixel buffer
   const atlasBuf = Buffer.alloc(atlasW * atlasH * 4);
 
-  const uvs: Record<string, { u0: number; v0: number; u1: number; v1: number }> = {};
+  const uvs: Record<string, UvRect> = {};
 
   for (let i = 0; i < TEXTURES.length; i++) {
     const tex = TEXTURES[i];
     const col = i % COLS;
     const row = Math.floor(i / COLS);
-
-    let tile: Buffer;
-    if (tex.custom) {
-      tile = Buffer.alloc(TILE * TILE * 4);
-      tex.custom(tile);
-    } else if (tex.split) {
-      tile = splitTile(tex.split.topColor, tex.split.bottomColor);
-    } else {
-      tile = solidTile(tex.color);
-    }
+    const tile = await buildTile(tex);
 
     // Copy tile into atlas buffer
     for (let y = 0; y < TILE; y++) {
@@ -457,17 +606,35 @@ async function main() {
     };
   }
 
-  // Write atlas PNG
   const outDir = path.resolve(__dirname, "../public/textures");
   fs.mkdirSync(outDir, { recursive: true });
+
+  // Write block atlas PNG
   await sharp(atlasBuf, { raw: { width: atlasW, height: atlasH, channels: 4 } })
     .png()
     .toFile(path.join(outDir, "atlas.png"));
   console.log(`Atlas written to public/textures/atlas.png (${atlasW}x${atlasH})`);
 
-  // Compute content hash for cache busting
-  const pngData = fs.readFileSync(path.join(outDir, "atlas.png"));
-  const atlasHash = crypto.createHash("md5").update(pngData).digest("hex").slice(0, 8);
+  // Build and write the item icon sheet
+  const items = await buildItemSheet();
+  await sharp(items.buf, { raw: { width: items.width, height: items.height, channels: 4 } })
+    .png()
+    .toFile(path.join(outDir, "items.png"));
+  console.log(
+    `Item sheet written to public/textures/items.png (${items.width}x${items.height}, ${Object.keys(items.uvs).length} icons)`
+  );
+
+  // Content hashes for cache busting
+  const atlasHash = crypto
+    .createHash("md5")
+    .update(fs.readFileSync(path.join(outDir, "atlas.png")))
+    .digest("hex")
+    .slice(0, 8);
+  const itemAtlasHash = crypto
+    .createHash("md5")
+    .update(fs.readFileSync(path.join(outDir, "items.png")))
+    .digest("hex")
+    .slice(0, 8);
 
   // Write UV TypeScript file
   const uvFile = path.resolve(__dirname, "../src/data/atlasUVs.ts");
@@ -481,8 +648,19 @@ async function main() {
   }
   lines.push("};");
   lines.push("");
+  lines.push(`export const ITEM_ATLAS_HASH = "${itemAtlasHash}";`);
+  lines.push(
+    "export const ITEM_ATLAS_UVS: Record<number, { u0: number; v0: number; u1: number; v1: number }> = {"
+  );
+  for (const [id, rect] of Object.entries(items.uvs)) {
+    lines.push(`  ${id}: { u0: ${rect.u0}, v0: ${rect.v0}, u1: ${rect.u1}, v1: ${rect.v1} },`);
+  }
+  lines.push("};");
+  lines.push("");
   fs.writeFileSync(uvFile, lines.join("\n"));
-  console.log(`UV data written to src/data/atlasUVs.ts (${Object.keys(uvs).length} entries)`);
+  console.log(
+    `UV data written to src/data/atlasUVs.ts (${Object.keys(uvs).length} block tiles, ${Object.keys(items.uvs).length} item icons)`
+  );
 }
 
 main().catch((err) => {
