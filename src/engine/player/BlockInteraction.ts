@@ -3,6 +3,7 @@ import { ItemDropManager } from "@engine/world/ItemDropManager";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 import { getToolDef } from "@data/items";
+import { canHarvest, harvestSpeedMultiplier } from "@engine/player/harvest";
 import { useGameStore } from "@store/useGameStore";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { useInventoryStore } from "@store/useInventoryStore";
@@ -111,7 +112,7 @@ export class BlockInteraction {
       if (blockDef && blockDef.breakable) {
         this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
         notifyWalkthrough("break");
-        if (target.blockId === BLOCK_ID.CRYSTAL) {
+        if (blockDef.special === "crystal_shard") {
           useGameStore.getState().collectShard();
         }
         this.creativeCooldown = 0.2; // 200ms between breaks
@@ -131,10 +132,7 @@ export class BlockInteraction {
         const hotbar = useHotbarStore.getState();
         const heldId = hotbar.getSelectedBlockId();
         const toolDef = getToolDef(heldId);
-        let speedMul = 1;
-        if (toolDef && toolDef.effectiveAgainst.includes(target.blockId!)) {
-          speedMul = toolDef.miningSpeedMultiplier;
-        }
+        const speedMul = harvestSpeedMultiplier(blockDef, toolDef);
 
         // Check if still targeting the same block
         if (
@@ -155,13 +153,11 @@ export class BlockInteraction {
           this.chunkManager.setBlock(bp.x, bp.y, bp.z, BLOCK_ID.AIR);
           notifyWalkthrough("break");
 
-          // Only drop if the correct tool is used (or no tool required)
-          const needsTool = blockDef.requiresTool;
-          const hasRightTool = !needsTool || (toolDef && toolDef.toolType === needsTool);
-          if (hasRightTool) {
+          // Only drop if the tool passes both the type gate and the level gate
+          if (canHarvest(blockDef, toolDef)) {
             this.itemDrops.spawnDrop(blockDef.dropId, bp.x, bp.y, bp.z, 0.5);
 
-            if (target.blockId === BLOCK_ID.CRYSTAL) {
+            if (blockDef.special === "crystal_shard") {
               useGameStore.getState().collectShard();
             }
           }
@@ -215,7 +211,8 @@ export class BlockInteraction {
       const hotbar = useHotbarStore.getState();
       const placeId = hotbar.getSelectedBlockId();
       const placeDef = BLOCK_DEFINITIONS[placeId];
-      if (placeId !== BLOCK_ID.AIR && placeDef?.solid) {
+      // A crystal shard is a trophy, never a placeable block — it stays in the inventory.
+      if (placeId !== BLOCK_ID.AIR && placeDef?.solid && placeDef.special !== "crystal_shard") {
         const px = target.facePos.x;
         const py = target.facePos.y;
         const pz = target.facePos.z;
