@@ -71,10 +71,10 @@ describe("findRecipe — species-following result (2x2)", () => {
     expect(findRecipe([BLOCK_ID.SPRUCE_LOG, BLOCK_ID.SPRUCE_LOG, BLOCK_ID.SPRUCE_LOG, BLOCK_ID.SPRUCE_LOG])).toBeNull();
   });
 
-  it("non-wood cells still require an exact match (4 stone -> sand, unaffected)", () => {
-    const recipe = findRecipe([BLOCK_ID.STONE, BLOCK_ID.STONE, BLOCK_ID.STONE, BLOCK_ID.STONE]);
+  it("non-wood cells still require an exact match (4 dirt -> grass, unaffected)", () => {
+    const recipe = findRecipe([BLOCK_ID.DIRT, BLOCK_ID.DIRT, BLOCK_ID.DIRT, BLOCK_ID.DIRT]);
     expect(recipe).not.toBeNull();
-    expect(recipe!.result).toBe(BLOCK_ID.SAND);
+    expect(recipe!.result).toBe(BLOCK_ID.GRASS);
   });
 
   it("an empty grid still matches nothing", () => {

@@ -19,15 +19,17 @@ export function storageRegion(layout: Layout): Region {
 }
 
 /**
- * A crafting grid (2x2 or 3x3). Never a quick-move destination — Minecraft
- * does not quick-move items into a crafting grid — but still a valid source
+ * A crafting grid (2x2 or 3x3). Prioritized above hotbar/storage so
+ * shift-clicking an inventory item while a crafting screen is open lays it
+ * into the grid first (whole stack, same fill rule as any other region) and
+ * only overflows to storage once the grid is full — and still a valid source
  * (shift-clicking a grid cell sends it back to the player).
  */
 export function craftInputRegion(range: [number, number]): Region {
   return {
     role: "craftInput",
     range,
-    priority: -1,
+    priority: 10,
     accepts: (item: ItemStack) => item.blockId !== BLOCK_ID.AIR && item.count > 0,
   };
 }

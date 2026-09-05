@@ -94,7 +94,7 @@ function PausePanel({
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-30 p-6">
-      <div className="flex max-h-full w-64 flex-col items-stretch gap-4 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/90 p-6">
+      <div className="flex max-h-full w-full max-w-md flex-col items-stretch gap-4 overflow-y-auto rounded-lg border border-gray-700 bg-gray-900/90 p-6 sm:max-w-xl">
         <h2 className="text-center text-2xl font-mono font-bold tracking-wide text-white">
           PAUSED
         </h2>
@@ -129,28 +129,38 @@ function PausePanel({
           Resume
         </button>
 
-        <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
-          {gameMode !== "hardcore" && (
-            <button onClick={handleToggleGameMode} className={secondaryButtonClass}>
-              {gameMode === "creative" ? "Switch to Survival" : "Switch to Creative"}
+        {/* Two columns on wider screens: gameplay actions on the left,
+            reference/navigation on the right. Stacks to one column when
+            narrow (the sm:max-w-xl panel width still fits on a phone). */}
+        <div className="grid grid-cols-1 gap-x-6 gap-y-4 border-t border-white/10 pt-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">
+              Game
+            </p>
+            {gameMode !== "hardcore" && (
+              <button onClick={handleToggleGameMode} className={secondaryButtonClass}>
+                {gameMode === "creative" ? "Switch to Survival" : "Switch to Creative"}
+              </button>
+            )}
+            <button onClick={handleSetSpawn} className={secondaryButtonClass}>
+              {spawnSet ? "Spawn set!" : "Set Spawn Here"}
             </button>
-          )}
+          </div>
 
-          <button onClick={handleSetSpawn} className={secondaryButtonClass}>
-            {spawnSet ? "Spawn set!" : "Set Spawn Here"}
-          </button>
-
-          <button onClick={handleShowWalkthrough} className={secondaryButtonClass}>
-            How to Play
-          </button>
-
-          <button onClick={handleShowControls} className={secondaryButtonClass}>
-            Controls
-          </button>
-
-          <button onClick={handleCreateWorld} className={secondaryButtonClass}>
-            Create New World
-          </button>
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/35">
+              Reference
+            </p>
+            <button onClick={handleShowWalkthrough} className={secondaryButtonClass}>
+              How to Play
+            </button>
+            <button onClick={handleShowControls} className={secondaryButtonClass}>
+              Controls
+            </button>
+            <button onClick={handleCreateWorld} className={secondaryButtonClass}>
+              Create New World
+            </button>
+          </div>
         </div>
 
         <button

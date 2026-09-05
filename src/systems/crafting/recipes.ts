@@ -36,13 +36,6 @@ export const RECIPES: CraftingRecipe[] = [
     count: 1,
     name: "Grass Block",
   },
-  // 4 stone → 4 sand (crushing)
-  {
-    grid: [BLOCK_ID.STONE, BLOCK_ID.STONE, BLOCK_ID.STONE, BLOCK_ID.STONE],
-    result: BLOCK_ID.SAND,
-    count: 4,
-    name: "Sand",
-  },
   // 1 log → 4 planks
   {
     grid: [BLOCK_ID.LOG, 0, 0, 0],
@@ -63,13 +56,6 @@ export const RECIPES: CraftingRecipe[] = [
     result: BLOCK_ID.STICK,
     count: 4,
     name: "Sticks",
-  },
-  // grass + dirt → 2 sand (erosion)
-  {
-    grid: [BLOCK_ID.GRASS, BLOCK_ID.DIRT, 0, 0],
-    result: BLOCK_ID.SAND,
-    count: 2,
-    name: "Sand (Erosion)",
   },
   // stone + sand → 2 dirt (mixing)
   {

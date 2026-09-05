@@ -144,18 +144,61 @@ describe("quickMove — output and negative-priority regions are never destinati
     const player = emptyPlayer();
     player[0] = stack(BLOCK_ID.DIRT, 5);
     const layout = buildLayout(player, [stack(BLOCK_ID.DIRT, 1), empty()], [], empty());
-    const [containerStart, containerEnd] = layout.ranges.container;
-    const craftInput = craftInputRegion([containerStart, containerEnd - 1]);
+    const [, containerEnd] = layout.ranges.container;
     const output = outputRegion(containerEnd - 1);
     const offhand = offhandRegion(layout);
-    const regions: Region[] = [hotbarRegion(layout), storageRegion(layout), craftInput, output, offhand];
+    const regions: Region[] = [hotbarRegion(layout), storageRegion(layout), output, offhand];
 
     const plan = quickMove(layout.slots[0], regions[0], regions, ctxFor(layout.slots, 0));
     for (const move of plan.moves) {
       expect(move.to).not.toBe(output.range[0]);
       expect(move.to).not.toBe(offhand.range[0]);
-      expect(move.to < craftInput.range[0] || move.to >= craftInput.range[1]).toBe(true);
     }
+  });
+});
+
+describe("quickMove — craftInput is a prioritized destination", () => {
+  it("shift-clicking a storage item lays the whole stack into the crafting grid first", () => {
+    const player = emptyPlayer();
+    player[9] = stack(BLOCK_ID.DIRT, 5); // storage, not hotbar
+    const layout = buildLayout(player, [empty(), empty(), empty(), empty()], [], empty());
+    const [containerStart, containerEnd] = layout.ranges.container;
+    const craftInput = craftInputRegion([containerStart, containerEnd]);
+    const regions: Region[] = [hotbarRegion(layout), storageRegion(layout), craftInput];
+
+    const fromIndex = 9;
+    const plan = quickMove(layout.slots[fromIndex], regions[1], regions, ctxFor(layout.slots, fromIndex));
+    expect(plan.moves).toEqual([{ from: fromIndex, to: containerStart, count: 5 }]);
+  });
+
+  it("overflows to storage once the crafting grid is full", () => {
+    const player = emptyPlayer();
+    player[9] = stack(BLOCK_ID.DIRT, 5);
+    const layout = buildLayout(
+      player,
+      [stack(BLOCK_ID.STONE, 1), stack(BLOCK_ID.STONE, 1)],
+      [],
+      empty()
+    );
+    const [containerStart, containerEnd] = layout.ranges.container;
+    const craftInput = craftInputRegion([containerStart, containerEnd]);
+    const regions: Region[] = [hotbarRegion(layout), storageRegion(layout), craftInput];
+
+    const fromIndex = 9;
+    const plan = quickMove(layout.slots[fromIndex], regions[1], regions, ctxFor(layout.slots, fromIndex));
+    // Grid full: falls through to hotbar next (priority 5 > storage's 4).
+    expect(plan.moves).toEqual([{ from: fromIndex, to: 0, count: 5 }]);
+  });
+
+  it("still lets a shift-clicked grid cell return to the player (craftInput as source)", () => {
+    const player = emptyPlayer();
+    const layout = buildLayout(player, [stack(BLOCK_ID.DIRT, 3), empty()], [], empty());
+    const [containerStart, containerEnd] = layout.ranges.container;
+    const craftInput = craftInputRegion([containerStart, containerEnd]);
+    const regions: Region[] = [hotbarRegion(layout), storageRegion(layout), craftInput];
+
+    const plan = quickMove(layout.slots[containerStart], craftInput, regions, ctxFor(layout.slots, containerStart));
+    expect(plan.moves).toEqual([{ from: containerStart, to: 0, count: 3 }]);
   });
 });
 

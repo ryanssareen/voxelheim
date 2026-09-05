@@ -12,6 +12,11 @@ const AIR = 0;
 const STONE = 1;
 const GROUND_TOP = 65; // flat terrain fills y <= 64, entities stand at y = 65
 
+// Creeper's model is authored to a height of 1.2; MOB_CONFIGS scales it up to
+// 1.5 so it reads as roughly player-sized, via a resting group scale of
+// 1.5 / 1.2 that the fuse swell (1x -> ~1.3x) multiplies on top of.
+const CREEPER_BASE_SCALE = 1.5 / 1.2;
+
 const registry = { isSolid: (id: number) => id === STONE } as unknown as BlockRegistry;
 
 /** Flat terrain, no obstacles. */
@@ -284,12 +289,12 @@ describe("E2 creeper fuse", () => {
     for (let frame = 0; frame < framesFor(0.75) - 1; frame++) {
       mob.update(1 / 60, flatWorld, registry, playerPos);
     }
-    expect(mob.group.scale.x).toBeCloseTo(1.15, 1);
+    expect(mob.group.scale.x).toBeCloseTo(1.15 * CREEPER_BASE_SCALE, 1);
 
     for (let frame = framesFor(0.75); frame < framesFor(1.49); frame++) {
       mob.update(1 / 60, flatWorld, registry, playerPos);
     }
-    expect(mob.group.scale.x).toBeCloseTo(1.3, 1);
+    expect(mob.group.scale.x).toBeCloseTo(1.3 * CREEPER_BASE_SCALE, 1);
 
     expect(internals.fuseDetonated).toBe(false);
     for (let frame = framesFor(1.49); frame < framesFor(1.6); frame++) {
@@ -305,13 +310,13 @@ describe("E2 creeper fuse", () => {
 
     // Burn a bit of the fuse first so scale/colour actually have something to reset.
     for (let frame = 0; frame < 20; frame++) mob.update(1 / 60, flatWorld, registry, { x: 9, y: GROUND_TOP, z: 20.5 });
-    expect(mob.group.scale.x).toBeGreaterThan(1);
+    expect(mob.group.scale.x).toBeGreaterThan(CREEPER_BASE_SCALE);
 
     const farAway = { x: 12, y: GROUND_TOP, z: 20.5 }; // dist 4 > fuseAbortRange (3.5)
     mob.update(1 / 60, flatWorld, registry, farAway);
 
     expect(internals.exploding).toBe(false);
-    expect(mob.group.scale.x).toBeCloseTo(1, 6);
+    expect(mob.group.scale.x).toBeCloseTo(CREEPER_BASE_SCALE, 6);
     for (const obj of mob.group.children) {
       if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshLambertMaterial) {
         // Every material must have been restored to its original colour.
@@ -335,7 +340,7 @@ describe("E2 creeper fuse", () => {
     mob.update(1 / 60, flatWorld, registry, playerPos, undefined, true);
 
     expect(internals.exploding).toBe(false);
-    expect(mob.group.scale.x).toBeCloseTo(1, 6);
+    expect(mob.group.scale.x).toBeCloseTo(CREEPER_BASE_SCALE, 6);
   });
 
   it("accelerates the flash pulse as the fuse burns down", () => {

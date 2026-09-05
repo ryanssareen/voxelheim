@@ -900,11 +900,27 @@ export class Engine {
     }
     this.eWasDown = eDown;
 
-    // Skip game input while inventory or crafting table is open
+    // Skip game input while inventory or crafting table is open. The
+    // crafting table and furnace are workstations, not a full pause — the
+    // player can still walk (WASD) away from them without closing the
+    // screen; mouse-look, combat, block interaction and the rest of the
+    // frame still don't run, matching the full inventory/creative screens.
     const invState = useInventoryStore.getState();
     if (invState.isOpen || invState.tableOpen || invState.furnaceOpen || invState.creativeOpen) {
       this.input.getMouseDelta(); // consume
       this.input.getMouseButton(); // consume
+
+      if (invState.tableOpen || invState.furnaceOpen) {
+        this.player!.update(
+          dt,
+          this.input,
+          this.camera,
+          (wx, wy, wz) => this.chunkManager!.getBlock(wx, wy, wz),
+          this.registry,
+          this.gameMode === "creative"
+        );
+      }
+
       this.camera.applyToThreeCamera(
         this.renderer!.getCamera(),
         this.player!.position,

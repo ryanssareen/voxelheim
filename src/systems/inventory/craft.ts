@@ -49,8 +49,12 @@ export function craftOnce(
   const withResult = [...layout.slots];
   withResult[outputIndex] = result;
 
+  // The crafted result always goes to the player, never back into the input
+  // grid it was just consumed from — craftInput is excluded even though it
+  // now outranks storage as a quick-move destination for ordinary items.
+  const destRegions = regions.filter((r) => r.role !== "craftInput");
   const ctx: QuickMoveContext = { slots: withResult, fromSlot: outputIndex, maxStack, stackable };
-  const plan = quickMove(result, outputRegion, regions, ctx);
+  const plan = quickMove(result, outputRegion, destRegions, ctx);
   if (plan.remainder > 0) return null;
 
   let next = applyPlan(withResult, plan);

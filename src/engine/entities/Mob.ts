@@ -42,12 +42,28 @@ interface MobConfig {
 }
 
 const MOB_CONFIGS: Record<MobType, MobConfig> = {
-  pig:      { health: 5,  speed: 1.5, halfWidth: 0.25, height: 0.6,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_PORK },
-  cow:      { health: 5,  speed: 1.5, halfWidth: 0.3,  height: 0.7,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_BEEF },
-  sheep:    { health: 5,  speed: 1.5, halfWidth: 0.25, height: 0.65, hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_MUTTON },
+  pig:      { health: 5,  speed: 1.5, halfWidth: 0.35, height: 0.9,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_PORK },
+  cow:      { health: 5,  speed: 1.5, halfWidth: 0.5,  height: 1.3,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_BEEF },
+  sheep:    { health: 5,  speed: 1.5, halfWidth: 0.4,  height: 1.1,  hostile: false, detectRange: 0,  attackRange: 0,   dropId: BLOCK_ID.RAW_MUTTON },
   zombie:   { health: 10, speed: 2.5, halfWidth: 0.25, height: 1.6,  hostile: true,  detectRange: 16, attackRange: 1.5, dropId: BLOCK_ID.DIRT },
   skeleton: { health: 10, speed: 2.0, halfWidth: 0.2,  height: 1.6,  hostile: true,  detectRange: 16, attackRange: 10,  dropId: BLOCK_ID.STONE },
-  creeper:  { health: 10, speed: 2.0, halfWidth: 0.2,  height: 1.2,  hostile: true,  detectRange: 16, attackRange: 2,   dropId: BLOCK_ID.SAND, fuseSeconds: 1.5, fuseAbortRange: 3.5 },
+  creeper:  { health: 10, speed: 2.0, halfWidth: 0.3,  height: 1.5,  hostile: true,  detectRange: 16, attackRange: 2,   dropId: BLOCK_ID.SAND, fuseSeconds: 1.5, fuseAbortRange: 3.5 },
+};
+
+/**
+ * Each model in MobModel.ts is authored (boxes, offsets) to exactly fill
+ * this height with feet at local y=0 — the height MOB_CONFIGS used to carry
+ * before mobs were scaled up to be visible next to a 1.8-tall player. A
+ * mob's group is scaled by config.height / this value so hitbox and model
+ * grow together instead of the hitbox outgrowing an unscaled, too-small mesh.
+ */
+const AUTHORED_MODEL_HEIGHT: Record<MobType, number> = {
+  pig: 0.6,
+  cow: 0.7,
+  sheep: 0.65,
+  zombie: 1.6,
+  skeleton: 1.6,
+  creeper: 1.2,
 };
 
 interface DamageNumber {
@@ -68,6 +84,7 @@ export class Mob {
   public age = 0;
 
   private model: MobModelData;
+  private readonly baseScale: number;
   private readonly bodyRestY: number;
   private walkTime = 0;
   private aiTimer = 0;
@@ -119,6 +136,8 @@ export class Mob {
     this.yaw = Math.random() * Math.PI * 2;
     this.aiTargetYaw = this.yaw;
     this.model = createMobModel(type);
+    this.baseScale = this.config.height / AUTHORED_MODEL_HEIGHT[type];
+    this.model.group.scale.setScalar(this.baseScale);
     this.bodyRestY = this.model.body.position.y;
     this.pathRecalcTimer = Math.random(); // stagger across mobs
 
@@ -418,8 +437,8 @@ export class Mob {
     texture.magFilter = THREE.NearestFilter;
     const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
     this.burnSprite = new THREE.Sprite(material);
-    this.burnSprite.scale.set(0.4, 0.4, 1);
-    this.burnSprite.position.set(0, this.config.height + 0.5, 0);
+    this.burnSprite.scale.set(0.4 / this.baseScale, 0.4 / this.baseScale, 1);
+    this.burnSprite.position.set(0, AUTHORED_MODEL_HEIGHT[this.type] + 0.5, 0);
     this.model.group.add(this.burnSprite);
   }
 
@@ -680,7 +699,8 @@ export class Mob {
       const t = 1 - Math.max(0, this.explodeTimer) / fuseSeconds;
       this.fusePhase += dt * Math.PI * 2 * (FUSE_PULSE_HZ_MIN + (FUSE_PULSE_HZ_MAX - FUSE_PULSE_HZ_MIN) * t);
       const pulse = Math.sin(this.fusePhase);
-      const scale = 1 + FUSE_SWELL * t + 0.04 * t * Math.max(0, pulse);
+      const swell = 1 + FUSE_SWELL * t + 0.04 * t * Math.max(0, pulse);
+      const scale = this.baseScale * swell;
       this.model.group.scale.setScalar(scale);
       this.compensateSwellSprites(scale);
       const flash = pulse > 0;
@@ -712,8 +732,8 @@ export class Mob {
     this.explodeTimer = 0;
     this.fusePhase = 0;
     this.fuseDetonated = false;
-    this.model.group.scale.setScalar(1);
-    this.compensateSwellSprites(1);
+    this.model.group.scale.setScalar(this.baseScale);
+    this.compensateSwellSprites(this.baseScale);
     this.model.group.traverse((obj) => {
       if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshLambertMaterial) {
         obj.material.color.setHex(this.originalColors.get(obj) ?? 0xffffff);
@@ -787,8 +807,8 @@ export class Mob {
       depthWrite: false,
     });
     this.nameTagSprite = new THREE.Sprite(material);
-    this.nameTagSprite.scale.set(1.2, 0.3, 1);
-    this.nameTagSprite.position.set(0, this.config.height + 0.35, 0);
+    this.nameTagSprite.scale.set(1.2 / this.baseScale, 0.3 / this.baseScale, 1);
+    this.nameTagSprite.position.set(0, AUTHORED_MODEL_HEIGHT[this.type] + 0.35, 0);
     this.model.group.add(this.nameTagSprite);
   }
 
@@ -820,8 +840,8 @@ export class Mob {
       depthWrite: false,
     });
     const sprite = new THREE.Sprite(material);
-    sprite.scale.set(0.6, 0.3, 1);
-    const startY = this.config.height + 0.5;
+    sprite.scale.set(0.6 / this.baseScale, 0.3 / this.baseScale, 1);
+    const startY = AUTHORED_MODEL_HEIGHT[this.type] + 0.5;
     sprite.position.set((Math.random() - 0.5) * 0.3, startY, (Math.random() - 0.5) * 0.3);
     this.model.group.add(sprite);
     this.damageNumbers.push({ sprite, lifetime: 1.0, startY });
@@ -859,8 +879,8 @@ export class Mob {
 
     const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
     const sprite = new THREE.Sprite(material);
-    sprite.scale.set(0.8, 0.1, 1);
-    sprite.position.set(0, this.config.height + 0.15, 0);
+    sprite.scale.set(0.8 / this.baseScale, 0.1 / this.baseScale, 1);
+    sprite.position.set(0, AUTHORED_MODEL_HEIGHT[this.type] + 0.15, 0);
     this.healthBarSprite = sprite;
     this.model.group.add(sprite);
     this.updateHealthBar();
