@@ -27,7 +27,13 @@ export type HeldIntent =
   /** Mine or attack — resolved by what is targeted, not by the control. */
   | "primary"
   /** Place or use — the level read the eat gate consumes. */
-  | "secondary";
+  | "secondary"
+  /**
+   * Narrowed field of view while held. The engine lerps the FOV toward the zoom
+   * target for as long as this is true, so it is a level read; the `zoom` edge
+   * is the same control expressed as a toggle for a source that has no hold.
+   */
+  | "zoom";
 
 /** Controls that matter at the moment of press. */
 export type EdgeIntent =

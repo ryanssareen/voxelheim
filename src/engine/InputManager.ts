@@ -1,8 +1,35 @@
+import { KeyboardMouseSource } from "@engine/input/keyboardMouseSource";
+import { IntentState } from "@engine/input/snapshot";
+
 /**
  * Captures keyboard, mouse movement, mouse buttons, and pointer lock state.
  * Call init(canvas) to attach listeners; dispose() to remove them.
+ *
+ * It is also the keyboard/mouse **source** for the intent layer: every event it
+ * already listens for is forwarded to a {@link KeyboardMouseSource}, which
+ * writes named intents into {@link InputManager.intents}. The direct accessors
+ * below (`isKeyDown`, `getMouseButton`, `isMouseButtonDown`, `getMouseDelta`)
+ * are unchanged and stay until the consumers that poll them — `Engine`,
+ * `PlayerController`, `BlockInteraction` — move over to the snapshot. Adding the
+ * source alongside them rather than replacing them is what lets the
+ * characterization suite keep proving desktop behaviour is untouched.
+ *
+ * One deliberate difference between the two faces: `getMouseDelta()` still
+ * drops movement made while the pointer is not locked, because that is the
+ * behaviour today's consumers are written against, while the intent layer
+ * accumulates look deltas regardless (R4). The frame loop's `drain()` is what
+ * throws away movement made on suppressed frames once look is read from
+ * intents.
  */
 export class InputManager {
+  /**
+   * Named intents produced from the events below. Consumers should type this as
+   * `IntentSnapshot` (read-only); the frame loop needs the `IntentState` face to
+   * set suppression, `drain()` on panel-open frames, and `endFrame()`.
+   */
+  readonly intents = new IntentState();
+  private readonly source: KeyboardMouseSource;
+
   private keys = new Set<string>();
   private mouseDx = 0;
   private mouseDy = 0;
@@ -24,6 +51,14 @@ export class InputManager {
   private onPointerLockChange: (() => void) | null = null;
   private onCanvasClick: (() => void) | null = null;
 
+  /**
+   * @param now press-timestamp clock handed to the intent source. Injectable so
+   *   tests can drive the double-tap window deterministically.
+   */
+  constructor(now: () => number = () => performance.now()) {
+    this.source = new KeyboardMouseSource(this.intents, now);
+  }
+
   /** Attaches all event listeners. */
   init(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -36,11 +71,16 @@ export class InputManager {
         return;
       }
       this.keys.add(e.code);
+      this.source.keyDown(e.code);
     };
     this.onKeyUp = (e: KeyboardEvent) => {
       this.keys.delete(e.code);
+      this.source.keyUp(e.code);
     };
     this.onMouseMove = (e: MouseEvent) => {
+      // Intent look is not gated on pointer lock (R4); the legacy accumulator
+      // below still is, because its consumers depend on that.
+      this.source.look(e.movementX, e.movementY);
       if (!this.locked) return;
       this.mouseDx += e.movementX;
       this.mouseDy += e.movementY;
@@ -48,10 +88,12 @@ export class InputManager {
     this.onMouseDown = (e: MouseEvent) => {
       if (e.button === 0) { this.leftClick = true; this.leftDown = true; }
       if (e.button === 2) { this.rightClick = true; this.rightDown = true; }
+      this.source.mouseDown(e.button);
     };
     this.onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) this.leftDown = false;
       if (e.button === 2) this.rightDown = false;
+      this.source.mouseUp(e.button);
     };
     this.onPointerLockChange = () => {
       const wasLocked = this.locked;
@@ -109,6 +151,17 @@ export class InputManager {
   /** Returns true if the pointer is currently locked to the canvas. */
   isPointerLocked(): boolean {
     return this.locked;
+  }
+
+  /**
+   * Ends the intent frame: clears accumulated deltas so the next frame's look
+   * describes only that frame. Call once per frame, after every consumer has
+   * read the snapshot. Held state and queued edges are untouched — edges are
+   * read through per-consumer cursors and must survive until each consumer has
+   * seen them.
+   */
+  endFrame(): void {
+    this.source.endFrame();
   }
 
   /** Removes all event listeners. */
