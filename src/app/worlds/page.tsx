@@ -175,9 +175,11 @@ export default function WorldsPage() {
       <div className="relative z-10 w-full max-w-[640px] px-4 pt-10 pb-8 animate-fadeIn">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
+          {/* Text-sized links are mouse targets, not thumb ones (R30): the hit
+              area grows to a finger, the text stays where it was. */}
           <Link
             href="/"
-            className="text-white/40 hover:text-white/70 font-mono text-sm transition-colors"
+            className="inline-flex items-center min-h-11 pr-3 text-white/40 hover:text-white/70 font-mono text-sm transition-colors"
             style={{ textShadow: "1px 1px 0 #000" }}
           >
             &larr; Back
@@ -260,13 +262,17 @@ export default function WorldsPage() {
                     </div>
                   </div>
 
+                  {/* Both sit inside a row that opens the world on tap, so an
+                      under-sized target here does not miss — it plays the world
+                      instead, and for delete that is a destructive miss. Thumb
+                      sizing is the fix; the row is tall enough to absorb it. */}
                   <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         void handleHost(world);
                       }}
-                      className="text-cyan-300 hover:text-cyan-100 font-mono text-xs px-2.5 py-1.5 rounded-sm transition-colors"
+                      className="inline-flex items-center justify-center min-h-11 min-w-11 text-cyan-300 hover:text-cyan-100 font-mono text-xs px-2.5 rounded-sm transition-colors"
                       style={{
                         background: "rgba(0,200,255,0.08)",
                         border: "1px solid rgba(0,200,255,0.15)",
@@ -280,7 +286,7 @@ export default function WorldsPage() {
                         e.stopPropagation();
                         handleDelete(world.id);
                       }}
-                      className="text-red-400/60 hover:text-red-400 font-mono text-xs px-2 py-1.5 transition-colors"
+                      className="inline-flex items-center justify-center min-h-11 min-w-11 text-red-400/60 hover:text-red-400 font-mono text-xs transition-colors"
                     >
                       {"\u00D7"}
                     </button>
