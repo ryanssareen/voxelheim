@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Engine } from "@engine/Engine";
+import { PAUSE_BLOCKERS } from "@engine/input/uiIntents";
+import { useIntentEdge } from "@ui/useIntentEdge";
 import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 import { useWalkthroughStore } from "@store/useWalkthroughStore";
@@ -12,6 +14,12 @@ import { enterPlayCapture } from "@ui/playCapture";
 /**
  * Pause menu overlay. Shown when isPaused is true.
  * Has pointer-events enabled for button interaction.
+ *
+ * The wrapper also owns the `pause` intent, which is the whole point of where
+ * it sits: the panel below is mounted only while paused, so a handler inside it
+ * could never be the thing that *starts* a pause. Escape produces the intent on
+ * a keyboard and U7's on-screen control produces the same one from a thumb, so
+ * pausing no longer depends on a pointer lock existing to be lost (R22).
  */
 export function PauseMenu({
   canvasRef,
@@ -21,6 +29,22 @@ export function PauseMenu({
   engineRef: React.RefObject<Engine | null>;
 }) {
   const isPaused = useGameStore((s) => s.isPaused);
+
+  // `setPaused(true)`, never a toggle: on desktop a locked Escape arrives twice
+  // over — once as this intent and once as the engine's lock-loss callback —
+  // and a toggle would unpause behind itself. Releasing the lock here matters
+  // for the triggers the browser does not handle for us (the touch control, an
+  // Escape pressed with no lock held); when the browser dropped the lock
+  // itself, there is nothing left to exit.
+  const pause = useCallback(() => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    useGameStore.getState().setPaused(true);
+  }, []);
+  // Registered unconditionally, above the early return, so the hook list never
+  // varies between renders. The controls popup claims this same intent at modal
+  // priority while it is open, which is how Escape closes the popup without
+  // also pausing the game behind it.
+  useIntentEdge(engineRef, "pause", PAUSE_BLOCKERS, pause);
 
   // Mount the panel only while paused so transient state (e.g. the
   // "Spawn set!" confirmation) resets each time the menu opens

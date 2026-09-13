@@ -14,6 +14,7 @@ import {
   primaryResolvesToMining,
   readEngineFrameEdges,
 } from "@engine/input/frameIntents";
+import { PAUSE_BLOCKERS, uiIntentBlocked, type UiInputState } from "@engine/input/uiIntents";
 import type { IntentSnapshot } from "@engine/input/snapshot";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
@@ -235,20 +236,16 @@ export class Engine {
     startPos.y = this.findSafeSpawnY(startPos.x, startPos.z);
 
     this.input.init(this.canvas);
+    // Losing the pointer lock is the *desktop* pause trigger, and since U8 it is
+    // no longer the only one: `PauseMenu` registers for the `pause` intent, which
+    // is what gives a touch control and an Escape pressed without a lock the same
+    // effect (R22). The two triggers share `PAUSE_BLOCKERS` so the conditions
+    // under which the game refuses to pause are one list rather than two guards
+    // that drift, and both call `setPaused(true)` rather than toggling — a locked
+    // desktop Escape fires both, and a toggle would unpause behind itself.
     this.input.onPointerLockLost = () => {
-      // Don't pause if dead, inventory open, or chat composing
-      const invS = useInventoryStore.getState();
-      const chatS = useChatStore.getState();
-      if (
-        !useGameStore.getState().isDead &&
-        !invS.isOpen &&
-        !invS.tableOpen &&
-        !invS.furnaceOpen &&
-        !invS.creativeOpen &&
-        !chatS.composing
-      ) {
-        useGameStore.getState().setPaused(true);
-      }
+      if (uiIntentBlocked(PAUSE_BLOCKERS, this.readPauseGuardState())) return;
+      useGameStore.getState().setPaused(true);
     };
 
     this.player = new PlayerController(startPos.x, startPos.y, startPos.z);
@@ -745,6 +742,27 @@ export class Engine {
     };
   }
 
+  /**
+   * The four guard conditions, read from the stores, in the shape
+   * `uiIntentBlocked` takes.
+   *
+   * Mirrors `readUiInputState()` on the React side (`src/ui/useIntentEdge.ts`)
+   * rather than importing it: that module is a `"use client"` React file, and
+   * the engine pulling React in to read three zustand stores it already imports
+   * would be a layering inversion for four lines. The *rule* is what has to be
+   * shared, and that is `PAUSE_BLOCKERS`.
+   */
+  private readPauseGuardState(): UiInputState {
+    const game = useGameStore.getState();
+    const inv = useInventoryStore.getState();
+    return {
+      dead: game.isDead,
+      paused: game.isPaused,
+      chatComposing: useChatStore.getState().composing,
+      panelOpen: inv.isOpen || inv.tableOpen || inv.furnaceOpen || inv.creativeOpen,
+    };
+  }
+
   private gameLoop = (): void => {
     if (!this.running) return;
     this.animationFrameId = requestAnimationFrame(this.gameLoop);
@@ -754,6 +772,13 @@ export class Engine {
     } catch (err) {
       console.error("[Voxelheim] Game loop error:", err);
     } finally {
+      // Publishes the live input source on *every* path, for the same reason
+      // `endFrame()` is here: a player who puts a finger on the screen while the
+      // game is paused, dead or over an open panel must still see the touch
+      // controls appear, and every one of those states returns early from
+      // `gameLoopInner()`. The store setter ignores a write that changes
+      // nothing, so this costs a comparison per frame (R28).
+      useGameStore.getState().setInputSource(this.input.intents.source);
       // Ends the intent frame on *every* path, early returns included. Look is
       // no longer gated on pointer lock (R4), so a delta left unread on a
       // paused, dead or panel-open frame would keep accumulating and land as a

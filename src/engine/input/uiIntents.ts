@@ -69,6 +69,24 @@ export const CHAT_OPEN_BLOCKERS: readonly UiBlocker[] = [
 export const MINIMAP_TOGGLE_BLOCKERS: readonly UiBlocker[] = ["chatComposing", "panelOpen"];
 
 /**
+ * Pause guards on the three conditions the pointer-lock-loss callback has
+ * always checked — dead, chat composing, a panel open.
+ *
+ * It is shared because pause now has *two* triggers: the `pause` intent (U8),
+ * which is what lets a touch control and an unlocked Escape reach it at all,
+ * and the lock-loss callback desktop keeps. One list is what stops them
+ * drifting into "Escape pauses over an open inventory but losing the lock does
+ * not", which nothing would catch.
+ *
+ * `paused` is deliberately not a blocker. A locked desktop Escape fires both
+ * triggers — the browser drops the lock *and* the keydown produces the edge —
+ * so the handler has to be idempotent (`setPaused(true)`), and a handler that
+ * is idempotent needs no guard against running twice. A toggle here would
+ * unpause the game it had just paused.
+ */
+export const PAUSE_BLOCKERS: readonly UiBlocker[] = ["dead", "chatComposing", "panelOpen"];
+
+/**
  * Empty on purpose. F3 fires unconditionally today, including while the player
  * is typing in chat. That is a latent bug, and the plan's Scope Boundaries
  * defer fixing it: a behaviour-preserving refactor that quietly fixes things is
