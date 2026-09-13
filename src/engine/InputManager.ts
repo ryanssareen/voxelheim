@@ -2,6 +2,24 @@ import { KeyboardMouseSource } from "@engine/input/keyboardMouseSource";
 import { IntentState } from "@engine/input/snapshot";
 
 /**
+ * Codes whose pre-U5 React listener ran with no typing guard and swallowed the
+ * browser default.
+ *
+ * Only F3 qualifies: the debug overlay's own `window` listener checked nothing
+ * about the event target, so F3 toggled the overlay even mid-sentence in chat,
+ * and called `preventDefault()` so Firefox did not open find-in-page. Both
+ * moved here with the handler. The typing quirk is a latent bug the plan's
+ * Scope Boundaries defer on purpose — a refactor that quietly fixes behaviour
+ * is one nothing can verify — so this set shrinks to empty in that follow-up,
+ * not here.
+ *
+ * Nothing else belongs in it. The chat and minimap keys have always respected
+ * the typing guard, and moving a movement key in would let WASD drive the
+ * player out from under a chat message.
+ */
+const UNGUARDED_UI_CODES = new Set(["F3"]);
+
+/**
  * Captures keyboard, mouse movement, mouse buttons, and pointer lock state.
  * Call init(canvas) to attach listeners; dispose() to remove them.
  *
@@ -66,10 +84,15 @@ export class InputManager {
     this.canvas = canvas;
 
     this.onKeyDown = (e: KeyboardEvent) => {
+      if (UNGUARDED_UI_CODES.has(e.code)) e.preventDefault();
       // Ignore keys while typing in a text field (e.g. chat), so movement
       // keys like WASD / arrows don't drive the player during composition.
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        // ...except the handful of codes whose React listener never had this
+        // guard. They reach the intent layer only; the legacy `keys` face keeps
+        // the behaviour it has always had, so neither face is rewritten.
+        if (UNGUARDED_UI_CODES.has(e.code)) this.source.keyDown(e.code);
         return;
       }
       this.keys.add(e.code);

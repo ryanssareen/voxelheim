@@ -43,6 +43,15 @@ export type EdgeIntent =
   | "openInventory"
   | "openChat"
   | "pause"
+  /**
+   * Accept, or dismiss-by-accepting, whatever modal is up. Enter produces it.
+   *
+   * It is deliberately not a gameplay action: no frame-loop consumer reads it,
+   * and `src/data/keybinds.ts` does not advertise it, because Enter has never
+   * been a bind — only the controls popup's own "close me" key. It joined the
+   * vocabulary in U5 so that popup could stop owning a `window` listener.
+   */
+  | "confirm"
   | "toggleDebug"
   | "toggleMinimap"
   | "toggleCamera"

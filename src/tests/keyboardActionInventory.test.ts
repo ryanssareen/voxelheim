@@ -6,16 +6,17 @@ import { KEYBIND_GROUPS } from "@data/keybinds";
  * "Every action currently reachable only by keyboard has a touch affordance or
  * is explicitly listed as deferred."
  *
- * Keyboard handling is scattered across the codebase:
- *  - Most gameplay keys go through `InputManager.isKeyDown()`, polled each
- *    frame by `PlayerController` and `Engine`.
- *  - Several React components attach their OWN `window` "keydown" listeners
- *    and bypass InputManager entirely: chat (GameCanvas), debug info (HUD),
- *    minimap toggle (MinimapUI), and the keybinds popup's own Escape/Enter
- *    close handler (KeybindsPopup).
- *  - `Escape` for "Pause" is not read from any keydown handler at all: it
- *    relies on the BROWSER's native pointer-lock-exit behavior, observed via
- *    `InputManager.onPointerLockLost` (wired in `Engine.ts`).
+ * Keyboard handling used to be scattered across the codebase. As of U5 of the
+ * touch/tablet plan it is not:
+ *  - Every key goes through `InputManager`, which maps the code to a named
+ *    intent (`src/engine/input/keyboardMouseSource.ts`). Gameplay reads the
+ *    intent snapshot each frame; the React overlays — chat (GameCanvas), debug
+ *    info (HUD), minimap toggle (MinimapUI), controls popup (KeybindsPopup) —
+ *    subscribe to the same intents through `src/ui/useIntentEdge.ts` instead of
+ *    attaching their own `window` "keydown" listeners.
+ *  - `Escape` for "Pause" is still not read from any keydown handler: it relies
+ *    on the BROWSER's native pointer-lock-exit behavior, observed via
+ *    `InputManager.onPointerLockLost` (wired in `Engine.ts`). U8 changes that.
  *
  * `src/data/keybinds.ts` is a display-only table with nothing enforcing it
  * matches reality. This test hand-encodes the actual inventory (found by
@@ -36,7 +37,7 @@ interface KeyHandlerEntry {
   action: string;
   /** file:line where the key is read/handled. */
   location: string;
-  /** true = polled via InputManager.isKeyDown(); false = own window listener / native browser behavior. */
+  /** true = the press enters through InputManager; false = own window listener / native browser behavior. */
   viaInputManager: boolean;
 }
 
@@ -89,14 +90,32 @@ const KEY_HANDLER_INVENTORY: readonly KeyHandlerEntry[] = [
   { code: "KeyV", action: "Zoom", location: "src/engine/input/keyboardMouseSource.ts:56 -> Engine.ts:761", viaInputManager: true },
   { code: "KeyP", action: "Change camera mode", location: "src/engine/input/keyboardMouseSource.ts:76 -> frameIntents.ts:80 -> Engine.ts:964", viaInputManager: true },
 
-  // --- View: components that bypass InputManager with their own window listener ---
-  { code: "KeyM", action: "Toggle minimap", location: "src/ui/MinimapUI.tsx:166", viaInputManager: false },
-  { code: "KeyT", action: "Open chat", location: "src/ui/GameCanvas.tsx:78", viaInputManager: false },
-  { code: "F3", action: "Toggle debug info", location: "src/ui/HUD.tsx:178", viaInputManager: false },
+  // --- View: React overlays. Since U5 these no longer attach their own window
+  // keydown listeners — keyboardMouseSource maps the code to an edge intent,
+  // InputManager pushes it, and the component reacts through
+  // `useIntentEdge` (src/ui/useIntentEdge.ts). Hence viaInputManager: true. ---
+  { code: "KeyM", action: "Toggle minimap", location: "src/engine/input/keyboardMouseSource.ts:84 -> MinimapUI.tsx:169", viaInputManager: true },
+  { code: "KeyT", action: "Open chat", location: "src/engine/input/keyboardMouseSource.ts:83 -> GameCanvas.tsx:86", viaInputManager: true },
+  // F3 additionally bypasses InputManager's typing guard
+  // (UNGUARDED_UI_CODES), because its pre-U5 listener had no such guard and
+  // the overlay therefore toggles while chat is composing. Preserved
+  // deliberately; the plan's Scope Boundaries defer the fix.
+  { code: "F3", action: "Toggle debug info", location: "src/engine/input/keyboardMouseSource.ts:85 -> HUD.tsx:183", viaInputManager: true },
 
-  // --- Escape: no keydown handler drives "Pause" at all. It rides the
-  // browser's native pointer-lock-exit, observed via onPointerLockLost. ---
-  { code: "Escape", action: "Pause (via native pointer-lock release, not a keydown listener)", location: "src/engine/Engine.ts:224 (InputManager.onPointerLockLost)", viaInputManager: false },
+  // --- Escape: still no keydown handler drives "Pause". It rides the
+  // browser's native pointer-lock-exit, observed via onPointerLockLost, which
+  // is why this stays viaInputManager: false. Escape *does* now also produce a
+  // `pause` intent, which the controls popup consumes exclusively while it is
+  // open (KeybindsPopup.tsx:41) — nothing else reads it yet. U8 makes pause a
+  // real intent consumer and this entry changes then. ---
+  { code: "Escape", action: "Pause (via native pointer-lock release, not a keydown listener)", location: "src/engine/Engine.ts:238 (InputManager.onPointerLockLost)", viaInputManager: false },
+
+  // NOT LISTED: `Enter`. The controls popup has always closed on Enter (a
+  // capture-phase window listener before U5, the `confirm` intent after), and
+  // this inventory has never carried it, because `src/data/keybinds.ts` does
+  // not advertise Enter and the cross-checks below require every pinned code to
+  // be advertised. Enter is modal-dismissal, not a game bind. Recorded here so
+  // the omission is a decision rather than an oversight.
 ] as const;
 
 /** Maps a keybinds.ts key label to the KeyboardEvent.code values it stands for. */
@@ -187,11 +206,19 @@ describe("keyboard action inventory (R23 audit)", () => {
     }
   });
 
+  /**
+   * U5 emptied this list of everything but Escape: chat, the debug overlay and
+   * the minimap toggle used to own `window` keydown listeners and now consume
+   * intents, so every keyboard action except Escape enters through
+   * InputManager. Escape remains outside it because "Pause" is still the
+   * browser's native pointer-lock release rather than any handler of ours —
+   * U8 is what changes that.
+   */
   it("pins which codes bypass InputManager (own window listeners or native browser behavior)", () => {
     const bypassing = KEY_HANDLER_INVENTORY.filter((e) => !e.viaInputManager)
       .map((e) => e.code)
       .sort();
-    expect(bypassing).toEqual(["Escape", "F3", "KeyM", "KeyT"]);
+    expect(bypassing).toEqual(["Escape"]);
   });
 
   it("pins the total set of handled key codes, so a new/removed handler must update this file", () => {

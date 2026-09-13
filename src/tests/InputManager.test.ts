@@ -408,6 +408,56 @@ describe("InputManager intent source: keyboard held intents", () => {
     expect(() => win.dispatchEvent(makeKeyEvent("keyup", "ShiftLeft"))).not.toThrow();
     expect(input.intents.isHeld("sprint")).toBe(false);
   });
+
+  /**
+   * U5 moved the debug overlay's own `window` listener into the intent layer.
+   * That listener never checked the event target, so F3 toggled the overlay
+   * even mid-sentence in chat, and it called `preventDefault()` so Firefox did
+   * not open find-in-page. Both had to come with it, which is why F3 — and only
+   * F3 — is exempt from the typing guard.
+   *
+   * The exemption is scoped to the intent face on purpose: `isKeyDown` is a
+   * characterization pin of the pre-refactor accessor and keeps the behaviour
+   * it has always had.
+   */
+  it("lets F3 reach the intent layer while a text field has focus", () => {
+    win.dispatchEvent(makeKeyEvent("keydown", "F3", new FakeElement("INPUT")));
+    expect(input.intents.takeEdges("debug").map((e) => e.intent)).toEqual(["toggleDebug"]);
+    expect(input.isKeyDown("F3")).toBe(false);
+  });
+
+  it("suppresses the browser default for F3, typing or not", () => {
+    // Built cancelable here rather than through makeKeyEvent: preventDefault()
+    // on a non-cancelable Event is silently a no-op, which would make this pass
+    // whether or not InputManager called it.
+    const cancelable = (code: string, target?: EventTarget) => {
+      const e = new Event("keydown", { cancelable: true }) as Event & { code: string };
+      e.code = code;
+      if (target) Object.defineProperty(e, "target", { value: target, configurable: true });
+      return e;
+    };
+
+    const typed = cancelable("F3", new FakeElement("TEXTAREA"));
+    const plain = cancelable("F3");
+    const other = cancelable("KeyW");
+    win.dispatchEvent(typed);
+    win.dispatchEvent(plain);
+    win.dispatchEvent(other);
+
+    expect(typed.defaultPrevented).toBe(true);
+    expect(plain.defaultPrevented).toBe(true);
+    // Keys the game merely reads must keep their default — swallowing them all
+    // would break browser shortcuts nothing asked us to take over.
+    expect(other.defaultPrevented).toBe(false);
+  });
+
+  it("exempts nothing but F3 — chat and minimap keys still obey the typing guard", () => {
+    win.dispatchEvent(makeKeyEvent("keydown", "KeyT", new FakeElement("INPUT")));
+    win.dispatchEvent(makeKeyEvent("keydown", "KeyM", new FakeElement("INPUT")));
+    win.dispatchEvent(makeKeyEvent("keydown", "Escape", new FakeElement("INPUT")));
+    win.dispatchEvent(makeKeyEvent("keydown", "Enter", new FakeElement("INPUT")));
+    expect(input.intents.takeEdges("exempt")).toEqual([]);
+  });
 });
 
 describe("InputManager intent source: keyboard edges", () => {

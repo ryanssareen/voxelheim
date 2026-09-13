@@ -63,11 +63,17 @@ export const KEY_HELD_INTENTS: Readonly<Record<string, readonly HeldIntent[]>> =
  * double-tap inside a 300 ms window while the same key is held-ascend during
  * flight, so both readings of one physical key have to be available together.
  *
- * `Escape` produces a `pause` edge even though nothing consumes it yet — pause
- * rides the browser's native pointer-lock exit today (`onPointerLockLost`). U8
- * decouples the two; when it does, note that a locked-then-Escape press yields
- * *both* this edge and the lock-loss callback, so pause must be idempotent
- * rather than a toggle.
+ * `Escape` produces a `pause` edge, which since U5 the controls popup consumes
+ * to close itself. Pause proper still rides the browser's native pointer-lock
+ * exit (`onPointerLockLost`). U8 decouples the two; when it does, note that a
+ * locked-then-Escape press yields *both* this edge and the lock-loss callback,
+ * so pause must be idempotent rather than a toggle — and that the popup
+ * registers as an exclusive consumer of `pause` (see
+ * `@engine/input/uiIntents`), which is how Escape closes the popup without also
+ * pausing behind it, as its capture-phase `stopPropagation()` used to ensure.
+ *
+ * `Enter` is here for the same popup and nothing else. It is not a gameplay
+ * bind and `src/data/keybinds.ts` does not advertise it.
  */
 export const KEY_EDGE_INTENTS: Readonly<Record<string, EdgeIntent>> = {
   Space: "jump",
@@ -78,6 +84,7 @@ export const KEY_EDGE_INTENTS: Readonly<Record<string, EdgeIntent>> = {
   KeyM: "toggleMinimap",
   F3: "toggleDebug",
   Escape: "pause",
+  Enter: "confirm",
   Digit1: "hotbar1",
   Digit2: "hotbar2",
   Digit3: "hotbar3",

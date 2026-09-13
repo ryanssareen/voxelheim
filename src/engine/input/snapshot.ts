@@ -40,6 +40,24 @@ export interface IntentSnapshot {
   takeEdges(consumer: string): IntentEdge[];
   /** Convenience: did this consumer see this edge kind since it last read? */
   tookEdge(consumer: string, intent: EdgeIntent): boolean;
+  /**
+   * Delivers each edge to `listener` the moment it is pushed. Returns an
+   * unsubscribe.
+   *
+   * The frame loop and the player controller pull edges through cursors,
+   * because they run on a frame boundary and want a frame's worth at a time.
+   * The React listeners (U5) cannot: they live outside the loop, and pulling
+   * would put them in a race with `drain()` — the debug overlay toggles while a
+   * panel is open today, and whether a poll landed before or after that frame's
+   * drain would decide whether F3 worked. Push delivery removes the race and
+   * the poll latency together.
+   *
+   * Not gated on suppression, deliberately. Suppression means *gameplay* input
+   * is being ignored; the surfaces on this face — chat, the debug overlay, the
+   * minimap, modal dismissal — are precisely the ones that must keep working
+   * while it is, exactly as they do today while the game is paused.
+   */
+  onEdge(listener: (edge: IntentEdge) => void): () => void;
   /** Null when gameplay input is live. */
   readonly suppressedBy: SuppressionReason | null;
   readonly source: InputSource;
@@ -58,6 +76,8 @@ export class IntentState implements IntentSnapshot {
   private cursors = new Map<string, number>();
   private suppression: SuppressionReason | null = null;
   private activeSource: InputSource = "keyboardMouse";
+  /** Push-face subscribers; see {@link IntentSnapshot.onEdge}. */
+  private edgeListeners = new Set<(edge: IntentEdge) => void>();
 
   get suppressedBy(): SuppressionReason | null {
     return this.suppression;
@@ -75,9 +95,13 @@ export class IntentState implements IntentSnapshot {
   }
 
   pushEdge(intent: EdgeIntent, at: number): void {
-    this.edges.push({ intent, at });
+    const edge: IntentEdge = { intent, at };
+    this.edges.push(edge);
     this.nextId++;
     this.prune(at);
+    // After the queue is consistent, so a listener that turns round and calls
+    // takeEdges() sees the same stream a puller would.
+    for (const listener of this.edgeListeners) listener(edge);
   }
 
   addDelta(intent: DeltaIntent, dx: number, dy: number): void {
@@ -119,6 +143,13 @@ export class IntentState implements IntentSnapshot {
 
   tookEdge(consumer: string, intent: EdgeIntent): boolean {
     return this.takeEdges(consumer).some((e) => e.intent === intent);
+  }
+
+  onEdge(listener: (edge: IntentEdge) => void): () => void {
+    this.edgeListeners.add(listener);
+    return () => {
+      this.edgeListeners.delete(listener);
+    };
   }
 
   // ---------------------------------------------------------------- frame

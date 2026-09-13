@@ -14,6 +14,7 @@ import {
   primaryResolvesToMining,
   readEngineFrameEdges,
 } from "@engine/input/frameIntents";
+import type { IntentSnapshot } from "@engine/input/snapshot";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
 import { ChunkManager } from "@engine/world/ChunkManager";
@@ -61,6 +62,17 @@ export class Engine {
   private readonly clock = new Clock();
   private readonly input = new InputManager();
   private readonly camera = new Camera();
+
+  /**
+   * Read face of the intent layer, for the React overlays (U5).
+   *
+   * Deliberately the read-only `IntentSnapshot` and not the `IntentState` the
+   * frame loop holds: an overlay that could `drain()` or set suppression would
+   * be reaching into the frame's ordering couplings from outside the frame.
+   */
+  get intents(): IntentSnapshot {
+    return this.input.intents;
+  }
   private readonly registry = BlockRegistry.getInstance();
   public renderer: Renderer | null = null;
   private chunkManager: ChunkManager | null = null;

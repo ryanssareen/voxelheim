@@ -1,11 +1,20 @@
 "use client";
 
 import { useEffect } from "react";
+import type { Engine } from "@engine/Engine";
 import { KEYBIND_GROUPS } from "@data/keybinds";
 import { useKeybindsStore } from "@store/useKeybindsStore";
 import { DEMO_WORLD_ID } from "@lib/demoWorld";
+import { MODAL_DISMISS_BLOCKERS, UI_PRIORITY } from "@engine/input/uiIntents";
+import { useIntentEdge } from "@ui/useIntentEdge";
 
-export function KeybindsPopup({ worldId }: { worldId?: string }) {
+export function KeybindsPopup({
+  worldId,
+  engineRef,
+}: {
+  worldId?: string;
+  engineRef?: React.RefObject<Engine | null>;
+}) {
   const isOpen = useKeybindsStore((s) => s.isOpen);
   const showOnce = useKeybindsStore((s) => s.showOnce);
   const close = useKeybindsStore((s) => s.close);
@@ -18,15 +27,19 @@ export function KeybindsPopup({ worldId }: { worldId?: string }) {
   useEffect(() => {
     if (!isOpen) return;
     if (document.pointerLockElement) document.exitPointerLock();
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Escape" || e.code === "Enter") {
-        e.stopPropagation();
-        close();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [isOpen, close]);
+  }, [isOpen]);
+
+  // Escape and Enter close the popup, and nothing behind it sees them.
+  //
+  // This used to be a capture-phase `window` listener calling
+  // `stopPropagation()`, which said two things at once: go before the other
+  // handlers, and stop the event there. Registering at modal priority is the
+  // first; `exclusive` is the second. It matters beyond tidiness — U8 makes
+  // `pause` a real intent, and without the claim, Escape on this popup would
+  // close it *and* pause the game behind it.
+  const modal = { enabled: isOpen, priority: UI_PRIORITY.modal, exclusive: true };
+  useIntentEdge(engineRef, "pause", MODAL_DISMISS_BLOCKERS, close, modal);
+  useIntentEdge(engineRef, "confirm", MODAL_DISMISS_BLOCKERS, close, modal);
 
   if (!isOpen) return null;
 
