@@ -1356,6 +1356,44 @@ export class Engine {
     this.renderer!.render();
   }
 
+  /**
+   * Sets look direction directly, bypassing mouse-look. For the Playwright E2E
+   * macro (see src/engine/testHook.ts): some automated Chromium environments
+   * refuse `requestPointerLock()` outright, and mouse-look is gated behind
+   * lock (src/engine/InputManager.ts), so aiming has no other route in those
+   * environments. Dev-only caller.
+   */
+  setE2ELook(yaw: number, pitch: number): void {
+    this.camera.setLook(yaw, pitch);
+  }
+
+  /** Snapshot for the Playwright E2E macro (see src/engine/testHook.ts). Dev-only caller. */
+  getE2EState(): import("@engine/testHook").E2EState {
+    const slots = useHotbarStore.getState().slots;
+    const toStackOrNull = (s: { blockId: number; count: number } | undefined) =>
+      s && s.blockId !== BLOCK_ID.AIR && s.count > 0 ? { blockId: s.blockId, count: s.count } : null;
+
+    let targetedBlock: import("@engine/testHook").E2EState["targetedBlock"] = null;
+    if (this.player && this.blockInteraction) {
+      const lookDir = this.camera.getLookDirection();
+      const target = this.blockInteraction.getTargetBlock(this.player.position, lookDir);
+      if (target.hit && target.blockPos && target.blockId !== undefined) {
+        targetedBlock = { blockId: target.blockId, x: target.blockPos.x, y: target.blockPos.y, z: target.blockPos.z };
+      }
+    }
+
+    return {
+      position: this.player ? { ...this.player.position } : { x: 0, y: 0, z: 0 },
+      yaw: this.camera.yaw,
+      pitch: this.camera.pitch,
+      isPaused: useGameStore.getState().isPaused,
+      heldItem: toStackOrNull(useHotbarStore.getState().getSelectedSlot()),
+      hotbar: slots.slice(0, 9).map(toStackOrNull),
+      inventory: slots.slice(9).map(toStackOrNull),
+      targetedBlock,
+    };
+  }
+
   async dispose(): Promise<void> {
     this.running = false;
     cancelAnimationFrame(this.animationFrameId);

@@ -62,6 +62,12 @@ export class Camera {
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch));
   }
 
+  /** Sets yaw/pitch directly, clamping pitch the same way mouse-look does. */
+  setLook(yaw: number, pitch: number): void {
+    this.yaw = yaw;
+    this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch));
+  }
+
   /** Forward direction on the XZ plane (yaw only, for movement). */
   getForward(): { x: number; y: number; z: number } {
     return {

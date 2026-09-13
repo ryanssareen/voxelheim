@@ -39,6 +39,8 @@ export function useEngine(canvasRef: React.RefObject<HTMLCanvasElement | null>) 
         const engine = new Engine(canvas);
         engineRef.current = engine;
         await engine.init(worldId, sessionId);
+        const { installE2ETestHook } = await import("@engine/testHook");
+        installE2ETestHook(engine);
         setState({ isLoading: false, isReady: true, error: null });
       })
       .catch((err) => {

@@ -180,12 +180,21 @@ assert held count decremented
 
 ## Verification Contract / Definition of Done
 
-- [ ] `npx playwright install chromium` has been run at least once in the development environment (documented, not just implied by `npm install`).
-- [ ] `window.__test` exists and matches the U1 schema in dev builds; it is `undefined` when `NODE_ENV === "production"`.
-- [ ] `npm run test:e2e` passes headless.
-- [ ] `npm run test:e2e -- --headed` (or equivalent) runs the same spec visibly for manual review.
-- [ ] The spec does not assert on `fullscreenOnPlay` succeeding.
-- [ ] `npx tsc --noEmit`, `npm run lint`, and `npm test` (the existing Vitest suite) all still pass — this plan adds a new test surface, it does not touch existing engine/store logic.
+- [x] `npx playwright install chromium` has been run at least once in the development environment (documented, not just implied by `npm install`).
+- [x] `window.__test` exists and matches the U1 schema in dev builds; it is `undefined` when `NODE_ENV === "production"`.
+- [x] `npm run test:e2e` passes headless.
+- [x] `npm run test:e2e -- --headed` (or equivalent) runs the same spec visibly for manual review.
+- [x] The spec does not assert on `fullscreenOnPlay` succeeding.
+- [x] `npx tsc --noEmit`, `npm run lint`, and `npm test` (the existing Vitest suite) all still pass — this plan adds a new test surface, it does not touch existing engine/store logic.
+
+---
+
+## Implementation Notes (added during U3)
+
+Building U3 surfaced two things this plan didn't anticipate, both now reflected in `e2e/move-break-place.spec.ts`:
+
+- **`requestPointerLock()` is refused outright in this development sandbox** — reproducible even on a bare page with no app code involved (Chromium throws `WrongDocumentError`). It can also flicker (briefly toggle `pointerLockElement` before failing), which `src/engine/Engine.ts`'s `onPointerLockLost` handler reads as "lock lost" and pauses the game on. Since mouse-look is gated behind lock (`src/engine/InputManager.ts`), there was no way to aim via the mouse at all in this environment. **U1's schema gained a `setLook(yaw, pitch)` method** (`src/engine/Engine.ts`'s `setE2ELook`, backed by a new `Camera.setLook`) so the macro can set aim directly instead. The spec also clicks "Resume" whenever it observes `isPaused` (also added to the schema) rather than depending on lock succeeding. This may be specific to this sandboxed environment — a developer's own machine may grant real pointer lock — but the workaround is harmless either way since it only takes effect when the game actually reports itself paused or when the debug hook is asked to set look directly.
+- **The demo island's terrain isn't flat near spawn.** Aiming downward at an arbitrary angle can target a block on a slope or cliff edge; breaking it lets the drop fall out of pickup range (`MAGNET_DISTANCE`, `src/engine/world/ItemDropManager.ts`) before the macro can collect it. The spec's look direction (`SAFE_LOOK_YAW`/`SAFE_LOOK_PITCH`) was found by scanning several angles from the deterministic demo-world spawn point for one that hits a block one pace away on level ground. It's tuned to this seed's spawn point, not a general-purpose look direction — if the demo world's spawn or seed ever changes, this constant will need re-tuning.
 
 ---
 

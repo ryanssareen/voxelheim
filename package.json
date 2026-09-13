@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "@types/three": "^0.183.1",
@@ -23,6 +25,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
