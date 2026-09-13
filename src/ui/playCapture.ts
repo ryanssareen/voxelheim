@@ -22,12 +22,36 @@ export function enterPlayCapture(canvas: HTMLCanvasElement | null): void {
 
   if (!useSettingsStore.getState().fullscreenOnPlay) return;
 
-  const target = canvas.parentElement;
+  const target = canvas.parentElement as WebkitFullscreenElement | null;
   if (!target) return;
-  if (!document.fullscreenEnabled || document.fullscreenElement) return;
-  if (typeof target.requestFullscreen !== "function") return;
 
-  target.requestFullscreen().catch(() => {
-    // Denied, unsupported, or blocked by permissions policy: stay windowed.
-  });
+  const doc = document as WebkitFullscreenDocument;
+  const enabled = doc.fullscreenEnabled ?? doc.webkitFullscreenEnabled ?? false;
+  const active = doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+  if (!enabled || active) return;
+
+  const request = target.requestFullscreen ?? target.webkitRequestFullscreen;
+  if (typeof request !== "function") return;
+
+  try {
+    // Prefixed WebKit returns undefined rather than a promise, so the rejection
+    // handler has to be attached conditionally.
+    const result = request.call(target);
+    if (result && typeof result.then === "function") {
+      result.catch(() => {
+        // Denied, unsupported, or blocked by permissions policy: stay windowed.
+      });
+    }
+  } catch {
+    // Synchronous throw from a prefixed implementation: stay windowed.
+  }
 }
+
+type WebkitFullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+
+type WebkitFullscreenDocument = Document & {
+  webkitFullscreenEnabled?: boolean;
+  webkitFullscreenElement?: Element | null;
+};
