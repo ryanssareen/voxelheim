@@ -221,8 +221,105 @@ function drawStage(grid: Int8Array, size: number, stage: number): HTMLCanvasElem
 }
 
 /**
+ * The two nested wire boxes that make up the aim outline, outermost first.
+ *
+ * R10 asks for an outline "legible against both light and dark block faces",
+ * and one colour cannot be: a black edge vanishes on coal, a white one on snow.
+ * Two boxes a hair apart solve it the way a map label with a halo does — the
+ * dark casing surrounds the light core, so whichever of the pair matches the
+ * face behind it, the other one still reads.
+ *
+ * `LineBasicMaterial.linewidth` is ignored by every WebGL renderer (lines are
+ * always one device pixel), so the separation has to come from the geometry.
+ * The scales are chosen to sit a fraction outside the block — far enough not to
+ * z-fight with its faces, close enough that the pair reads as one outline
+ * rather than two boxes.
+ */
+const OUTLINE_LAYERS: ReadonlyArray<{ scale: number; color: number; opacity: number }> = [
+  { scale: 1.012, color: 0x000000, opacity: 0.85 },
+  { scale: 1.004, color: 0xffffff, opacity: 0.95 },
+];
+
+/**
+ * Wire outline around the block the player is aiming at.
+ *
+ * In touch mode this *is* the aim indicator: R10 drops the crosshair, on the
+ * grounds that a small mark in the middle of a small screen is both frequently
+ * under the player's own thumb and a worse version of what the outline already
+ * says. Desktop keeps its crosshair and never turns this on, which is why the
+ * engine passes a target only while the touch source is driving.
+ *
+ * Headless-safe by construction — lines need no 2D context, unlike the crack
+ * textures above, so this stays visible in tests where the overlay cannot be.
+ */
+export class BlockTargetOutline {
+  private readonly group = new THREE.Group();
+  private readonly geometries: THREE.BufferGeometry[] = [];
+  private readonly materials: THREE.LineBasicMaterial[] = [];
+
+  constructor() {
+    this.group.visible = false;
+    // Above the crack overlay (2), so an outlined block being mined shows both.
+    this.group.renderOrder = 3;
+
+    for (const layer of OUTLINE_LAYERS) {
+      const box = new THREE.BoxGeometry(layer.scale, layer.scale, layer.scale);
+      const edges = new THREE.EdgesGeometry(box);
+      // The box was only ever a source of edges; keeping it alive would leak a
+      // buffer nothing draws.
+      box.dispose();
+
+      const material = new THREE.LineBasicMaterial({
+        color: layer.color,
+        transparent: true,
+        opacity: layer.opacity,
+        // Must never occlude anything: the outline is an annotation on the
+        // world, not part of it. Depth *testing* stays on so a block between
+        // the player and the target still hides it.
+        depthWrite: false,
+      });
+
+      const lines = new THREE.LineSegments(edges, material);
+      lines.renderOrder = 3;
+      this.group.add(lines);
+      this.geometries.push(edges);
+      this.materials.push(material);
+    }
+  }
+
+  /** The object to add to the scene. */
+  getObject(): THREE.Object3D {
+    return this.group;
+  }
+
+  /** Moves the outline onto `target`, or hides it when there is nothing aimed at. */
+  update(target: { x: number; y: number; z: number } | null): void {
+    if (!target) {
+      this.group.visible = false;
+      return;
+    }
+    this.group.visible = true;
+    this.group.position.set(target.x + 0.5, target.y + 0.5, target.z + 0.5);
+  }
+
+  dispose(): void {
+    for (const g of this.geometries) g.dispose();
+    for (const m of this.materials) m.dispose();
+    this.geometries.length = 0;
+    this.materials.length = 0;
+  }
+}
+
+/**
  * Renders progressive breaking cracks on the block being mined.
  * Slightly oversized to prevent z-fighting with block faces.
+ *
+ * It also owns the {@link BlockTargetOutline}, for one reason worth stating:
+ * every frame path that stops mining already calls `update(null, 0)` here, and
+ * hanging the outline off the same call means those paths clear it too. A
+ * separately-driven outline would have to be turned off in each of them by
+ * hand, and the one that got missed would leave a box floating over the world
+ * while the inventory is open.
  */
 export class BlockBreakOverlay {
   private readonly mesh: THREE.Mesh;
@@ -230,6 +327,7 @@ export class BlockBreakOverlay {
   private readonly textures: THREE.CanvasTexture[] = [];
   private readonly materials: THREE.MeshBasicMaterial[] = [];
   private readonly fallback: THREE.MeshBasicMaterial;
+  private readonly outline = new BlockTargetOutline();
   private stage = -1;
 
   constructor() {
@@ -281,11 +379,33 @@ export class BlockBreakOverlay {
     return this.mesh;
   }
 
-  /** Update overlay position and crack stage based on break progress. */
+  /**
+   * Returns the aim outline to add to the scene.
+   *
+   * A second scene object rather than a child of the crack mesh: that mesh is
+   * positioned on the block being *mined* and hidden whenever nothing is, while
+   * the outline follows the block being *aimed at*, which is a different block
+   * on most frames and present on many more of them.
+   */
+  getOutline(): THREE.Object3D {
+    return this.outline.getObject();
+  }
+
+  /**
+   * Update overlay position and crack stage based on break progress.
+   *
+   * @param aimTarget block to outline (R10), or null for no outline. Defaults
+   *   to null so every existing "nothing is happening" call — the paused, dead
+   *   and panel-open paths — clears the outline without being changed, and so
+   *   desktop, which never passes one, keeps the crosshair and no outline.
+   */
   update(
     target: { x: number; y: number; z: number } | null,
-    progress: number
+    progress: number,
+    aimTarget: { x: number; y: number; z: number } | null = null
   ): void {
+    this.outline.update(aimTarget);
+
     const stage = target ? breakStageForProgress(progress) : -1;
 
     if (!target || stage < 0 || this.materials.length === 0) {
@@ -306,6 +426,7 @@ export class BlockBreakOverlay {
   dispose(): void {
     this.geometry.dispose();
     this.fallback.dispose();
+    this.outline.dispose();
     for (const m of this.materials) m.dispose();
     for (const t of this.textures) t.dispose();
     this.materials.length = 0;

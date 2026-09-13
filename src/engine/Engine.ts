@@ -16,6 +16,7 @@ import {
 } from "@engine/input/frameIntents";
 import { PAUSE_BLOCKERS, uiIntentBlocked, type UiInputState } from "@engine/input/uiIntents";
 import type { IntentSnapshot } from "@engine/input/snapshot";
+import type { TouchSource } from "@engine/input/touchSource";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
 import { ChunkManager } from "@engine/world/ChunkManager";
@@ -73,6 +74,19 @@ export class Engine {
    */
   get intents(): IntentSnapshot {
     return this.input.intents;
+  }
+
+  /**
+   * Write face of the touch source, for the on-screen controls (U7).
+   *
+   * The overlay needs both halves of it: it presses buttons the canvas never
+   * sees — its controls are DOM elements, which is exactly what makes moving,
+   * looking and tapping three independent touches (R12) — and it draws the
+   * joystick the source is already tracking, rather than tracking a second copy
+   * of the same thumb.
+   */
+  get touch(): TouchSource {
+    return this.input.touch;
   }
   private readonly registry = BlockRegistry.getInstance();
   public renderer: Renderer | null = null;
@@ -277,9 +291,11 @@ export class Engine {
       this.renderer.getAtlas()
     );
 
-    // Break overlay
+    // Break overlay, and the aim outline it owns (R10): in touch mode the
+    // outlined block replaces the crosshair as the aim indicator.
     this.breakOverlay = new BlockBreakOverlay();
     this.renderer.getScene().add(this.breakOverlay.getMesh());
+    this.renderer.getScene().add(this.breakOverlay.getOutline());
 
     // Day/night cycle
     this.dayNight = new DayNightCycle();
@@ -1218,12 +1234,19 @@ export class Engine {
     const foodDef = selectedBlockId !== 0 ? BLOCK_DEFINITIONS[selectedBlockId] : undefined;
     const restore = foodDef?.special === "food" ? foodDef.hungerRestore ?? 0 : 0;
     const gs2 = useGameStore.getState();
+    // One raycast read twice: the eat gate asks *whether* the player is aiming
+    // at a block, the touch-mode outline (R10) asks *which* one. Left exactly
+    // where the eat gate's own call was — after breaking and placing have
+    // resolved — because that is the aim the player is looking at by the time
+    // the frame draws, and hoisting it above them would answer with the world
+    // as it stood before this frame changed it.
+    const aimTarget = this.blockInteraction!.getTargetBlock(this.player!.position, lookDir);
     const canEat = eatGateOpen({
       hungerRestore: restore,
       secondaryHeld: this.input.intents.isHeld("secondary"),
       hunger: gs2.hunger,
       maxHunger: gs2.maxHunger,
-      targetingBlock: this.blockInteraction!.getTargetBlock(this.player!.position, lookDir).hit,
+      targetingBlock: aimTarget.hit,
     });
     if (!canEat || selectedBlockId !== this.eatingBlockId) {
       this.eatTimer = 0;
@@ -1364,8 +1387,14 @@ export class Engine {
       return;
     }
 
-    // Update break overlay and HUD
-    this.breakOverlay!.update(breakState.breakTarget, breakState.breakProgress);
+    // Update break overlay and HUD. The third argument is the aim outline: it
+    // is handed a target only while touch is driving, because R10 trades the
+    // crosshair for the outline on touch and desktop keeps its crosshair.
+    this.breakOverlay!.update(
+      breakState.breakTarget,
+      breakState.breakProgress,
+      this.input.intents.source === "touch" ? aimTarget.blockPos ?? null : null
+    );
     useGameStore.getState().setBreakProgress(breakState.breakProgress);
 
     // Update hand state

@@ -13,6 +13,7 @@ export { FurnaceUI } from "./FurnaceUI";
 export { CreativeInventoryUI } from "./CreativeInventoryUI";
 export { ChatUI } from "./ChatUI";
 export { MinimapUI } from "./MinimapUI";
+export { TouchControls } from "./TouchControls";
 
 // NOTE: AuthLayout (next/link), DeathScreen and PauseMenu (next/navigation) are
 // intentionally excluded. The Next.js runtime modules they import reference
