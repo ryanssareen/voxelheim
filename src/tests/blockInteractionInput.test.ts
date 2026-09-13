@@ -3,6 +3,7 @@ import { BLOCK_ID } from "@data/blocks";
 import { TOOL_DEFS, getToolDef } from "@data/items";
 import { harvestSpeedMultiplier } from "@engine/player/harvest";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
+import { primaryResolvesToMining } from "@engine/input/frameIntents";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
 import type { ChunkManager } from "@engine/world/ChunkManager";
 import type { ItemDropManager } from "@engine/world/ItemDropManager";
@@ -301,6 +302,95 @@ describe("BlockInteraction — placing is a single-flag EDGE action, with no int
 
     // The block actually placed is DIRT (the hotbar's real selection), not the
     // BLOCK_ID.STONE that was passed as `selectedBlockId`.
+    expect(setBlock).toHaveBeenCalledWith(
+      FACE_BEFORE_TARGET_SIDE.x,
+      FACE_BEFORE_TARGET_SIDE.y,
+      FACE_BEFORE_TARGET_SIDE.z,
+      BLOCK_ID.DIRT
+    );
+  });
+});
+
+/**
+ * U4: the frame loop hit-tests mobs and remote players *before* it calls
+ * update(), and hands the result through `primaryResolvesToMining`. Mining and
+ * attacking are one control (R3) and this is the only thing keeping a swing at
+ * a mob standing against a wall from chewing through the wall as well — a
+ * coupling that breaks silently, since both halves keep working on their own.
+ */
+describe("BlockInteraction — the primary control mines only what no entity claimed", () => {
+  const dt = 0.05;
+
+  it("mines the targeted block when the swing is held and nothing was hit", () => {
+    const { chunkManager } = makeStaticWorld({ ...TARGET_A, id: BLOCK_ID.DIRT });
+    const { interaction } = makeInteraction(chunkManager);
+
+    const s = interaction.update(
+      PLAYER_UP,
+      LOOK_UP,
+      primaryResolvesToMining(true, false),
+      false,
+      0,
+      dt
+    );
+
+    expect(s.isBreaking).toBe(true);
+    expect(s.breakProgress).toBeGreaterThan(0);
+    expect(s.breakTarget).toEqual(TARGET_A);
+  });
+
+  it("does not mine on a frame an entity claimed the swing, even with a block squarely targeted", () => {
+    const { chunkManager, setBlock } = makeStaticWorld({ ...TARGET_A, id: BLOCK_ID.DIRT });
+    const { interaction } = makeInteraction(chunkManager);
+
+    // Long enough that, unclaimed, this would break the block outright.
+    const s = interaction.update(
+      PLAYER_UP,
+      LOOK_UP,
+      primaryResolvesToMining(true, true),
+      false,
+      0,
+      5
+    );
+
+    expect(s.isBreaking).toBe(false);
+    expect(s.breakProgress).toBe(0);
+    expect(setBlock).not.toHaveBeenCalled();
+  });
+
+  it("drops accumulated progress when an entity steps into the swing mid-break", () => {
+    const { chunkManager, setBlock } = makeStaticWorld({ ...TARGET_A, id: BLOCK_ID.DIRT });
+    const { interaction } = makeInteraction(chunkManager);
+
+    interaction.update(PLAYER_UP, LOOK_UP, primaryResolvesToMining(true, false), false, 0, dt);
+    const mid = interaction.update(PLAYER_UP, LOOK_UP, primaryResolvesToMining(true, false), false, 0, dt);
+    expect(mid.breakProgress).toBeCloseTo(0.2);
+
+    // A mob wanders in front of the block: the swing is now an attack.
+    const claimed = interaction.update(PLAYER_UP, LOOK_UP, primaryResolvesToMining(true, true), false, 0, dt);
+    expect(claimed.breakProgress).toBe(0);
+    expect(setBlock).not.toHaveBeenCalled();
+
+    // And it starts over, rather than resuming, once the mob is gone.
+    const resumed = interaction.update(PLAYER_UP, LOOK_UP, primaryResolvesToMining(true, false), false, 0, dt);
+    expect(resumed.breakProgress).toBeCloseTo(0.1);
+  });
+
+  it("still places while an entity holds the swing — the two controls are independent", () => {
+    const { chunkManager, setBlock } = makeStaticWorld({ ...TARGET_SIDE, id: BLOCK_ID.STONE });
+    const { interaction } = makeInteraction(chunkManager);
+    equipPlaceable(BLOCK_ID.DIRT, 1);
+
+    interaction.update(
+      PLAYER_SIDE,
+      LOOK_SIDE,
+      primaryResolvesToMining(true, true),
+      true,
+      0,
+      dt
+    );
+
+    expect(setBlock).toHaveBeenCalledTimes(1);
     expect(setBlock).toHaveBeenCalledWith(
       FACE_BEFORE_TARGET_SIDE.x,
       FACE_BEFORE_TARGET_SIDE.y,

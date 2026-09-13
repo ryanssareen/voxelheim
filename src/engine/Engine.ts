@@ -9,6 +9,11 @@ import { OffhandRenderer } from "@engine/player/OffhandRenderer";
 import { MultiplayerManager } from "@engine/multiplayer/MultiplayerManager";
 import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import { BlockInteraction } from "@engine/player/BlockInteraction";
+import {
+  eatGateOpen,
+  primaryResolvesToMining,
+  readEngineFrameEdges,
+} from "@engine/input/frameIntents";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
 import { Renderer } from "@engine/renderer/Renderer";
 import { ChunkManager } from "@engine/world/ChunkManager";
@@ -76,14 +81,11 @@ export class Engine {
   private directionalLight: THREE.DirectionalLight | null = null;
   private animationFrameId = 0;
   private running = false;
-  private pWasDown = false;
-  private eWasDown = false;
   private worldId: string | null = null;
   private worldName = "World";
   private seed = "voxelheim-mvp";
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private playerAttackCooldown = 0;
-  private qWasDown = false;
   private hungerExhaustion = 0;
   private passiveHungerTimer = 0;
   /** Seconds the right button has been held on the current food item. */
@@ -739,6 +741,14 @@ export class Engine {
       this.gameLoopInner();
     } catch (err) {
       console.error("[Voxelheim] Game loop error:", err);
+    } finally {
+      // Ends the intent frame on *every* path, early returns included. Look is
+      // no longer gated on pointer lock (R4), so a delta left unread on a
+      // paused, dead or panel-open frame would keep accumulating and land as a
+      // single camera snap on the frame play resumes. Held state and queued
+      // edges survive — only accumulated deltas are cleared, so the buffered
+      // click that fires after unpausing still does.
+      this.input.endFrame();
     }
   };
 
@@ -748,7 +758,7 @@ export class Engine {
    * animates back out, whatever state the player releases V in.
    */
   private updateZoom(dt: number): void {
-    const target = this.input.isKeyDown("KeyV") ? ZOOM_FOV : DEFAULT_FOV;
+    const target = this.input.intents.isHeld("zoom") ? ZOOM_FOV : DEFAULT_FOV;
     if (Math.abs(this.currentFov - target) < 0.01) return;
     const t = Math.min(1, dt * ZOOM_LERP_SPEED);
     this.currentFov += (target - this.currentFov) * t;
@@ -870,9 +880,18 @@ export class Engine {
 
     this.randomTicker?.update(dt);
 
-    // E key: toggle inventory / close crafting table (single press)
-    const eDown = this.input.isKeyDown("KeyE");
-    if (eDown && !this.eWasDown) {
+    // This frame's presses, taken once under the frame loop's own cursor.
+    // Must happen before the panel toggle below, and therefore before the
+    // panel-open check that follows it: a toggle that resolved after the check
+    // would leave the panel state one frame behind the press.
+    //
+    // Nothing above this line reads edges, and nothing between here and the
+    // frame's end pushes any — events arrive between frames — so reading the
+    // whole frame at once is the same as reading each press where it is used.
+    const frame = readEngineFrameEdges(this.input.intents);
+
+    // Toggle inventory / close crafting table (single press)
+    if (frame.togglePanel) {
       const inv = useInventoryStore.getState();
       if (inv.furnaceOpen) {
         inv.closeFurnace();
@@ -898,7 +917,6 @@ export class Engine {
         }
       }
     }
-    this.eWasDown = eDown;
 
     // Skip game input while inventory or crafting table is open. The
     // crafting table and furnace are workstations, not a full pause — the
@@ -907,8 +925,18 @@ export class Engine {
     // frame still don't run, matching the full inventory/creative screens.
     const invState = useInventoryStore.getState();
     if (invState.isOpen || invState.tableOpen || invState.furnaceOpen || invState.creativeOpen) {
-      this.input.getMouseDelta(); // consume
-      this.input.getMouseButton(); // consume
+      // Throw away everything buffered, before anything else gets a chance to
+      // consume it: a click aimed at a slot must not place a block on the frame
+      // the panel closes, and a drag across the panel must not spin the camera.
+      // Held state survives, so a button still down when the panel closes goes
+      // straight back to mining, exactly as it does today.
+      //
+      // This discards more than the mouse-only consume it replaces — the
+      // double-tap-to-fly presses made *while* a workstation is open now land
+      // in the drain instead of reaching the controller. The plan puts the
+      // drain ahead of every other consumption for the sake of the click that
+      // must not place; flying out of an open crafting table is the price.
+      this.input.intents.drain();
 
       if (invState.tableOpen || invState.furnaceOpen) {
         this.player!.update(
@@ -932,21 +960,16 @@ export class Engine {
       return;
     }
 
-    // P key camera cycling
-    const pDown = this.input.isKeyDown("KeyP");
-    if (pDown && !this.pWasDown) this.camera.cycleMode();
-    this.pWasDown = pDown;
+    // Camera cycling
+    if (frame.cycleCamera) this.camera.cycleMode();
 
-    // Hotbar selection: keys 1-9
-    for (let i = 1; i <= 9; i++) {
-      if (this.input.isKeyDown(`Digit${i}`)) {
-        useHotbarStore.getState().select(i - 1);
-      }
+    // Hotbar selection
+    if (frame.hotbarSlot !== null) {
+      useHotbarStore.getState().select(frame.hotbarSlot);
     }
 
-    // Q key: drop held item
-    const qDown = this.input.isKeyDown("KeyQ");
-    if (qDown && !this.qWasDown) {
+    // Drop held item
+    if (frame.dropItem) {
       const hotbar = useHotbarStore.getState();
       const droppedId = hotbar.removeSelectedItem();
       if (droppedId !== 0) {
@@ -959,15 +982,19 @@ export class Engine {
         );
       }
     }
-    this.qWasDown = qDown;
 
-    // Camera rotation — sensitivity scales with FOV so zoomed aiming stays steady
-    if (this.input.isPointerLocked()) {
-      const { dx, dy } = this.input.getMouseDelta();
-      this.camera.update(dx, dy, MOUSE_SENSITIVITY * (this.currentFov / DEFAULT_FOV));
-    } else {
-      this.input.getMouseDelta();
-    }
+    // Camera rotation — sensitivity scales with FOV so zoomed aiming stays
+    // steady. No pointer-lock gate (R4): look is a delta wherever it comes
+    // from, and a finger drag will never hold a lock. Desktop still acquires
+    // one for the cursor-capture it gives, and every state where the cursor is
+    // deliberately loose — paused, dead, panel open — has already returned
+    // above, with `endFrame()` clearing the delta it did not read.
+    //
+    // Runs before the look direction is read below: the raycast that decides
+    // what is mined, placed against or eaten instead of must see where the
+    // player is aiming *now*, not where they aimed last frame.
+    const look = this.input.intents.delta("look");
+    this.camera.update(look.x, look.y, MOUSE_SENSITIVITY * (this.currentFov / DEFAULT_FOV));
 
     // Player physics
     const creative = this.gameMode === "creative";
@@ -1044,9 +1071,11 @@ export class Engine {
       }
     }
 
-    // Block interaction (timed breaking)
-    const isLeftHeld = this.input.isMouseButtonDown(0);
-    const { right: rightClick } = this.input.getMouseButton();
+    // Block interaction (timed breaking). `primaryHeld` is the level read that
+    // mining and attacking share; `frame.place` is the edge taken at the top of
+    // the frame. The secondary control's *other* reading — held, for the eat
+    // gate — is deliberately left until after placing has resolved.
+    const primaryHeld = this.input.intents.isHeld("primary");
     const lookDir = this.camera.getLookDirection();
     const selectedBlockId = useHotbarStore.getState().getSelectedBlockId();
 
@@ -1058,7 +1087,7 @@ export class Engine {
       y: this.player!.position.y + 1.6,
       z: this.player!.position.z,
     };
-    if (isLeftHeld) {
+    if (primaryHeld) {
       hitMob = this.mobManager!.hitTest(eyePos, lookDir, 5);
       if (hitMob) {
         const blockTarget = this.blockInteraction!.getTargetBlock(this.player!.position, lookDir);
@@ -1082,7 +1111,7 @@ export class Engine {
 
     // Check remote player hit (friendly fire) — only if no mob is closer
     let hitRemotePlayer: { playerId: string; name: string; position: { x: number; y: number; z: number } } | null = null;
-    if (isLeftHeld && this.multiplayer) {
+    if (primaryHeld && this.multiplayer) {
       const remote = this.multiplayer.hitTestRemote(eyePos, lookDir, 5);
       if (remote) {
         // If we hit a mob too, take whichever is closer
@@ -1107,7 +1136,7 @@ export class Engine {
       }
     }
 
-    if (hitRemotePlayer && isLeftHeld && this.playerAttackCooldown <= 0 && !hitMob) {
+    if (hitRemotePlayer && primaryHeld && this.playerAttackCooldown <= 0 && !hitMob) {
       const toolDef = getToolDef(selectedBlockId);
       const damage = toolDef ? toolDef.attackDamage : 1;
       this.multiplayer!.sendPlayerHit(
@@ -1120,7 +1149,7 @@ export class Engine {
       if (toolDef) {
         useHotbarStore.getState().damageSelectedTool();
       }
-    } else if (hitMob && isLeftHeld && this.playerAttackCooldown <= 0) {
+    } else if (hitMob && primaryHeld && this.playerAttackCooldown <= 0) {
       const toolDef = getToolDef(selectedBlockId);
       const damage = toolDef ? toolDef.attackDamage : 1;
       hitMob.takeDamage(damage, { x: this.player!.position.x, z: this.player!.position.z });
@@ -1134,25 +1163,31 @@ export class Engine {
     const breakState = this.blockInteraction!.update(
       this.player!.position,
       lookDir,
-      isLeftHeld && !hitMob && !hitRemotePlayer,
-      rightClick,
+      primaryResolvesToMining(primaryHeld, hitMob !== null || hitRemotePlayer !== null),
+      frame.place,
       selectedBlockId,
       dt,
       creative
     );
 
-    // Eating: hold right-click with food in hand while not aiming at a block.
-    // Progress accrues over getEatTimeSeconds(def); releasing the button,
-    // switching items, filling up, or looking at a block cancels and resets it.
-    // Holding through a stack eats successive items.
+    // Eating: hold the secondary control with food in hand while not aiming at
+    // a block. Progress accrues over getEatTimeSeconds(def); releasing the
+    // button, switching items, filling up, or looking at a block cancels and
+    // resets it. Holding through a stack eats successive items.
+    //
+    // Deliberately after the place edge above: one press of the same control
+    // both places a block and keeps a bite going, which is the whole reason the
+    // secondary control carries an edge and a level reading side by side.
     const foodDef = selectedBlockId !== 0 ? BLOCK_DEFINITIONS[selectedBlockId] : undefined;
     const restore = foodDef?.special === "food" ? foodDef.hungerRestore ?? 0 : 0;
     const gs2 = useGameStore.getState();
-    const canEat =
-      restore > 0 &&
-      this.input.isMouseButtonDown(2) &&
-      gs2.hunger < gs2.maxHunger &&
-      !this.blockInteraction!.getTargetBlock(this.player!.position, lookDir).hit;
+    const canEat = eatGateOpen({
+      hungerRestore: restore,
+      secondaryHeld: this.input.intents.isHeld("secondary"),
+      hunger: gs2.hunger,
+      maxHunger: gs2.maxHunger,
+      targetingBlock: this.blockInteraction!.getTargetBlock(this.player!.position, lookDir).hit,
+    });
     if (!canEat || selectedBlockId !== this.eatingBlockId) {
       this.eatTimer = 0;
       this.eatingBlockId = canEat ? selectedBlockId : 0;
@@ -1300,7 +1335,7 @@ export class Engine {
     let handState: "idle" | "walking" | "breaking" | "placing" = "idle";
     if (breakState.isBreaking) {
       handState = "breaking";
-    } else if (rightClick) {
+    } else if (frame.place) {
       handState = "placing";
     } else if (
       this.player!.velocity.x !== 0 ||
@@ -1358,10 +1393,11 @@ export class Engine {
 
   /**
    * Sets look direction directly, bypassing mouse-look. For the Playwright E2E
-   * macro (see src/engine/testHook.ts): some automated Chromium environments
-   * refuse `requestPointerLock()` outright, and mouse-look is gated behind
-   * lock (src/engine/InputManager.ts), so aiming has no other route in those
-   * environments. Dev-only caller.
+   * macro (see src/engine/testHook.ts): aiming from a script means synthesising
+   * mouse movement across a canvas whose cursor position the macro does not
+   * control, and some automated Chromium environments refuse
+   * `requestPointerLock()` outright, so the resulting deltas are not
+   * reproducible. Setting yaw/pitch is. Dev-only caller.
    */
   setE2ELook(yaw: number, pitch: number): void {
     this.camera.setLook(yaw, pitch);

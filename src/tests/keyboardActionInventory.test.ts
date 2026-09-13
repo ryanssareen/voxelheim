@@ -69,22 +69,25 @@ const KEY_HANDLER_INVENTORY: readonly KeyHandlerEntry[] = [
   // in src/tests/playerControllerInput.test.ts.
   { code: "CapsLock", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:53 -> PlayerController.ts:126,187", viaInputManager: true },
 
-  // --- Building / hotbar (Engine, polled via InputManager) ---
-  { code: "Digit1", action: "Pick hotbar slot 1", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit2", action: "Pick hotbar slot 2", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit3", action: "Pick hotbar slot 3", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit4", action: "Pick hotbar slot 4", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit5", action: "Pick hotbar slot 5", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit6", action: "Pick hotbar slot 6", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit7", action: "Pick hotbar slot 7", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit8", action: "Pick hotbar slot 8", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit9", action: "Pick hotbar slot 9", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "KeyE", action: "Open inventory", location: "src/engine/Engine.ts:874", viaInputManager: true },
-  { code: "KeyQ", action: "Drop held item", location: "src/engine/Engine.ts:948", viaInputManager: true },
+  // --- Building / hotbar. Since U4 the engine reads named edges, not codes:
+  // keyboardMouseSource maps the code to an edge intent and Engine.update()
+  // takes one frame's worth through readEngineFrameEdges(). InputManager still
+  // owns the listeners, so these stay viaInputManager. ---
+  { code: "Digit1", action: "Pick hotbar slot 1", location: "src/engine/input/keyboardMouseSource.ts:81 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit2", action: "Pick hotbar slot 2", location: "src/engine/input/keyboardMouseSource.ts:82 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit3", action: "Pick hotbar slot 3", location: "src/engine/input/keyboardMouseSource.ts:83 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit4", action: "Pick hotbar slot 4", location: "src/engine/input/keyboardMouseSource.ts:84 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit5", action: "Pick hotbar slot 5", location: "src/engine/input/keyboardMouseSource.ts:85 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit6", action: "Pick hotbar slot 6", location: "src/engine/input/keyboardMouseSource.ts:86 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit7", action: "Pick hotbar slot 7", location: "src/engine/input/keyboardMouseSource.ts:87 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit8", action: "Pick hotbar slot 8", location: "src/engine/input/keyboardMouseSource.ts:88 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit9", action: "Pick hotbar slot 9", location: "src/engine/input/keyboardMouseSource.ts:89 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "KeyE", action: "Open inventory", location: "src/engine/input/keyboardMouseSource.ts:74 -> frameIntents.ts:77 -> Engine.ts:894", viaInputManager: true },
+  { code: "KeyQ", action: "Drop held item", location: "src/engine/input/keyboardMouseSource.ts:75 -> frameIntents.ts:83 -> Engine.ts:972", viaInputManager: true },
 
-  // --- View (Engine, polled via InputManager) ---
-  { code: "KeyV", action: "Zoom", location: "src/engine/Engine.ts:751", viaInputManager: true },
-  { code: "KeyP", action: "Change camera mode", location: "src/engine/Engine.ts:936", viaInputManager: true },
+  // --- View (Engine, read from the intent snapshot; V is a held intent, P an edge) ---
+  { code: "KeyV", action: "Zoom", location: "src/engine/input/keyboardMouseSource.ts:56 -> Engine.ts:761", viaInputManager: true },
+  { code: "KeyP", action: "Change camera mode", location: "src/engine/input/keyboardMouseSource.ts:76 -> frameIntents.ts:80 -> Engine.ts:964", viaInputManager: true },
 
   // --- View: components that bypass InputManager with their own window listener ---
   { code: "KeyM", action: "Toggle minimap", location: "src/ui/MinimapUI.tsx:166", viaInputManager: false },

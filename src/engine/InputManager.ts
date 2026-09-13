@@ -7,19 +7,21 @@ import { IntentState } from "@engine/input/snapshot";
  *
  * It is also the keyboard/mouse **source** for the intent layer: every event it
  * already listens for is forwarded to a {@link KeyboardMouseSource}, which
- * writes named intents into {@link InputManager.intents}. The direct accessors
- * below (`isKeyDown`, `getMouseButton`, `isMouseButtonDown`, `getMouseDelta`)
- * are unchanged and stay until the consumers that poll them — `Engine`,
- * `PlayerController`, `BlockInteraction` — move over to the snapshot. Adding the
- * source alongside them rather than replacing them is what lets the
- * characterization suite keep proving desktop behaviour is untouched.
+ * writes named intents into {@link InputManager.intents}.
  *
- * One deliberate difference between the two faces: `getMouseDelta()` still
- * drops movement made while the pointer is not locked, because that is the
- * behaviour today's consumers are written against, while the intent layer
- * accumulates look deltas regardless (R4). The frame loop's `drain()` is what
- * throws away movement made on suppressed frames once look is read from
- * intents.
+ * Since U4 no gameplay code polls the direct accessors below (`isKeyDown`,
+ * `getMouseButton`, `isMouseButtonDown`, `getMouseDelta`) — `Engine`,
+ * `PlayerController` and `BlockInteraction` all read the snapshot. They stay
+ * because the characterization suite pins them, and pinning both faces against
+ * the same event stream is what proves desktop behaviour came through the
+ * refactor intact; the React listeners (U5) are the last surface still outside
+ * the layer.
+ *
+ * One deliberate difference between the two faces: `getMouseDelta()` drops
+ * movement made while the pointer is not locked, where the intent layer
+ * accumulates look deltas regardless (R4) — a finger drag will never hold a
+ * lock. The frame loop calls `endFrame()` on every path so an unread delta is
+ * cleared rather than saved up into a camera snap.
  */
 export class InputManager {
   /**

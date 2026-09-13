@@ -8,6 +8,13 @@ import {
 } from "@data/blocks";
 import { getToolDef, TOOL_DEFS } from "@data/items";
 import { useGameStore } from "@store/useGameStore";
+import { IntentState } from "@engine/input/snapshot";
+import { KeyboardMouseSource } from "@engine/input/keyboardMouseSource";
+import {
+  eatGateOpen,
+  primaryResolvesToMining,
+  readEngineFrameEdges,
+} from "@engine/input/frameIntents";
 
 /**
  * Engine.ts's eat gate and attack gate (src/engine/Engine.ts:1046-1178) are not
@@ -39,6 +46,18 @@ import { useGameStore } from "@store/useGameStore";
  * "no block targeted" eat condition, bite cancellation on hotbar switch) —
  * see the report back to the caller for what extraction would be needed to
  * test that wiring directly.
+ *
+ * UPDATE (U4, intent layer): the extraction that comment asked for exists for
+ * the parts of the frame that can be stated as a value. `Engine.update()` now
+ * reads its presses through `readEngineFrameEdges`, resolves mine-versus-attack
+ * through `primaryResolvesToMining`, and asks `eatGateOpen` whether a bite may
+ * accrue — all in `src/engine/input/frameIntents.ts`, all callable from node.
+ * The describes at the bottom of this file exercise those directly. What is
+ * still only readable in `Engine.update()` is the *sequence* they are called in;
+ * the tests below pin the properties that sequence depends on (a press arrives
+ * on the frame it happened; one consumer's read does not starve another's; a
+ * drain takes edges and deltas but never held state) so that reordering the loop
+ * has to break something visible.
  */
 
 describe("attack damage resolution (Engine.ts:1116-1117, 1122-1123)", () => {
@@ -186,5 +205,240 @@ describe("hunger-not-full half of the eat gate (Engine.ts:1154, useGameStore)", 
     gs.setHunger(gs.maxHunger - 1);
     const s = useGameStore.getState();
     expect(s.hunger < s.maxHunger).toBe(true);
+  });
+});
+
+/**
+ * Keyboard/mouse driving a real intent state, as `InputManager` wires it. Frames
+ * are explicit: `engineFrame()` is what `Engine.update()` does on a live frame,
+ * `panelFrame()` what it does when a panel is open.
+ */
+function harness() {
+  const intents = new IntentState();
+  const source = new KeyboardMouseSource(intents, () => 0);
+  return {
+    intents,
+    source,
+    /** A live frame: take this frame's presses under the engine's own cursor. */
+    engineFrame: () => readEngineFrameEdges(intents),
+    /**
+     * A panel-open frame: the engine reads, then throws away everything
+     * buffered before anything else can consume it, then returns.
+     */
+    panelFrame: () => {
+      const frame = readEngineFrameEdges(intents);
+      intents.drain();
+      return frame;
+    },
+  };
+}
+
+describe("engine frame edges (Engine.update, presses taken once per frame)", () => {
+  it("delivers a press on the frame it happened, so the panel toggle resolves in time for the panel-open check that follows it", () => {
+    const h = harness();
+    h.source.keyDown("KeyE");
+
+    expect(h.engineFrame().togglePanel).toBe(true);
+    // ...and is gone by the next frame, so the panel does not flap open/shut.
+    expect(h.engineFrame().togglePanel).toBe(false);
+  });
+
+  it("ignores auto-repeat: a key held down toggles once, not once per frame", () => {
+    const h = harness();
+    h.source.keyDown("KeyE");
+    h.source.keyDown("KeyE"); // browser auto-repeat
+    h.source.keyDown("KeyE");
+
+    expect(h.engineFrame().togglePanel).toBe(true);
+    expect(h.engineFrame().togglePanel).toBe(false);
+
+    // A genuine second press, after a release, toggles again.
+    h.source.keyUp("KeyE");
+    h.source.keyDown("KeyE");
+    expect(h.engineFrame().togglePanel).toBe(true);
+  });
+
+  it("maps the camera-cycle and drop presses the engine acts on", () => {
+    const h = harness();
+    h.source.keyDown("KeyP");
+    h.source.keyDown("KeyQ");
+
+    const frame = h.engineFrame();
+    expect(frame.cycleCamera).toBe(true);
+    expect(frame.dropItem).toBe(true);
+  });
+
+  it("selects the hotbar slot matching the digit pressed (0-based)", () => {
+    const h = harness();
+    h.source.keyDown("Digit1");
+    expect(h.engineFrame().hotbarSlot).toBe(0);
+
+    h.source.keyDown("Digit9");
+    expect(h.engineFrame().hotbarSlot).toBe(8);
+  });
+
+  it("resolves two hotbar presses in one frame to the last one", () => {
+    const h = harness();
+    h.source.keyDown("Digit3");
+    h.source.keyDown("Digit7");
+
+    expect(h.engineFrame().hotbarSlot).toBe(6);
+  });
+
+  it("leaves hotbarSlot null on a frame with no digit press, so selection is not re-applied every frame", () => {
+    const h = harness();
+    h.source.keyDown("Digit4");
+    h.engineFrame();
+
+    expect(h.engineFrame().hotbarSlot).toBeNull();
+  });
+
+  it("takes presses it has no use for without acting on them and without throwing", () => {
+    const h = harness();
+    h.source.keyDown("Space"); // jump — the controller's business
+    h.source.keyDown("Escape"); // pause — nothing consumes it until U8
+
+    const frame = h.engineFrame();
+    expect(frame).toEqual({
+      togglePanel: false,
+      cycleCamera: false,
+      dropItem: false,
+      place: false,
+      hotbarSlot: null,
+    });
+  });
+
+  it("does not starve another consumer of the same press", () => {
+    const h = harness();
+    h.source.keyDown("Space");
+
+    h.engineFrame();
+    // PlayerController reads under its own cursor and must still see the jump,
+    // or the flight double-tap silently loses every press the engine ran first.
+    expect(h.intents.takeEdges("playerController").map((e) => e.intent)).toEqual(["jump"]);
+  });
+});
+
+describe("the secondary control's two readings inside one frame", () => {
+  it("produces a place edge and a held reading the eat gate can still see afterwards", () => {
+    const h = harness();
+    h.source.mouseDown(2);
+
+    const frame = h.engineFrame();
+    expect(frame.place).toBe(true);
+    // The eat gate runs after placing has resolved; taking the edge must not
+    // have spent the level reading it depends on.
+    expect(h.intents.isHeld("secondary")).toBe(true);
+  });
+
+  it("places once per press: holding the button does not place again on the next frame", () => {
+    const h = harness();
+    h.source.mouseDown(2);
+
+    expect(h.engineFrame().place).toBe(true);
+    expect(h.engineFrame().place).toBe(false);
+    // Still down, so a bite would still be accruing.
+    expect(h.intents.isHeld("secondary")).toBe(true);
+  });
+});
+
+describe("the panel-open drain", () => {
+  it("a press buffered while a panel is open does not place when the panel closes", () => {
+    const h = harness();
+
+    // Frame 1: inventory open, the player clicks a slot.
+    h.source.mouseDown(2);
+    h.panelFrame();
+    h.source.mouseUp(2);
+
+    // Frame 2: panel closed, full frame runs again.
+    expect(h.engineFrame().place).toBe(false);
+  });
+
+  it("takes that press away from every other consumer too, not just the engine", () => {
+    const h = harness();
+    h.source.mouseDown(2);
+
+    h.panelFrame();
+
+    // The React listeners and the controller never ran on the panel frame; the
+    // drain is the only thing standing between them and a stale press.
+    expect(h.intents.takeEdges("someOtherConsumer")).toEqual([]);
+  });
+
+  it("leaves held state alone, so a button still down when the panel closes goes straight back to mining", () => {
+    const h = harness();
+    h.source.mouseDown(0);
+
+    h.panelFrame();
+
+    expect(h.intents.isHeld("primary")).toBe(true);
+  });
+
+  it("discards accumulated look, so a drag across an open panel does not snap the camera when it closes", () => {
+    const h = harness();
+    h.source.look(120, -40);
+
+    h.panelFrame();
+
+    expect(h.intents.delta("look")).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("primary-held resolution: mine or attack, never both (Engine.update)", () => {
+  it("mines when the swing is held and no entity was hit", () => {
+    expect(primaryResolvesToMining(true, false)).toBe(true);
+  });
+
+  it("does not mine when a mob or remote player claimed the swing first", () => {
+    expect(primaryResolvesToMining(true, true)).toBe(false);
+  });
+
+  it("does not mine when the control is not held, entity or not", () => {
+    expect(primaryResolvesToMining(false, false)).toBe(false);
+    expect(primaryResolvesToMining(false, true)).toBe(false);
+  });
+});
+
+describe("eat gate (Engine.update, after placing has resolved)", () => {
+  const open = {
+    hungerRestore: 8,
+    secondaryHeld: true,
+    hunger: 10,
+    maxHunger: 20,
+    targetingBlock: false,
+  };
+
+  it("opens with food in hand, the control held, room to eat and nothing aimed at", () => {
+    expect(eatGateOpen(open)).toBe(true);
+  });
+
+  it("stays shut for an item that restores no hunger", () => {
+    expect(eatGateOpen({ ...open, hungerRestore: 0 })).toBe(false);
+  });
+
+  it("stays shut while the control is not held", () => {
+    expect(eatGateOpen({ ...open, secondaryHeld: false })).toBe(false);
+  });
+
+  it("stays shut at full hunger", () => {
+    expect(eatGateOpen({ ...open, hunger: 20 })).toBe(false);
+  });
+
+  it("stays shut while aiming at a block, so placing wins over eating", () => {
+    expect(eatGateOpen({ ...open, targetingBlock: true })).toBe(false);
+  });
+
+  it("reads the same held state a place edge was just taken from", () => {
+    const h = harness();
+    h.source.mouseDown(2);
+    const frame = h.engineFrame();
+
+    expect(frame.place).toBe(true);
+    expect(eatGateOpen({ ...open, secondaryHeld: h.intents.isHeld("secondary") })).toBe(true);
+
+    // Releasing cancels the bite on the very next frame.
+    h.source.mouseUp(2);
+    expect(eatGateOpen({ ...open, secondaryHeld: h.intents.isHeld("secondary") })).toBe(false);
   });
 });
