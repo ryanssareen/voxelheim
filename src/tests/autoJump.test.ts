@@ -1,19 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { PlayerController } from "@engine/player/PlayerController";
 import { useSettingsStore } from "@store/useSettingsStore";
-import type { InputManager } from "@engine/InputManager";
 import type { Camera } from "@engine/player/Camera";
 import type { BlockRegistry } from "@engine/world/BlockRegistry";
+import { heldKeys } from "./helpers";
 
 const AIR = 0;
 const STONE = 1;
 const GROUND_TOP = 65; // solid terrain fills y <= 64, so entities stand at y = 65
 
 const registry = { isSolid: (id: number) => id === STONE } as unknown as BlockRegistry;
-
-function heldKeys(...keys: string[]) {
-  return { isKeyDown: (k: string) => keys.includes(k) } as unknown as InputManager;
-}
 
 /** Camera looking along (dirX, dirZ); right is that vector rotated 90 degrees. */
 function facing(dirX: number, dirZ: number) {

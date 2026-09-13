@@ -51,7 +51,14 @@ export type EdgeIntent =
   | "toggleFly"
   | `hotbar${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
 
-/** Continuous two-axis input. */
+/**
+ * Continuous two-axis input.
+ *
+ * `look` is a pointer/drag delta in screen space. `move` is an analog stick in
+ * the camera's local frame — `x` strafes right, `y` pushes forward — which is
+ * the frame `PlayerController` adds the four held movement intents on, so a key
+ * and a stick compose instead of fighting.
+ */
 export type DeltaIntent = "look" | "move";
 
 /** A single press, with the moment it happened. */

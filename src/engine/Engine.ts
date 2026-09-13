@@ -913,7 +913,7 @@ export class Engine {
       if (invState.tableOpen || invState.furnaceOpen) {
         this.player!.update(
           dt,
-          this.input,
+          this.input.intents,
           this.camera,
           (wx, wy, wz) => this.chunkManager!.getBlock(wx, wy, wz),
           this.registry,
@@ -973,7 +973,7 @@ export class Engine {
     const creative = this.gameMode === "creative";
     this.player!.update(
       dt,
-      this.input,
+      this.input.intents,
       this.camera,
       (wx, wy, wz) => this.chunkManager!.getBlock(wx, wy, wz),
       this.registry,

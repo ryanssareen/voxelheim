@@ -45,25 +45,29 @@ interface KeyHandlerEntry {
  * responds to, as of this writing. See file header for how this was built.
  */
 const KEY_HANDLER_INVENTORY: readonly KeyHandlerEntry[] = [
-  // --- Movement (PlayerController, polled via InputManager) ---
-  { code: "KeyW", action: "Walk forward", location: "src/engine/player/PlayerController.ts:112", viaInputManager: true },
-  { code: "ArrowUp", action: "Walk forward", location: "src/engine/player/PlayerController.ts:112", viaInputManager: true },
-  { code: "KeyS", action: "Walk backward", location: "src/engine/player/PlayerController.ts:113", viaInputManager: true },
-  { code: "ArrowDown", action: "Walk backward", location: "src/engine/player/PlayerController.ts:113", viaInputManager: true },
-  { code: "KeyA", action: "Walk left", location: "src/engine/player/PlayerController.ts:114", viaInputManager: true },
-  { code: "ArrowLeft", action: "Walk left", location: "src/engine/player/PlayerController.ts:114", viaInputManager: true },
-  { code: "KeyD", action: "Walk right", location: "src/engine/player/PlayerController.ts:115", viaInputManager: true },
-  { code: "ArrowRight", action: "Walk right", location: "src/engine/player/PlayerController.ts:115", viaInputManager: true },
-  { code: "Space", action: "Jump / fly up / double-tap toggles flying (creative)", location: "src/engine/player/PlayerController.ts:74,141,155", viaInputManager: true },
-  { code: "ShiftLeft", action: "Sprint / fly faster", location: "src/engine/player/PlayerController.ts:104", viaInputManager: true },
-  { code: "ShiftRight", action: "Sprint / fly faster", location: "src/engine/player/PlayerController.ts:104", viaInputManager: true },
-  { code: "ControlLeft", action: "Sneak / fly down", location: "src/engine/player/PlayerController.ts:97,143", viaInputManager: true },
-  { code: "ControlRight", action: "Sneak / fly down", location: "src/engine/player/PlayerController.ts:98,143", viaInputManager: true },
-  // NOTE: CapsLock only sneaks; the flight-descend branch (line 143) checks
-  // ControlLeft/ControlRight only, so CapsLock does NOT fly down. keybinds.ts
-  // advertises "Ctrl / CapsLock" -> "Sneak / fly down" as one bundled action,
-  // which slightly overstates what CapsLock does. Pinned as-is (characterization).
-  { code: "CapsLock", action: "Sneak (does not fly down)", location: "src/engine/player/PlayerController.ts:99", viaInputManager: true },
+  // --- Movement: key codes are mapped to intents in keyboardMouseSource.ts and
+  // consumed by PlayerController.update(), which no longer sees codes at all.
+  // InputManager still owns the listeners, so these remain viaInputManager. ---
+  { code: "KeyW", action: "Walk forward", location: "src/engine/input/keyboardMouseSource.ts:40 -> PlayerController.ts:139", viaInputManager: true },
+  { code: "ArrowUp", action: "Walk forward", location: "src/engine/input/keyboardMouseSource.ts:41 -> PlayerController.ts:139", viaInputManager: true },
+  { code: "KeyS", action: "Walk backward", location: "src/engine/input/keyboardMouseSource.ts:42 -> PlayerController.ts:140", viaInputManager: true },
+  { code: "ArrowDown", action: "Walk backward", location: "src/engine/input/keyboardMouseSource.ts:43 -> PlayerController.ts:140", viaInputManager: true },
+  { code: "KeyA", action: "Walk left", location: "src/engine/input/keyboardMouseSource.ts:44 -> PlayerController.ts:142", viaInputManager: true },
+  { code: "ArrowLeft", action: "Walk left", location: "src/engine/input/keyboardMouseSource.ts:45 -> PlayerController.ts:142", viaInputManager: true },
+  { code: "KeyD", action: "Walk right", location: "src/engine/input/keyboardMouseSource.ts:46 -> PlayerController.ts:141", viaInputManager: true },
+  { code: "ArrowRight", action: "Walk right", location: "src/engine/input/keyboardMouseSource.ts:47 -> PlayerController.ts:141", viaInputManager: true },
+  { code: "Space", action: "Jump / fly up / double-tap toggles flying (creative)", location: "src/engine/input/keyboardMouseSource.ts:48,71 -> PlayerController.ts:107,185,201", viaInputManager: true },
+  { code: "ShiftLeft", action: "Sprint / fly faster", location: "src/engine/input/keyboardMouseSource.ts:49 -> PlayerController.ts:129", viaInputManager: true },
+  { code: "ShiftRight", action: "Sprint / fly faster", location: "src/engine/input/keyboardMouseSource.ts:50 -> PlayerController.ts:129", viaInputManager: true },
+  { code: "ControlLeft", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:51 -> PlayerController.ts:126,187", viaInputManager: true },
+  { code: "ControlRight", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:52 -> PlayerController.ts:126,187", viaInputManager: true },
+  // CHANGED in U3 (intent layer): CapsLock used to sneak but NOT fly down,
+  // because the flight-descend branch listed the two Control codes only. All
+  // three codes now produce the one `sneak` intent the controller reads for
+  // both, so CapsLock descends too — which is what keybinds.ts has always
+  // advertised ("Ctrl / CapsLock" -> "Sneak / fly down"). Pinned behaviourally
+  // in src/tests/playerControllerInput.test.ts.
+  { code: "CapsLock", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:53 -> PlayerController.ts:126,187", viaInputManager: true },
 
   // --- Building / hotbar (Engine, polled via InputManager) ---
   { code: "Digit1", action: "Pick hotbar slot 1", location: "src/engine/Engine.ts:942", viaInputManager: true },

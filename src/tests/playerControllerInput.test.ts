@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { PlayerController } from "@engine/player/PlayerController";
-import type { InputManager } from "@engine/InputManager";
 import type { Camera } from "@engine/player/Camera";
 import type { BlockRegistry } from "@engine/world/BlockRegistry";
+import { IntentState } from "@engine/input/snapshot";
+import { heldKeys, keyboardHarness } from "./helpers";
 
 /**
  * Characterization tests for the INPUT -> MOVEMENT mapping in
@@ -12,6 +13,12 @@ import type { BlockRegistry } from "@engine/world/BlockRegistry";
  * already covered by collision.test.ts and autoJump.test.ts and is
  * deliberately NOT re-tested here — this file only cares about which key
  * codes produce which movement/intent.
+ *
+ * Since U3 the controller reads an intent snapshot rather than InputManager, so
+ * `heldKeys()` feeds key codes through the real keyboard/mouse source instead of
+ * stubbing `isKeyDown`. The cases below are otherwise untouched: the point is
+ * that the same key still does the same thing. Analog movement and edge-driven
+ * jump, which only the intent layer can express, are covered at the end.
  */
 
 const AIR = 0;
@@ -25,10 +32,6 @@ const openWorld = () => AIR;
 
 /** Flat ground at y<=64 (stand at y=65), open above. */
 const flatWorld = (_x: number, y: number) => (y <= 64 ? STONE : AIR);
-
-function heldKeys(...keys: string[]) {
-  return { isKeyDown: (k: string) => keys.includes(k) } as unknown as InputManager;
-}
 
 /** Camera looking along (dirX, dirZ); right is that vector rotated 90 degrees (matches Camera.getRight). */
 function facing(dirX: number, dirZ: number) {
@@ -267,7 +270,7 @@ describe("PlayerController jump", () => {
 });
 
 describe("PlayerController creative fly toggle", () => {
-  // `lastSpacePressTime` starts at 0, so the very first Space press of a
+  // `lastJumpPressTime` starts at 0, so the very first Space press of a
   // fresh PlayerController's life is compared against t=0. With fake timers
   // starting near t=0 that reads as "within the double-tap window" and would
   // spuriously toggle flight on a single press. Advancing the clock well past
@@ -376,5 +379,276 @@ describe("PlayerController creative fly toggle", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("descends from the sneak intent, so CapsLock now flies down alongside Ctrl", () => {
+    // BEHAVIOUR CHANGE, deliberate (U3): the old branch listed ControlLeft and
+    // ControlRight only, so CapsLock crouched but did not descend. The intent
+    // vocabulary has a single crouch control — touch has one crouch button — so
+    // the code-level distinction has nowhere to live, and this is what
+    // keybinds.ts already advertises ("Ctrl / CapsLock — Sneak / fly down").
+    try {
+      farPastStartup();
+      for (const code of ["ControlLeft", "ControlRight", "CapsLock"]) {
+        const p = newGroundedPlayer();
+        p.isFlying = true;
+        p.update(1 / 60, heldKeys(code), facing(1, 0), openWorld, registry, true);
+        expect(p.velocity.y, code).toBe(-20); // FLY_SPEED
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+/**
+ * Intent-layer behaviour the keyboard alone cannot express (U3 / R1, R3).
+ *
+ * A joystick supplies a magnitude where keys supplied a normalized vector, and
+ * per-frame displacement is what collision sub-stepping and auto-jump's
+ * blocked-axis detection are derived from — so what the controller does with
+ * that magnitude is physics, not cosmetics.
+ */
+describe("PlayerController analog movement", () => {
+  const dt = 1 / 60;
+
+  /**
+   * A stick pushed to (x, y) in the camera's local frame: x strafes right, y
+   * pushes forward. Written with `addDelta`, which does NOT clamp, so what is
+   * under test is the controller's own clamp rather than the setter's.
+   */
+  function analogMove(x: number, y: number): IntentState {
+    const s = new IntentState();
+    s.addDelta("move", x, y);
+    return s;
+  }
+
+  /** Distance travelled in one frame from a standing start at (10, 10). */
+  function stepDistance(intents: IntentState): number {
+    const p = newGroundedPlayer();
+    p.update(dt, intents, facing(1, 0), openWorld, registry);
+    return Math.hypot(p.position.x - 10, p.position.z - 10);
+  }
+
+  it("magnitude 1.0 forward produces displacement identical to a held movement key", () => {
+    const pKey = newGroundedPlayer();
+    pKey.update(dt, heldKeys("KeyW"), facing(1, 0), openWorld, registry);
+
+    const pStick = newGroundedPlayer();
+    pStick.update(dt, analogMove(0, 1), facing(1, 0), openWorld, registry);
+
+    expect(pStick.position.x).toBeCloseTo(pKey.position.x, 12);
+    expect(pStick.position.z).toBeCloseTo(pKey.position.z, 12);
+  });
+
+  it("magnitude 1.0 sideways matches the strafe key, on the same axis and sign", () => {
+    const pKey = newGroundedPlayer();
+    pKey.update(dt, heldKeys("KeyD"), facing(1, 0), openWorld, registry);
+
+    const pStick = newGroundedPlayer();
+    pStick.update(dt, analogMove(1, 0), facing(1, 0), openWorld, registry);
+
+    expect(pStick.position.z).toBeCloseTo(pKey.position.z, 12);
+    expect(pStick.position.x).toBeCloseTo(pKey.position.x, 12);
+  });
+
+  it("magnitude above 1 clamps rather than scaling displacement", () => {
+    const full = stepDistance(analogMove(0, 1));
+    expect(stepDistance(analogMove(0, 3))).toBeCloseTo(full, 12);
+    // Diagonal at magnitude sqrt(2) clamps to the same per-frame distance.
+    expect(stepDistance(analogMove(1, 1))).toBeCloseTo(full, 12);
+  });
+
+  it("magnitude below 1 is preserved, so a half-pushed stick walks at half speed", () => {
+    const full = stepDistance(analogMove(0, 1));
+    expect(stepDistance(analogMove(0, 0.5))).toBeCloseTo(full / 2, 12);
+  });
+
+  it("a stick pushed against a held key cancels it, exactly as two opposing keys do", () => {
+    const s = analogMove(0, -1);
+    s.setHeld("moveForward", true);
+
+    const p = newGroundedPlayer();
+    p.update(dt, s, facing(1, 0), openWorld, registry);
+
+    expect(p.velocity.x).toBeCloseTo(0, 12);
+    expect(p.velocity.z).toBeCloseTo(0, 12);
+  });
+
+  it("a stick pushed with the held key in the same direction still clamps to one key's speed", () => {
+    const s = analogMove(0, 1);
+    s.setHeld("moveForward", true);
+
+    const pBoth = newGroundedPlayer();
+    pBoth.update(dt, s, facing(1, 0), openWorld, registry);
+
+    const pKey = newGroundedPlayer();
+    pKey.update(dt, heldKeys("KeyW"), facing(1, 0), openWorld, registry);
+
+    expect(pBoth.position.x).toBeCloseTo(pKey.position.x, 12);
+  });
+});
+
+describe("PlayerController jump intent: held and edge readings together", () => {
+  const dt = 1 / 60;
+
+  /** A keyboard whose presses persist across frames, on a clock this test drives. */
+  function keyboardAt(start = 10_000) {
+    const clock = { now: start };
+    return { kb: keyboardHarness(() => clock.now), clock };
+  }
+
+  it("a single press while grounded jumps once and does not re-launch mid-air while still held", () => {
+    const { kb } = keyboardAt();
+    const p = newGroundedPlayer();
+
+    kb.press("Space");
+    p.update(dt, kb.intents, facing(1, 0), flatWorld, registry);
+    expect(p.velocity.y).toBe(8);
+    expect(p.onGround).toBe(false);
+
+    // Still held, now airborne: gravity only.
+    p.update(dt, kb.intents, facing(1, 0), flatWorld, registry);
+    expect(p.velocity.y).toBeLessThan(8);
+  });
+
+  it("holding jump while flying ascends on every frame, without the hold reading as a double-tap", () => {
+    const { kb, clock } = keyboardAt();
+    const p = newGroundedPlayer();
+    p.isFlying = true;
+
+    kb.press("Space");
+    for (let frame = 0; frame < 5; frame++) {
+      clock.now += 16;
+      p.update(dt, kb.intents, facing(1, 0), openWorld, registry, true);
+      expect(p.velocity.y, `frame ${frame}`).toBe(20); // FLY_SPEED
+      expect(p.isFlying, `frame ${frame}: a held key toggled flight`).toBe(true);
+    }
+  });
+
+  it("a key held down across frames produces one press, so auto-repeat never toggles flight", () => {
+    const { kb, clock } = keyboardAt();
+    const p = newGroundedPlayer();
+
+    kb.press("Space");
+    for (let frame = 0; frame < 20; frame++) {
+      clock.now += 16;
+      p.update(dt, kb.intents, facing(1, 0), flatWorld, registry, true);
+    }
+
+    expect(p.isFlying).toBe(false);
+  });
+
+  it("press, release, press inside the window toggles flight from real key events", () => {
+    const { kb, clock } = keyboardAt();
+    const p = newGroundedPlayer();
+
+    kb.press("Space");
+    p.update(dt, kb.intents, facing(1, 0), flatWorld, registry, true);
+    kb.release("Space");
+    p.update(dt, kb.intents, facing(1, 0), flatWorld, registry, true);
+
+    clock.now += 50;
+    kb.press("Space");
+    p.update(dt, kb.intents, facing(1, 0), flatWorld, registry, true);
+
+    expect(p.isFlying).toBe(true);
+  });
+
+  it("toggles from jump edges whatever produced them, so a touch source needs no controller change", () => {
+    const s = new IntentState();
+    const p = newGroundedPlayer();
+
+    s.pushEdge("jump", 10_000);
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+    expect(p.isFlying).toBe(false);
+
+    s.pushEdge("jump", 10_120);
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+    expect(p.isFlying).toBe(true);
+  });
+
+  it("sees both presses of a double-tap that lands inside a single frame", () => {
+    // The old detector could only notice one press per frame, because it read a
+    // held boolean and compared it with the previous frame's. Timestamped edges
+    // survive a long frame, which is exactly when a tap is most likely to be
+    // swallowed.
+    const s = new IntentState();
+    const p = newGroundedPlayer();
+
+    s.pushEdge("jump", 10_000);
+    s.pushEdge("jump", 10_050);
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+
+    expect(p.isFlying).toBe(true);
+  });
+
+  it("does not pair presses that straddle the window, even across many frames", () => {
+    const s = new IntentState();
+    const p = newGroundedPlayer();
+
+    s.pushEdge("jump", 10_000);
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+    s.pushEdge("jump", 10_400); // 400 ms later: outside DOUBLE_TAP_WINDOW
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+
+    expect(p.isFlying).toBe(false);
+  });
+
+  it("leaves the same edge readable by other consumers", () => {
+    // Edges are delivered per consumer, not consumed globally. If the
+    // controller drained the queue, the frame loop would silently lose presses.
+    const s = new IntentState();
+    const p = newGroundedPlayer();
+    s.pushEdge("jump", 10_000);
+
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+
+    expect(s.tookEdge("engine", "jump")).toBe(true);
+  });
+});
+
+describe("PlayerController under input suppression", () => {
+  const dt = 1 / 60;
+
+  it("ignores held movement and jump while suppressed, but still falls", () => {
+    const s = new IntentState();
+    s.setHeld("moveForward", true);
+    s.setHeld("jump", true);
+    s.setSuppression("paused");
+
+    const p = new PlayerController(10, GROUND_TOP + 5, 10);
+    p.onGround = false;
+    p.update(dt, s, facing(1, 0), flatWorld, registry);
+
+    expect(p.position.x).toBeCloseTo(10, 12);
+    expect(p.position.z).toBeCloseTo(10, 12);
+    expect(p.velocity.y).toBeLessThan(0); // gravity is not input
+  });
+
+  it("does not let a press made while suppressed pair with one made after", () => {
+    const s = new IntentState();
+    const p = newGroundedPlayer();
+
+    s.setSuppression("panelOpen");
+    s.pushEdge("jump", 10_000);
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+
+    s.setSuppression(null);
+    s.pushEdge("jump", 10_040); // inside the window of the swallowed press
+    p.update(dt, s, facing(1, 0), flatWorld, registry, true);
+
+    expect(p.isFlying).toBe(false);
+  });
+
+  it("ignores an analog stick left pushed while suppressed", () => {
+    const s = new IntentState();
+    s.addDelta("move", 0, 1);
+    s.setSuppression("chatComposing");
+
+    const p = newGroundedPlayer();
+    p.update(dt, s, facing(1, 0), openWorld, registry);
+
+    expect(p.position.x).toBeCloseTo(10, 12);
   });
 });

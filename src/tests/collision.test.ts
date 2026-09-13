@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { PlayerController } from "@engine/player/PlayerController";
 import { Mob } from "@engine/entities/Mob";
-import type { InputManager } from "@engine/InputManager";
 import type { Camera } from "@engine/player/Camera";
 import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import type { BlockRegistry } from "@engine/world/BlockRegistry";
+import { IntentState } from "@engine/input/snapshot";
+import { heldKeys } from "./helpers";
 
 const AIR = 0;
 const STONE = 1;
@@ -16,10 +17,6 @@ const registry = { isSolid: (id: number) => id === STONE } as unknown as BlockRe
 function flatWorldWithWall(axis: "x" | "z", coord: number) {
   return (x: number, y: number, z: number) =>
     y <= 64 || ((axis === "x" ? x : z) === coord && y >= 65 && y <= 67) ? STONE : AIR;
-}
-
-function heldKeys(...keys: string[]) {
-  return { isKeyDown: (k: string) => keys.includes(k) } as unknown as InputManager;
 }
 
 /** Camera looking along (dirX, dirZ); right is that vector rotated 90 degrees. */
@@ -138,6 +135,34 @@ describe("PlayerController wall collision", () => {
       expect(player.position[crossAxis]).toBeCloseTo(startCross, 6);
     });
   }
+
+  it("holds the same invariant when an analog stick drives the walk instead of a key", () => {
+    // Analog movement feeds the same displacement that sub-stepping and the
+    // overlap resolver work from, so the wall cases have to survive a stick at
+    // full deflection too — not only the four booleans they were written for.
+    for (const c of cases) {
+      const startCross = 20.5;
+      const player =
+        c.axis === "x"
+          ? new PlayerController(c.start, GROUND_TOP, startCross)
+          : new PlayerController(startCross, GROUND_TOP, c.start);
+
+      const getBlock = flatWorldWithWall(c.axis, 10);
+      const camera = c.axis === "x" ? facing(c.dir, 0) : facing(0, c.dir);
+      const stick = new IntentState();
+      stick.addDelta("move", 0, 1); // pushed fully forward, and held there
+
+      for (let frame = 0; frame < 180; frame++) {
+        player.update(1 / 60, stick, camera, getBlock, registry);
+        expect(
+          player.position.y,
+          `${c.name}, frame ${frame}: player left the ground (climbed the wall)`
+        ).toBe(GROUND_TOP);
+      }
+
+      expect(player.position[c.axis], c.name).toBeCloseTo(c.expected, 6);
+    }
+  });
 
   it("ejects a player embedded in a 2-thick wall sideways, not up over it", () => {
     // Straddling two solid columns is the case where scan order matters. Moving

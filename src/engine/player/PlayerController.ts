@@ -1,4 +1,5 @@
-import { InputManager } from "@engine/InputManager";
+import { clampMoveVector } from "@engine/input/intents";
+import type { IntentSnapshot } from "@engine/input/snapshot";
 import { Camera } from "@engine/player/Camera";
 import { firstBlockingLayer, maxBlock } from "@engine/physics";
 import { BlockRegistry } from "@engine/world/BlockRegistry";
@@ -21,6 +22,13 @@ const FLY_SPEED = 20;
 const FLY_SPRINT_SPEED = 40;
 const DOUBLE_TAP_WINDOW = 300; // ms
 
+/**
+ * Cursor name this controller reads edges under. Edges are delivered through
+ * per-consumer cursors, so naming it uniquely is what keeps the controller from
+ * starving the frame loop or the React listeners of the same press.
+ */
+const EDGE_CONSUMER = "playerController";
+
 export class PlayerController {
   public position: { x: number; y: number; z: number };
   public velocity = { x: 0, y: 0, z: 0 };
@@ -29,8 +37,13 @@ export class PlayerController {
   public isSprinting = false;
   public isFlying = false;
 
-  private lastSpacePressTime = 0;
-  private spaceWasDown = false;
+  /**
+   * Timestamp of the jump press that a second press is measured against for the
+   * flight toggle. Carries the press time from the intent edge rather than the
+   * frame time, so a press is timed by when it happened, not by when the frame
+   * that noticed it ran.
+   */
+  private lastJumpPressTime = 0;
   /**
    * Decaying horizontal impulse channel, kept separate from `velocity` so a
    * hit still displaces the player even while a movement key holds
@@ -62,71 +75,93 @@ export class PlayerController {
     this.onGround = false;
   }
 
+  /**
+   * One physics frame, driven by named intents rather than key codes.
+   *
+   * Per-frame order is unchanged and load-bearing: flight toggle, crouch/sprint,
+   * camera-relative vector, gravity, jump, Y sub-step, ground probe, X then Z
+   * with crouch rollback, overlap resolve, auto-jump impulse last
+   * (docs/solutions/best-practices/player-physics-movement-architecture-2026-04-10.md).
+   */
   update(
     dt: number,
-    input: InputManager,
+    intents: IntentSnapshot,
     camera: Camera,
     getBlock: (wx: number, wy: number, wz: number) => number,
     registry: BlockRegistry,
     creative = false
   ): void {
-    // Double-tap Space detection for flight toggle (creative only)
-    const spaceDown = input.isKeyDown("Space");
-    if (creative && spaceDown && !this.spaceWasDown) {
-      const now = performance.now();
-      if (now - this.lastSpacePressTime < DOUBLE_TAP_WINDOW) {
-        this.isFlying = !this.isFlying;
-        if (this.isFlying) {
-          this.velocity.y = 0;
+    // Read this frame's presses once, under this controller's own cursor, so
+    // other consumers still see the same edges. Read unconditionally, even in
+    // survival where the toggle below ignores them: leaving them unread parks a
+    // stale press behind the cursor for a later creative frame to trip over.
+    // The old `spaceWasDown` bookkeeping ran every frame for the same reason.
+    const edges = intents.takeEdges(EDGE_CONSUMER);
+
+    // Double-tap jump for the flight toggle (creative only). Kept here rather
+    // than in the input layer: it is a gameplay rule, and the same control is
+    // simultaneously held-ascend while flying, which only the consumer can
+    // disentangle. Edge timestamps are why `jump` is not a plain boolean.
+    if (creative) {
+      for (const edge of edges) {
+        if (edge.intent !== "jump") continue;
+        if (edge.at - this.lastJumpPressTime < DOUBLE_TAP_WINDOW) {
+          this.isFlying = !this.isFlying;
+          if (this.isFlying) {
+            this.velocity.y = 0;
+          }
+          // Reset so the next press isn't another toggle
+          this.lastJumpPressTime = 0;
+        } else {
+          this.lastJumpPressTime = edge.at;
         }
-        // Reset so the next press isn't another toggle
-        this.lastSpacePressTime = 0;
-      } else {
-        this.lastSpacePressTime = now;
       }
     }
-    this.spaceWasDown = spaceDown;
 
     // Disable flight in survival
     if (!creative) {
       this.isFlying = false;
     }
 
-    this.isCrouching =
-      !this.isFlying &&
-      (input.isKeyDown("ControlLeft") ||
-      input.isKeyDown("ControlRight") ||
-      input.isKeyDown("CapsLock"));
+    this.isCrouching = !this.isFlying && intents.isHeld("sneak");
 
-    // Shift = sprint (works both on ground and while flying)
-    this.isSprinting =
-      !this.isCrouching &&
-      (input.isKeyDown("ShiftLeft") || input.isKeyDown("ShiftRight"));
+    // Sprint works both on ground and while flying
+    this.isSprinting = !this.isCrouching && intents.isHeld("sprint");
 
     const forward = camera.getForward();
     const right = camera.getRight();
 
-    let moveX = 0;
-    let moveZ = 0;
+    // Movement is assembled in the camera's local frame first — x is strafe
+    // (right positive), y is forward — so a keyboard's four booleans and a
+    // joystick's analog vector add on the same axes.
+    let localX = 0;
+    let localY = 0;
+    if (intents.isHeld("moveForward")) localY += 1;
+    if (intents.isHeld("moveBack")) localY -= 1;
+    if (intents.isHeld("moveRight")) localX += 1;
+    if (intents.isHeld("moveLeft")) localX -= 1;
 
-    if (input.isKeyDown("KeyW") || input.isKeyDown("ArrowUp")) { moveX += forward.x; moveZ += forward.z; }
-    if (input.isKeyDown("KeyS") || input.isKeyDown("ArrowDown")) { moveX -= forward.x; moveZ -= forward.z; }
-    if (input.isKeyDown("KeyA") || input.isKeyDown("ArrowLeft")) { moveX -= right.x; moveZ -= right.z; }
-    if (input.isKeyDown("KeyD") || input.isKeyDown("ArrowRight")) { moveX += right.x; moveZ += right.z; }
+    const analog = intents.delta("move");
+    localX += analog.x;
+    localY += analog.y;
+
+    // Clamped, not normalised: a diagonal key pair still resolves to exactly 1
+    // (matching the old normalise-the-sum step), while a half-pushed stick keeps
+    // its half magnitude. The speed constants below stay the only scalar,
+    // because per-frame displacement is what sub-stepping and auto-jump's
+    // blocked-axis detection are derived from.
+    const move = clampMoveVector({ x: localX, y: localY });
 
     const speed = this.isFlying
       ? (this.isSprinting ? FLY_SPRINT_SPEED : FLY_SPEED)
       : this.isCrouching ? CROUCH_SPEED
       : this.isSprinting ? SPRINT_SPEED
       : WALK_SPEED;
-    const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
-    if (len > 0) {
-      moveX = (moveX / len) * speed;
-      moveZ = (moveZ / len) * speed;
-    }
 
-    this.velocity.x = moveX;
-    this.velocity.z = moveZ;
+    // `forward` and `right` are unit vectors on the XZ plane and perpendicular,
+    // so projecting a unit local vector through them preserves its magnitude.
+    this.velocity.x = (move.y * forward.x + move.x * right.x) * speed;
+    this.velocity.z = (move.y * forward.z + move.x * right.z) * speed;
 
     // Decay the knockback impulse channel. Independent of input, so it keeps
     // pushing the player even while a movement key holds velocity.x/z at the
@@ -136,11 +171,20 @@ export class PlayerController {
     this.knockback.z *= knockbackFactor;
 
     if (this.isFlying) {
-      // Flight vertical controls: Space=ascend, Ctrl=descend, neither=hover
+      // Flight vertical controls: jump=ascend, sneak=descend, neither=hover.
+      // Both are level reads of the same controls the toggle above read as
+      // edges — jump has to be readable both ways within one frame.
+      //
+      // Behaviour note: descend now follows the `sneak` intent, so CapsLock
+      // descends where it previously did not (the old branch listed the two
+      // Control codes only). The intent layer has a single crouch control by
+      // design — touch has one crouch button — so the code-level distinction
+      // has nowhere left to live, and this is what keybinds.ts already
+      // advertises ("Ctrl / CapsLock — Sneak / fly down").
       const flyVertSpeed = this.isSprinting ? FLY_SPRINT_SPEED : FLY_SPEED;
-      if (input.isKeyDown("Space")) {
+      if (intents.isHeld("jump")) {
         this.velocity.y = flyVertSpeed;
-      } else if (input.isKeyDown("ControlLeft") || input.isKeyDown("ControlRight")) {
+      } else if (intents.isHeld("sneak")) {
         this.velocity.y = -flyVertSpeed;
       } else {
         this.velocity.y = 0;
@@ -152,7 +196,9 @@ export class PlayerController {
         if (this.velocity.y < MAX_FALL_SPEED) this.velocity.y = MAX_FALL_SPEED;
       }
 
-      if (input.isKeyDown("Space") && this.onGround) {
+      // Level read, deliberately: holding jump re-launches on the frame the
+      // player lands, exactly as holding Space does today.
+      if (intents.isHeld("jump") && this.onGround) {
         this.velocity.y = JUMP_VELOCITY;
         this.onGround = false;
       }

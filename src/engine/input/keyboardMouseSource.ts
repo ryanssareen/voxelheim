@@ -28,12 +28,14 @@ import type { IntentState } from "@engine/input/snapshot";
  * Mirrors the call sites this replaces: `PlayerController.update()` for
  * movement/jump/sneak/sprint and `Engine.updateZoom()` for hold-V zoom.
  *
- * NOTE (carried forward for U3): `CapsLock` maps to `sneak` alongside
- * `ControlLeft`/`ControlRight`, but today `PlayerController` reads CapsLock only
- * for crouching — its flight-descend branch checks the two Control codes alone,
- * so CapsLock does not fly down. The intent vocabulary has one `sneak` control
- * (touch has one crouch button, by design), so a consumer that wants that quirk
- * preserved has to keep it at the consumer. It is pinned as a string in
+ * NOTE (resolved in U3): `CapsLock` maps to `sneak` alongside
+ * `ControlLeft`/`ControlRight`. Before the intent layer, `PlayerController`
+ * read CapsLock for crouching only — its flight-descend branch checked the two
+ * Control codes alone, so CapsLock did not fly down. The vocabulary has one
+ * `sneak` control (touch has one crouch button, by design) and the controller
+ * reads it for both, so CapsLock now descends as well, matching what
+ * `src/data/keybinds.ts` advertises. Pinned in
+ * `src/tests/playerControllerInput.test.ts` and noted in
  * `src/tests/keyboardActionInventory.test.ts`.
  */
 export const KEY_HELD_INTENTS: Readonly<Record<string, readonly HeldIntent[]>> = {
