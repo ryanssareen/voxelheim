@@ -260,14 +260,19 @@ describe("RandomTicker + grass spread (headless, no React, no renderer)", () => 
 
   it("every setBlock call carries source \"simulation\"", () => {
     const world = build3x3DirtPlate();
+    // Sized to produce a healthy batch of changes and stop, rather than to
+    // simulate for as long as possible: the assertion is about the tag on each
+    // logged call, not about how far grass spreads. The original settings ran
+    // ~37 million cell samples and timed out on CI, where the runner is slower
+    // than a dev machine.
     const ticker = new RandomTicker(world, grassSpreadRules(), "source-seed", {
-      ticksPerSecond: 400,
+      ticksPerSecond: 20,
       samplesPerChunkPerTick: 512,
       maxChangesPerTick: 1000,
       maxChunksPerTick: 10,
     });
 
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 2; i++) {
       ticker.update(1);
     }
 

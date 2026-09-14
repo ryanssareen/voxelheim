@@ -3,18 +3,43 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request, not only those targeting main. Stacked PRs base onto
+  # each other, and filtering on the target branch left them with no checks at
+  # all — the reviews that most need a signal got none.
   pull_request:
-    branches: [main]
+
+# A new push supersedes the run in flight for the same ref. Stacked branches
+# multiply runs, and there is no value in finishing a run for a commit that has
+# already been replaced.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+
       - run: npm ci
-      - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm test -- --passWithNoTests
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test -- --passWithNoTests
+
+      # tsc checks types; it does not prove the app compiles. Next's own
+      # transform, route collection and static generation only run here, and
+      # they are what a broken import or a server/client boundary mistake
+      # actually trips.
+      - name: Production build
+        run: npm run build
