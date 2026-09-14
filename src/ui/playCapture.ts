@@ -1,4 +1,4 @@
-import { useGameStore } from "@store/useGameStore";
+import { requestPlayPointerLock } from "@engine/input/pointerLock";
 import { useSettingsStore } from "@store/useSettingsStore";
 
 /**
@@ -28,9 +28,7 @@ import { useSettingsStore } from "@store/useSettingsStore";
 export function enterPlayCapture(canvas: HTMLCanvasElement | null): void {
   if (!canvas) return;
 
-  if (useGameStore.getState().inputSource !== "touch") {
-    canvas.requestPointerLock();
-  }
+  requestPlayPointerLock(canvas);
 
   if (!useSettingsStore.getState().fullscreenOnPlay) return;
 

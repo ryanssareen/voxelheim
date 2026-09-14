@@ -15,6 +15,7 @@ import {
   readEngineFrameEdges,
 } from "@engine/input/frameIntents";
 import { PAUSE_BLOCKERS, uiIntentBlocked, type UiInputState } from "@engine/input/uiIntents";
+import { requestPlayPointerLock } from "@engine/input/pointerLock";
 import type { IntentSnapshot } from "@engine/input/snapshot";
 import type { TouchSource } from "@engine/input/touchSource";
 import { BlockBreakOverlay } from "@engine/renderer/BlockBreakOverlay";
@@ -948,16 +949,16 @@ export class Engine {
       const inv = useInventoryStore.getState();
       if (inv.furnaceOpen) {
         inv.closeFurnace();
-        this.canvas.requestPointerLock();
+        requestPlayPointerLock(this.canvas);
       } else if (inv.tableOpen) {
         inv.closeTable();
-        this.canvas.requestPointerLock();
+        requestPlayPointerLock(this.canvas);
       } else if (inv.creativeOpen) {
         inv.closeCreative();
-        this.canvas.requestPointerLock();
+        requestPlayPointerLock(this.canvas);
       } else if (inv.isOpen) {
         inv.close();
-        this.canvas.requestPointerLock();
+        requestPlayPointerLock(this.canvas);
       } else {
         // Creative mode: open creative inventory instead of survival inventory
         if (this.gameMode === "creative") {

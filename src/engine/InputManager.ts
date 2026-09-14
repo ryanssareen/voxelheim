@@ -1,4 +1,5 @@
 import { KeyboardMouseSource } from "@engine/input/keyboardMouseSource";
+import { attemptPointerLock } from "@engine/input/pointerLock";
 import { IntentState } from "@engine/input/snapshot";
 import { TouchSource, type TouchPoint } from "@engine/input/touchSource";
 
@@ -199,7 +200,7 @@ export class InputManager {
       // a pointer lock the player never asked for and cannot exit.
       if (this.isCompatMouseEvent()) return;
       if (!this.locked) {
-        canvas.requestPointerLock();
+        attemptPointerLock(canvas);
       }
     };
 
