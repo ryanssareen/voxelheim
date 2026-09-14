@@ -6,6 +6,7 @@ import { useHotbarStore, MAX_STACK } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
 import { getToolDef, getArmorDef, getArmorSlotIndex } from "@data/items";
 import { quickMoveAt } from "@systems/inventory/craft";
+import { splitStack } from "@systems/inventory/split";
 import {
   inventoryScreen,
   tableScreen,
@@ -16,7 +17,23 @@ import {
 
 export const ARMOR_LABELS = ["Helmet", "Chest", "Legs", "Boots"];
 
-/** Which screen is open right now, if any — read fresh at click time. */
+/**
+ * What a slot was asked to do, independent of how it was asked.
+ *
+ * The handlers below used to read `e.shiftKey` directly, which made them
+ * mouse-only by construction. Naming the action instead lets a finger and a
+ * cursor drive identical store mutations — the same separation the engine's
+ * intent layer makes for gameplay input.
+ */
+export type SlotAction =
+  /** Pick up, place, merge or swap — a plain click or a tap. */
+  | "primary"
+  /** Send the stack to its paired container — shift-click or double-tap. */
+  | "quickMove"
+  /** Halve the stack onto the cursor — right-click or long-press. */
+  | "split";
+
+/** Which screen is open right now, if any — read fresh at action time. */
 function currentScreen(): ScreenDescriptor | null {
   const inv = useInventoryStore.getState();
   if (inv.isOpen) return inventoryScreen();
@@ -27,12 +44,16 @@ function currentScreen(): ScreenDescriptor | null {
 }
 
 /**
- * Shared cursor-item slot mechanics (pick up / place / merge / swap, plus
- * shift-click quick-move) for the hotbar+inventory slots, armor slots, and
- * offhand slot. Used by every screen that renders those slots.
+ * Shared cursor-item slot mechanics for the hotbar+inventory slots, armor slots
+ * and offhand slot. Used by every screen that renders those slots.
+ *
+ * Every path that writes the cursor passes the slot's `durability` through.
+ * Omitting it silently resets a tool to full — `docs/solutions/runtime-errors/
+ * inventory-tool-system-crash-and-data-loss-2026-04-08.md` records that
+ * happening from a single call site that enumerated only id and count.
  */
 export function useSlotInteractions() {
-  const applyShiftClick = useCallback((locateIndex: (screen: ScreenDescriptor) => number) => {
+  const applyQuickMove = useCallback((locateIndex: (screen: ScreenDescriptor) => number) => {
     const screen = currentScreen();
     if (!screen) return;
     const flatIndex = locateIndex(screen);
@@ -40,11 +61,35 @@ export function useSlotInteractions() {
     if (next) screen.write(next);
   }, []);
 
-  // Click any inventory/hotbar slot
-  const handleSlotClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>, index: number) => {
-      if (e.shiftKey) {
-        applyShiftClick(() => index);
+  /**
+   * Halve a stack onto the cursor, or drop one item from the cursor onto a
+   * compatible slot. Both directions conserve: nothing is created or destroyed,
+   * which `inventoryConservation.test.ts` enforces across every screen.
+   */
+  const applySplit = useCallback((index: number) => {
+    const store = useHotbarStore.getState();
+    const invStore = useInventoryStore.getState();
+    const cursor = invStore.cursorItem;
+    const stackable = !getToolDef(cursor.blockId) && !getArmorDef(cursor.blockId);
+
+    const next = splitStack(store.slots[index], cursor, MAX_STACK, stackable);
+    if (!next) return;
+
+    const slots = [...store.slots];
+    slots[index] = next.slot;
+    useHotbarStore.setState({ slots });
+    if (next.cursor.count === 0) invStore.clearCursor();
+    else invStore.setCursorItem(next.cursor.blockId, next.cursor.count, next.cursor.durability);
+  }, []);
+
+  const handleSlotAction = useCallback(
+    (action: SlotAction, index: number) => {
+      if (action === "quickMove") {
+        applyQuickMove(() => index);
+        return;
+      }
+      if (action === "split") {
+        applySplit(index);
         return;
       }
 
@@ -82,15 +127,17 @@ export function useSlotInteractions() {
         }
       }
     },
-    [applyShiftClick]
+    [applyQuickMove, applySplit]
   );
 
-  const handleArmorClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>, index: number) => {
-      if (e.shiftKey) {
-        applyShiftClick((screen) => screen.layout.ranges.armor[0] + index);
+  const handleArmorAction = useCallback(
+    (action: SlotAction, index: number) => {
+      if (action === "quickMove") {
+        applyQuickMove((screen) => screen.layout.ranges.armor[0] + index);
         return;
       }
+      // An armor slot holds exactly one item, so there is no half to take:
+      // split falls through to the ordinary pick-up/swap.
 
       const store = useHotbarStore.getState();
       const invStore = useInventoryStore.getState();
@@ -130,13 +177,13 @@ export function useSlotInteractions() {
         invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       }
     },
-    [applyShiftClick]
+    [applyQuickMove]
   );
 
-  const handleOffhandClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.shiftKey) {
-        applyShiftClick((screen) => screen.layout.ranges.offhand);
+  const handleOffhandAction = useCallback(
+    (action: SlotAction) => {
+      if (action === "quickMove") {
+        applyQuickMove((screen) => screen.layout.ranges.offhand);
         return;
       }
 
@@ -156,8 +203,8 @@ export function useSlotInteractions() {
         invStore.setCursorItem(slot.blockId, slot.count, slot.durability);
       }
     },
-    [applyShiftClick]
+    [applyQuickMove]
   );
 
-  return { handleSlotClick, handleArmorClick, handleOffhandClick };
+  return { handleSlotAction, handleArmorAction, handleOffhandAction };
 }

@@ -997,6 +997,8 @@ export function InventorySlot({
   highlight = false,
   label,
   tooltip = true,
+  style,
+  ...gestures
 }: {
   item: { blockId: number; count: number; durability?: number };
   onClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
@@ -1004,7 +1006,12 @@ export function InventorySlot({
   highlight?: boolean;
   label?: string;
   tooltip?: boolean;
-}) {
+  /** Merged over the slot's own chrome — used to suppress native touch gestures. */
+  style?: React.CSSProperties;
+} & Pick<
+  React.ComponentPropsWithoutRef<"div">,
+  "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onContextMenu"
+>) {
   const [hover, setHover] = useState(false);
   const hasItem = item.count > 0 && item.blockId !== BLOCK_ID.AIR;
   const toolDef = hasItem ? getToolDef(item.blockId) : null;
@@ -1013,6 +1020,7 @@ export function InventorySlot({
   return (
     <div
       onClick={onClick}
+      {...gestures}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className="relative flex items-center justify-center cursor-pointer select-none"
@@ -1024,6 +1032,7 @@ export function InventorySlot({
         boxShadow: highlight
           ? "inset 2px 2px 0 #fafafa, inset -2px -2px 0 #aaa"
           : "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
+        ...style,
       }}
     >
       {hasItem && <ItemIcon blockId={item.blockId} size={size} />}
@@ -1069,21 +1078,25 @@ export function InventorySlot({
 }
 
 /**
- * Floating item stack that follows the mouse while an inventory screen is
- * open. Mount only while the screen is open; renders nothing when the
- * cursor is empty.
+ * Floating item stack that follows the pointer while an inventory screen is
+ * open. Mount only while the screen is open; renders nothing when the cursor is
+ * empty.
+ *
+ * Listens for `pointermove` rather than `mousemove` so a finger drags it too.
+ * A touch only emits moves while it is down, so between taps the stack rests
+ * where the last contact left it — which is where the player is looking.
  */
 export function CursorItemOverlay({
   item,
 }: {
   item: { blockId: number; count: number; durability?: number };
 }) {
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [pos, setPos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY });
-    window.addEventListener("mousemove", handler);
-    return () => window.removeEventListener("mousemove", handler);
+    const handler = (e: PointerEvent) => setPos({ x: e.clientX, y: e.clientY });
+    window.addEventListener("pointermove", handler);
+    return () => window.removeEventListener("pointermove", handler);
   }, []);
 
   if (item.count === 0) return null;
@@ -1091,7 +1104,7 @@ export function CursorItemOverlay({
   return (
     <div
       className="fixed pointer-events-none z-50 flex items-center justify-center"
-      style={{ left: mousePos.x + 8, top: mousePos.y + 8, width: 40, height: 40 }}
+      style={{ left: pos.x + 8, top: pos.y + 8, width: 40, height: 40 }}
     >
       <ItemIcon blockId={item.blockId} size={40} />
       {item.count > 1 && (
