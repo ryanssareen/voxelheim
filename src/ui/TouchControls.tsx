@@ -9,6 +9,7 @@ import { useGameStore } from "@store/useGameStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { HOTBAR_DOCK_INTENT } from "@ui/HotbarUI";
 import { useHudMetrics, type HudMetrics } from "@ui/useHudScale";
+import { NO_INSETS, useViewportEnv, type Insets } from "@ui/useViewportEnv";
 
 /**
  * The on-screen half of touch play: joystick, jump/crouch, and the corner
@@ -45,8 +46,18 @@ export function touchControlsVisible(source: InputSource): boolean {
 }
 
 export interface TouchControlLayout {
-  /** Gap between a control and the nearest viewport edge, px. */
+  /**
+   * Reach gap between a control and the nearest viewport edge, px. Derived from
+   * viewport size, and deliberately separate from the safe-area insets below —
+   * one is about a thumb's arc, the other about what the hardware occludes.
+   */
   inset: number;
+  /** Distance from the left edge a left-anchored control sits at, px. */
+  edgeLeft: number;
+  /** Distance from the right edge a right-anchored control sits at, px. */
+  edgeRight: number;
+  /** Distance from the top edge a top-anchored control sits at, px. */
+  edgeTop: number;
   /** Jump / crouch button edge, px. */
   actionButton: number;
   /** Vertical gap between the two stacked action buttons, px. */
@@ -84,6 +95,7 @@ export function touchControlLayout(
   vw: number,
   vh: number,
   m: HudMetrics,
+  insets: Insets = NO_INSETS,
 ): TouchControlLayout {
   const shortest = Math.max(1, Math.min(vw, vh));
   const inset = Math.round(clamp(shortest * 0.035, 12, 32));
@@ -92,13 +104,18 @@ export function touchControlLayout(
 
   return {
     inset,
+    // The reach gap and the occluded strip stack: a notch does not make a thumb
+    // reach further, so the control clears both rather than the larger of them.
+    edgeLeft: inset + insets.left,
+    edgeRight: inset + insets.right,
+    edgeTop: inset + insets.top,
     actionButton,
     actionGap: Math.round(clamp(actionButton * 0.22, 8, 24)),
-    actionBottom: m.hotbarHeight + inset,
+    actionBottom: m.hotbarHeight + inset + insets.bottom,
     iconButton,
     iconGap: Math.round(clamp(iconButton * 0.2, 6, 14)),
     // 12px is the HUD's own `top-3`; the rest clears the sun/moon box under it.
-    iconTop: 12 + m.sunH + 14,
+    iconTop: 12 + m.sunH + 14 + insets.top,
     // The ring is drawn at the deflection radius the source actually uses, so
     // the knob reaching the rim means the stick is at full tilt rather than
     // approximately so.
@@ -242,7 +259,8 @@ export function TouchControls({ engineRef }: { engineRef?: React.RefObject<Engin
 function TouchOverlay({ engineRef }: { engineRef?: React.RefObject<Engine | null> }) {
   const m = useHudMetrics();
   const viewport = useViewport();
-  const layout = touchControlLayout(viewport.w, viewport.h, m);
+  const env = useViewportEnv();
+  const layout = touchControlLayout(viewport.w, viewport.h, m, env.insets);
   const [hintDismissed, setHintDismissed] = useState(() => touchHintSeen());
   const panelOpen = useInventoryStore(panelIsOpen);
 
@@ -302,7 +320,7 @@ function TouchOverlay({ engineRef }: { engineRef?: React.RefObject<Engine | null
   if (panelOpen) {
     return (
       <div className="absolute inset-0 pointer-events-none z-40 select-none">
-        <div className="absolute" style={{ right: layout.inset, top: layout.inset }}>
+        <div className="absolute" style={{ right: layout.edgeRight, top: layout.edgeTop }}>
           <IconButton
             control={{ intent: HOTBAR_DOCK_INTENT, label: "Close", glyph: "close" }}
             size={layout.iconButton}
@@ -341,7 +359,7 @@ function TouchOverlay({ engineRef }: { engineRef?: React.RefObject<Engine | null
       <div
         className="absolute flex flex-col-reverse items-center"
         style={{
-          right: layout.inset,
+          right: layout.edgeRight,
           bottom: layout.actionBottom,
           gap: layout.actionGap,
         }}
@@ -360,7 +378,7 @@ function TouchOverlay({ engineRef }: { engineRef?: React.RefObject<Engine | null
           sun/moon box. */}
       <div
         className="absolute flex flex-col"
-        style={{ left: layout.inset, top: layout.iconTop, gap: layout.iconGap }}
+        style={{ left: layout.edgeLeft, top: layout.iconTop, gap: layout.iconGap }}
       >
         {TOUCH_CORNER_CONTROLS.map((control) => (
           <IconButton

@@ -8,6 +8,7 @@ import { HUD } from "@ui/HUD";
 import { enterPlayCapture } from "@ui/playCapture";
 import { MinimapUI } from "@ui/MinimapUI";
 import { HotbarUI } from "@ui/HotbarUI";
+import { RotatePrompt } from "@ui/RotatePrompt";
 import { TouchControls } from "@ui/TouchControls";
 import { PauseMenu } from "@ui/PauseMenu";
 import { DeathScreen } from "@ui/DeathScreen";
@@ -113,6 +114,7 @@ export function GameCanvas({
           <HotbarUI engineRef={engineRef} />
           {/* On-screen controls; they draw nothing until touch arms (R27). */}
           <TouchControls engineRef={engineRef} />
+          <RotatePrompt />
           <PauseMenu canvasRef={canvasRef} engineRef={engineRef} />
           <DeathScreen onRespawn={handleRespawn} />
           <InventoryUI />
