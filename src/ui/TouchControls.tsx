@@ -154,6 +154,18 @@ export interface TouchHoldControl {
   intent: HeldIntent;
   label: string;
   glyph: "up" | "down";
+  /**
+   * An edge this button also pushes on press, for a control whose two temporal
+   * readings both matter.
+   *
+   * Only jump has one. `PlayerController` toggles creative flight on two `jump`
+   * *edges* inside a 300 ms window while the same intent is held-ascend during
+   * flight — so a button that only set the held state left flight unreachable
+   * on a phone, silently, the way every gap in this work has been silent. With
+   * the edge pushed too, double-tapping the Jump button toggles flight by
+   * exactly the rule double-tapping Space does, in the same consumer.
+   */
+  edgeOnPress?: EdgeIntent;
 }
 
 /**
@@ -163,7 +175,7 @@ export interface TouchHoldControl {
  * lower slot is the shorter reach for a thumb anchored in the corner.
  */
 export const TOUCH_HOLD_CONTROLS: readonly TouchHoldControl[] = [
-  { intent: "jump", label: "Jump", glyph: "up" },
+  { intent: "jump", label: "Jump", glyph: "up", edgeOnPress: "jump" },
   { intent: "sneak", label: "Crouch", glyph: "down" },
 ];
 
@@ -171,7 +183,7 @@ export const TOUCH_HOLD_CONTROLS: readonly TouchHoldControl[] = [
 export interface TouchEdgeControl {
   intent: EdgeIntent;
   label: string;
-  glyph: "pause" | "chat" | "map" | "close";
+  glyph: "pause" | "chat" | "map" | "close" | "zoom";
 }
 
 /**
@@ -186,6 +198,13 @@ export const TOUCH_CORNER_CONTROLS: readonly TouchEdgeControl[] = [
   { intent: "pause", label: "Pause", glyph: "pause" },
   { intent: "openChat", label: "Chat", glyph: "chat" },
   { intent: "toggleMinimap", label: "Map", glyph: "map" },
+  // Zoom is a *held* intent on a keyboard (V) and a toggle here, which is what
+  // the `zoom` edge in the vocabulary was reserved for: a source with no hold
+  // to spend. `Engine` latches on the edge and un-latches on the next one.
+  // Camera cycle and debug info are deliberately not here — they are rare, and
+  // the icon column is the scarcest space on a short screen, so both live in
+  // the pause menu instead (see `src/data/touchParity.ts`).
+  { intent: "zoom", label: "Zoom", glyph: "zoom" },
 ];
 
 /** One line of the first-session hint. */
@@ -370,6 +389,7 @@ function TouchOverlay({ engineRef }: { engineRef?: React.RefObject<Engine | null
             control={control}
             size={layout.actionButton}
             onHold={hold}
+            onPress={press}
           />
         ))}
       </div>
@@ -429,10 +449,12 @@ function HoldButton({
   control,
   size,
   onHold,
+  onPress,
 }: {
   control: TouchHoldControl;
   size: number;
   onHold: (intent: HeldIntent, down: boolean) => void;
+  onPress: (intent: EdgeIntent) => void;
 }) {
   return (
     <button
@@ -449,6 +471,7 @@ function HoldButton({
           // still fire on the element the finger started on.
         }
         onHold(control.intent, true);
+        if (control.edgeOnPress) onPress(control.edgeOnPress);
       }}
       onPointerUp={(e) => {
         e.preventDefault();
@@ -559,6 +582,12 @@ function CornerGlyph({ kind, size }: { kind: TouchEdgeControl["glyph"]; size: nu
           strokeWidth="2"
           strokeLinejoin="round"
         />
+      )}
+      {kind === "zoom" && (
+        <>
+          <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M15.5 15.5L21 21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+        </>
       )}
       {kind === "map" && (
         <path

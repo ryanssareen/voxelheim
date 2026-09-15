@@ -1,5 +1,5 @@
-# Pages (generated 2026-09-04)
-# 8 pages. [client]=client component, [server]=server component.
+# Pages (generated 2026-09-15)
+# 9 pages. [client]=client component, [server]=server component.
 
 [client]   /                                                  Home
 [client]   /dressing-room                                     DressingRoomPage
@@ -7,5 +7,6 @@
 [client]   /game                                              GamePage
 [client]   /game/create                                       CreateWorldPage
 [client]   /login                                             LoginPage
+[client]   /mobile-check                                      MobileCheckPage
 [client]   /signup                                            SignUpPage
 [client]   /worlds                                            WorldsPage

@@ -132,6 +132,15 @@ export class Engine {
   private lavaDamageTimer = 0;
   private frameCount = 0;
   private currentFov = DEFAULT_FOV;
+  /**
+   * Zoom held on by a press rather than by a finger staying down.
+   *
+   * A keyboard holds V; a thumb cannot hold an icon and play at the same time,
+   * so the touch control toggles this instead. The two compose rather than
+   * compete — `updateZoom` zooms if *either* is true — so a touchscreen laptop
+   * with a keyboard behaves sensibly with both.
+   */
+  private zoomLatched = false;
   private worldType: WorldType = "island";
   private gameMode: "survival" | "creative" | "hardcore" = "survival";
   // Effective island footprint in blocks — legacy saves stay 64 so their
@@ -659,6 +668,20 @@ export class Engine {
   }
 
   /**
+   * Cycle first/third person from outside the frame loop.
+   *
+   * The in-game path is the `toggleCamera` edge, which the frame loop consumes.
+   * The pause menu cannot use that: edges pushed while paused stay queued and
+   * would fire on the frame after resuming, so the player would close the menu
+   * and only then see the camera move. This is the same shape as
+   * {@link Engine.setGameMode} — a direct call for the one caller that is not
+   * playing at the time.
+   */
+  cycleCameraMode(): void {
+    this.camera.cycleMode();
+  }
+
+  /**
    * Set the world spawn to the player's current position. Persists with the
    * world save; respawn() re-derives a safe Y from the spawn column.
    */
@@ -812,7 +835,8 @@ export class Engine {
    * animates back out, whatever state the player releases V in.
    */
   private updateZoom(dt: number): void {
-    const target = this.input.intents.isHeld("zoom") ? ZOOM_FOV : DEFAULT_FOV;
+    const zooming = this.input.intents.isHeld("zoom") || this.zoomLatched;
+    const target = zooming ? ZOOM_FOV : DEFAULT_FOV;
     if (Math.abs(this.currentFov - target) < 0.01) return;
     const t = Math.min(1, dt * ZOOM_LERP_SPEED);
     this.currentFov += (target - this.currentFov) * t;
@@ -1015,6 +1039,8 @@ export class Engine {
     }
 
     // Camera cycling
+    if (frame.toggleZoom) this.zoomLatched = !this.zoomLatched;
+
     if (frame.cycleCamera) this.camera.cycleMode();
 
     // Hotbar selection

@@ -1,4 +1,4 @@
-# Library Exports (generated 2026-09-04)
+# Library Exports (generated 2026-09-15)
 # fn=function, class=class. Type-only files omitted.
 
 ## src/lib

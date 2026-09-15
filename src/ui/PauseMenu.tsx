@@ -61,6 +61,7 @@ function PausePanel({
 }) {
   const setPaused = useGameStore((s) => s.setPaused);
   const gameMode = useGameStore((s) => s.gameMode);
+  const debugVisible = useGameStore((s) => s.debugVisible);
   const multiplayerSession = useMultiplayerStore((s) => s.session);
   const multiplayerPlayers = useMultiplayerStore((s) => s.players);
   const [spawnSet, setSpawnSet] = useState(false);
@@ -102,6 +103,23 @@ function PausePanel({
 
   const handleSetSpawn = () => {
     if (engineRef.current?.setWorldSpawn()) setSpawnSet(true);
+  };
+
+  // The touch affordances for the two actions that have no on-screen control
+  // (R23). Both are rare enough that a corner icon would not earn its place —
+  // the icon column is the scarcest space on a short landscape screen — and the
+  // pause menu is already where a player goes to change how the game looks.
+  //
+  // Neither presses an intent. An edge pushed while paused stays queued and
+  // fires on the frame after resuming, so the player would close the menu and
+  // only then see anything happen; both call the thing directly instead, the
+  // way the game-mode switch above already does.
+  const handleCycleCamera = () => {
+    engineRef.current?.cycleCameraMode();
+  };
+
+  const handleToggleDebug = () => {
+    useGameStore.getState().toggleDebug();
   };
 
   const handleCopyCode = async () => {
@@ -168,6 +186,12 @@ function PausePanel({
             )}
             <button onClick={handleSetSpawn} className={secondaryButtonClass}>
               {spawnSet ? "Spawn set!" : "Set Spawn Here"}
+            </button>
+            <button onClick={handleCycleCamera} className={secondaryButtonClass}>
+              Change Camera
+            </button>
+            <button onClick={handleToggleDebug} className={secondaryButtonClass}>
+              {debugVisible ? "Hide Debug Info" : "Debug Info"}
             </button>
           </div>
 
