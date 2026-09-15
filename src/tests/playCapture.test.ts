@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { enterPlayCapture } from "@ui/playCapture";
 import { useSettingsStore } from "@store/useSettingsStore";
+import { useGameStore } from "@store/useGameStore";
 
 function fakeCanvas(overrides: { parentElement?: unknown } = {}) {
   return {
@@ -15,6 +16,7 @@ function fakeCanvas(overrides: { parentElement?: unknown } = {}) {
 describe("enterPlayCapture", () => {
   afterEach(() => {
     useSettingsStore.setState({ fullscreenOnPlay: true });
+    useGameStore.setState({ inputSource: "keyboardMouse" });
     vi.unstubAllGlobals();
   });
 
@@ -92,6 +94,25 @@ describe("enterPlayCapture", () => {
     // Let the rejected promise's .catch() run before the test finishes.
     await Promise.resolve();
     await Promise.resolve();
+  });
+
+  it("skips the pointer lock in touch mode but still goes fullscreen", () => {
+    // The half of this that is worth the most is on the device that cannot ask
+    // for it with a mouse. A finger has nothing to capture, so the lock is
+    // skipped — but a full-bleed canvas matters more on a phone than anywhere
+    // else, so fullscreen still applies. `GameCanvas` reaches this from the
+    // canvas's `onTouchEnd`, because suppressing the compatibility mouse burst
+    // suppresses the synthesized `click` that the mouse path rides.
+    vi.stubGlobal("document", { fullscreenEnabled: true, fullscreenElement: null });
+    useGameStore.setState({ inputSource: "touch" });
+    const canvas = fakeCanvas();
+
+    enterPlayCapture(canvas);
+
+    expect(canvas.requestPointerLock).not.toHaveBeenCalled();
+    const parentFullscreen = (canvas.parentElement as unknown as { requestFullscreen: ReturnType<typeof vi.fn> })
+      .requestFullscreen;
+    expect(parentFullscreen).toHaveBeenCalledTimes(1);
   });
 
   it("is a no-op for a null canvas", () => {

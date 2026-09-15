@@ -40,6 +40,24 @@ export function GameCanvas({
     }
   }, [start, worldId, sessionId]);
 
+  // Both handlers, because a touch reaches neither the other one nor this
+  // element the way a mouse does. `InputManager` calls `preventDefault()` on
+  // every canvas touch — that is what stops the page scrolling under the player
+  // and a hold-to-mine starting a text selection — and suppressing the
+  // compatibility mouse burst suppresses the synthesized `click` with it. So on
+  // a phone `onClick` never fires, and until this `onTouchEnd` existed the
+  // `fullscreenOnPlay` setting was unreachable on the one device where a
+  // full-bleed canvas is worth the most.
+  //
+  // `touchend` rather than `touchstart`: it is an activation-triggering event,
+  // so `requestFullscreen` is allowed from it. `preventDefault()` on the
+  // engine's own listener does not stop React's synthetic event — React listens
+  // at the root and the event still propagates there.
+  //
+  // It fires on every tap, not just the first, which is exactly what the mouse
+  // path does: `enterPlayCapture` returns early while a fullscreen is already
+  // active, and re-requests after the player has left one. Pointer lock is
+  // skipped in touch mode inside `enterPlayCapture` itself.
   const handleCanvasClick = useCallback(() => {
     enterPlayCapture(canvasRef.current);
   }, []);
@@ -100,6 +118,7 @@ export function GameCanvas({
         ref={canvasRef}
         className="w-full h-full block bg-black cursor-pointer"
         onClick={handleCanvasClick}
+        onTouchEnd={handleCanvasClick}
       />
       <LoadingScreen visible={isLoading || (!isReady && !error)} />
       {error && (

@@ -32,7 +32,10 @@ import type { IntentState } from "@engine/input/snapshot";
  *        edge a right-click pushes, so placing runs the identical engine path.
  *      - *hold* — still past the hold threshold: `primary` held for as long as
  *        the finger stays down, which is mine-or-attack resolved by what is
- *        targeted exactly as a held left button is.
+ *        targeted exactly as a held left button is. Keep holding past the
+ *        longer eat threshold and `secondary` is asserted alongside it, which
+ *        is the level read the eat gate consumes — desktop's two buttons
+ *        separated in time rather than across controls.
  *      - *look* — moved past the look threshold: `look` deltas, and any hold it
  *        had already earned is released so break progress stops accruing.
  *
@@ -78,6 +81,25 @@ export interface TouchSourceConfig {
    * blocks while mining; longer reads as lag.
    */
   holdThresholdMs: number;
+  /**
+   * How long a still contact must last before it *also* asserts `secondary` as
+   * a level read — the reading the eat gate consumes.
+   *
+   * Touch has one hold to spend and desktop spends two buttons, so the two
+   * meanings are separated in time rather than across controls: a short hold is
+   * mine/attack, and a hold that outlasts this is additionally a bite. Both
+   * intents stay asserted, which is safe because `secondary`'s *edge* is what
+   * places a block and a hold never pushes one, and because the eat gate is
+   * already closed whenever the player is aiming at a block — so the gesture
+   * that mines and the gesture that eats can never both resolve.
+   *
+   * Necessarily longer than {@link holdThresholdMs}: arming both at once would
+   * make every mine attempt in open air a bite. It is dead time in front of the
+   * food's own eat duration, so it buys cancellability at the cost of felt
+   * latency, and like every threshold here the number is reasoned rather than
+   * measured on a device.
+   */
+  eatHoldThresholdMs: number;
 }
 
 export const DEFAULT_TOUCH_CONFIG: TouchSourceConfig = {
@@ -85,6 +107,7 @@ export const DEFAULT_TOUCH_CONFIG: TouchSourceConfig = {
   joystickRadiusPx: 56,
   lookThresholdPx: 10,
   holdThresholdMs: 200,
+  eatHoldThresholdMs: 500,
 };
 
 /** What a play-surface contact has resolved into so far. */
@@ -104,9 +127,11 @@ interface PlayContact {
   startY: number;
   lastX: number;
   lastY: number;
-  /** Press timestamp, for the hold threshold. */
+  /** Press timestamp, for both hold thresholds. */
   at: number;
   phase: PlayPhase;
+  /** Whether this contact has outlasted the eat threshold and holds `secondary`. */
+  eating: boolean;
 }
 
 /** Read-only view of the live joystick, for the U7 overlay to draw. */
@@ -205,6 +230,7 @@ export class TouchSource {
           lastY: point.y,
           at: this.now(),
           phase: "pending",
+          eating: false,
         };
         continue;
       }
@@ -233,7 +259,7 @@ export class TouchSource {
         // A hold that starts sliding is a look. Dropping `primary` here is what
         // stops break progress accruing (BlockInteraction resets the moment the
         // level read goes false) — the finger is aiming now, not mining.
-        if (play.phase === "hold") this.state.setHeld("primary", false);
+        if (play.phase === "hold") this.releaseHold(play);
         play.phase = "look";
         // The movement that crossed the threshold is deliberately not looked
         // with: it is the slop a tap is allowed, and spending it would make
@@ -278,11 +304,13 @@ export class TouchSource {
         // right-click pushes, so place runs the identical engine path.
         //
         // Note it pushes the edge only, never the `secondary` *level* read the
-        // eat gate consumes. Eating on touch is R26/U12's longer hold with its
-        // own cancellable indicator; a tap must not smuggle a bite in.
+        // eat gate consumes: a tap must not smuggle a bite in. Eating is the
+        // separate, longer hold above, cancellable by lifting the finger — the
+        // gate closes the moment `secondary` goes false and the engine resets
+        // the timer.
         this.state.pushEdge("secondary", this.now());
       } else if (play.phase === "hold") {
-        this.state.setHeld("primary", false);
+        this.releaseHold(play);
       }
 
       this.play = null;
@@ -307,7 +335,7 @@ export class TouchSource {
 
       const play = this.play;
       if (!play || play.id !== point.id) continue;
-      if (play.phase === "hold") this.state.setHeld("primary", false);
+      if (play.phase === "hold") this.releaseHold(play);
       this.play = null;
     }
   }
@@ -370,7 +398,7 @@ export class TouchSource {
    * them with it.
    */
   releaseAll(): void {
-    if (this.play?.phase === "hold") this.state.setHeld("primary", false);
+    if (this.play?.phase === "hold") this.releaseHold(this.play);
     for (const intent of this.buttonsHeld) this.state.setHeld(intent, false);
     this.buttonsHeld.clear();
     this.joystick = null;
@@ -406,12 +434,45 @@ export class TouchSource {
     });
   }
 
-  /** Turns a pending contact that has outlasted the threshold into a hold. */
+  /**
+   * Advances a still contact through both hold thresholds.
+   *
+   * Two promotions rather than one, in order: pending → hold asserts `primary`,
+   * and a hold that keeps going past the longer threshold additionally asserts
+   * `secondary` so the eat gate can open. A contact that has already converted
+   * to a look is past both — it is aiming, not pressing.
+   */
   private promoteHold(): void {
     const play = this.play;
-    if (!play || play.phase !== "pending") return;
-    if (this.now() - play.at < this.config.holdThresholdMs) return;
-    play.phase = "hold";
-    this.state.setHeld("primary", true);
+    if (!play || play.phase === "look") return;
+
+    const elapsed = this.now() - play.at;
+
+    if (play.phase === "pending") {
+      if (elapsed < this.config.holdThresholdMs) return;
+      play.phase = "hold";
+      this.state.setHeld("primary", true);
+    }
+
+    if (!play.eating && elapsed >= this.config.eatHoldThresholdMs) {
+      play.eating = true;
+      this.state.setHeld("secondary", true);
+    }
+  }
+
+  /**
+   * Drops whatever level reads a hold contact had earned.
+   *
+   * One place rather than four, because `secondary` is only ever asserted
+   * alongside `primary` and releasing one without the other would leave the eat
+   * gate open on a finger that is no longer down — a bite the player cannot
+   * see, cancel, or explain.
+   */
+  private releaseHold(play: PlayContact): void {
+    this.state.setHeld("primary", false);
+    if (play.eating) {
+      this.state.setHeld("secondary", false);
+      play.eating = false;
+    }
   }
 }

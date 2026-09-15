@@ -130,6 +130,7 @@ sequenceDiagram
 
 - R30. The title, settings, world-list, and create-world screens are operable by touch. The settings sliders currently respond only to `onMouseDown` plus a `window` `mousemove` listener, which a touch drag never emits.
 - R31. Render distance and simulation distance are adjustable on a touch device, since settings is the only surface exposing them and R29 depends on reaching it.
+- R32. A human plays a session on a real phone and a real tablet and judges the result playable. Every other requirement here is a parity or absence check — desktop is unchanged, an affordance exists, a gesture produces an intent — and a build can satisfy all of them while being miserable to play. This is the only criterion that asks whether the thing works, and the only one no test and no agent can run. It is also where the reasoned gesture thresholds get replaced with measured ones.
 
 ---
 
@@ -324,6 +325,8 @@ Order within the tier is U6, U11, U8, U7. The pre-game screens come early becaus
 **Dependencies:** U7, U8
 **Files:** `src/ui/KeybindsPopup.tsx`, `src/ui/Walkthrough.tsx`, `src/ui/ChatUI.tsx`, `src/ui/MinimapUI.tsx`, `src/tests/keyboardActionInventory.test.ts`, `src/tests/walkthrough.test.ts`
 **Approach:** Resolve each of sprint, creative fly, drop, zoom, minimap toggle, debug info, and the third-person camera cycle to an affordance or the deferred list. Eating keeps its held trigger with a longer threshold and a cancellable indicator.
+
+**Landed early:** R26's producer. `TouchSource` had no way to assert `secondary` as a *level* read — its only hold asserted `primary` and its only `secondary` signal was the tap edge — so the eat gate could never open on a phone, silently, since a closed gate is indistinguishable from a player who is not hungry. A play-surface hold that outlasts `eatHoldThresholdMs` (500 ms, against mining's 200 ms) now asserts `secondary` alongside `primary`, and lifting, cancelling, or sliding into a look drops it. The two never both resolve: the eat gate is already closed whenever the player is aiming at a block. The indicator is the existing eat progress bar. What remains for U12 is the affordance work, not the input.
 **Test scenarios:**
 - The keyboard-only action inventory test enumerates zero unaddressed actions.
 - Controls popup presents touch affordances in touch mode.
