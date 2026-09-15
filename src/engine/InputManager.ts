@@ -1,8 +1,55 @@
+import { KeyboardMouseSource } from "@engine/input/keyboardMouseSource";
+import { IntentState } from "@engine/input/snapshot";
+
+/**
+ * Codes whose pre-U5 React listener ran with no typing guard and swallowed the
+ * browser default.
+ *
+ * Only F3 qualifies: the debug overlay's own `window` listener checked nothing
+ * about the event target, so F3 toggled the overlay even mid-sentence in chat,
+ * and called `preventDefault()` so Firefox did not open find-in-page. Both
+ * moved here with the handler. The typing quirk is a latent bug the plan's
+ * Scope Boundaries defer on purpose — a refactor that quietly fixes behaviour
+ * is one nothing can verify — so this set shrinks to empty in that follow-up,
+ * not here.
+ *
+ * Nothing else belongs in it. The chat and minimap keys have always respected
+ * the typing guard, and moving a movement key in would let WASD drive the
+ * player out from under a chat message.
+ */
+const UNGUARDED_UI_CODES = new Set(["F3"]);
+
 /**
  * Captures keyboard, mouse movement, mouse buttons, and pointer lock state.
  * Call init(canvas) to attach listeners; dispose() to remove them.
+ *
+ * It is also the keyboard/mouse **source** for the intent layer: every event it
+ * already listens for is forwarded to a {@link KeyboardMouseSource}, which
+ * writes named intents into {@link InputManager.intents}.
+ *
+ * Since U4 no gameplay code polls the direct accessors below (`isKeyDown`,
+ * `getMouseButton`, `isMouseButtonDown`, `getMouseDelta`) — `Engine`,
+ * `PlayerController` and `BlockInteraction` all read the snapshot. They stay
+ * because the characterization suite pins them, and pinning both faces against
+ * the same event stream is what proves desktop behaviour came through the
+ * refactor intact; the React listeners (U5) are the last surface still outside
+ * the layer.
+ *
+ * One deliberate difference between the two faces: `getMouseDelta()` drops
+ * movement made while the pointer is not locked, where the intent layer
+ * accumulates look deltas regardless (R4) — a finger drag will never hold a
+ * lock. The frame loop calls `endFrame()` on every path so an unread delta is
+ * cleared rather than saved up into a camera snap.
  */
 export class InputManager {
+  /**
+   * Named intents produced from the events below. Consumers should type this as
+   * `IntentSnapshot` (read-only); the frame loop needs the `IntentState` face to
+   * set suppression, `drain()` on panel-open frames, and `endFrame()`.
+   */
+  readonly intents = new IntentState();
+  private readonly source: KeyboardMouseSource;
+
   private keys = new Set<string>();
   private mouseDx = 0;
   private mouseDy = 0;
@@ -24,23 +71,41 @@ export class InputManager {
   private onPointerLockChange: (() => void) | null = null;
   private onCanvasClick: (() => void) | null = null;
 
+  /**
+   * @param now press-timestamp clock handed to the intent source. Injectable so
+   *   tests can drive the double-tap window deterministically.
+   */
+  constructor(now: () => number = () => performance.now()) {
+    this.source = new KeyboardMouseSource(this.intents, now);
+  }
+
   /** Attaches all event listeners. */
   init(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
 
     this.onKeyDown = (e: KeyboardEvent) => {
+      if (UNGUARDED_UI_CODES.has(e.code)) e.preventDefault();
       // Ignore keys while typing in a text field (e.g. chat), so movement
       // keys like WASD / arrows don't drive the player during composition.
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        // ...except the handful of codes whose React listener never had this
+        // guard. They reach the intent layer only; the legacy `keys` face keeps
+        // the behaviour it has always had, so neither face is rewritten.
+        if (UNGUARDED_UI_CODES.has(e.code)) this.source.keyDown(e.code);
         return;
       }
       this.keys.add(e.code);
+      this.source.keyDown(e.code);
     };
     this.onKeyUp = (e: KeyboardEvent) => {
       this.keys.delete(e.code);
+      this.source.keyUp(e.code);
     };
     this.onMouseMove = (e: MouseEvent) => {
+      // Intent look is not gated on pointer lock (R4); the legacy accumulator
+      // below still is, because its consumers depend on that.
+      this.source.look(e.movementX, e.movementY);
       if (!this.locked) return;
       this.mouseDx += e.movementX;
       this.mouseDy += e.movementY;
@@ -48,10 +113,12 @@ export class InputManager {
     this.onMouseDown = (e: MouseEvent) => {
       if (e.button === 0) { this.leftClick = true; this.leftDown = true; }
       if (e.button === 2) { this.rightClick = true; this.rightDown = true; }
+      this.source.mouseDown(e.button);
     };
     this.onMouseUp = (e: MouseEvent) => {
       if (e.button === 0) this.leftDown = false;
       if (e.button === 2) this.rightDown = false;
+      this.source.mouseUp(e.button);
     };
     this.onPointerLockChange = () => {
       const wasLocked = this.locked;
@@ -109,6 +176,17 @@ export class InputManager {
   /** Returns true if the pointer is currently locked to the canvas. */
   isPointerLocked(): boolean {
     return this.locked;
+  }
+
+  /**
+   * Ends the intent frame: clears accumulated deltas so the next frame's look
+   * describes only that frame. Call once per frame, after every consumer has
+   * read the snapshot. Held state and queued edges are untouched — edges are
+   * read through per-consumer cursors and must survive until each consumer has
+   * seen them.
+   */
+  endFrame(): void {
+    this.source.endFrame();
   }
 
   /** Removes all event listeners. */

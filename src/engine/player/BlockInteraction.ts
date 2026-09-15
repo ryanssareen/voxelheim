@@ -90,12 +90,28 @@ export class BlockInteraction {
     return { hit: false };
   }
 
-  /** Processes timed breaking and single-frame placing. Returns break state for rendering. */
+  /**
+   * Processes timed breaking and single-frame placing. Returns break state for
+   * rendering.
+   *
+   * Both inputs are intents the frame loop has already resolved, not raw
+   * buttons, and the two temporal models are the point:
+   *
+   *  - `primaryHeld` is a **level** read that has survived the entity hit-test.
+   *    `Engine` passes false when a mob or remote player claimed the swing, so
+   *    one control mines or attacks but never both (R3). Breaking keyed to a
+   *    level read is what lets progress accrue across frames.
+   *  - `secondaryEdge` is one **press**. There is no place-once latch in here —
+   *    passing true on consecutive frames places on every one of them, bounded
+   *    only by the stack. Edge-triggering belongs to the caller, which is why
+   *    `Engine` reads the place edge and the eat gate's level read separately
+   *    off the same control.
+   */
   update(
     playerPos: { x: number; y: number; z: number },
     lookDir: { x: number; y: number; z: number },
-    isLeftHeld: boolean,
-    rightClick: boolean,
+    primaryHeld: boolean,
+    secondaryEdge: boolean,
     selectedBlockId: number,
     dt: number,
     creative = false
@@ -106,7 +122,7 @@ export class BlockInteraction {
     if (creative) {
       this.creativeCooldown = Math.max(0, this.creativeCooldown - dt);
     }
-    if (creative && isLeftHeld && target.hit && target.blockPos && this.creativeCooldown <= 0) {
+    if (creative && primaryHeld && target.hit && target.blockPos && this.creativeCooldown <= 0) {
       const bp = target.blockPos;
       const blockDef = this.registry.getBlock(target.blockId!);
       if (blockDef && blockDef.breakable) {
@@ -123,7 +139,7 @@ export class BlockInteraction {
     }
 
     // --- Timed breaking (survival) ---
-    if (isLeftHeld && target.hit && target.blockPos) {
+    if (primaryHeld && target.hit && target.blockPos) {
       const bp = target.blockPos;
       const blockDef = this.registry.getBlock(target.blockId!);
 
@@ -178,7 +194,7 @@ export class BlockInteraction {
     }
 
     // --- Single-frame placing (right click) ---
-    if (rightClick && target.hit && target.blockPos) {
+    if (secondaryEdge && target.hit && target.blockPos) {
       // Right-click on crafting table opens 3x3 UI
       if (target.blockId === BLOCK_ID.CRAFTING_TABLE) {
         const inv = useInventoryStore.getState();
@@ -206,7 +222,7 @@ export class BlockInteraction {
         };
       }
     }
-    if (rightClick && target.hit && target.facePos) {
+    if (secondaryEdge && target.hit && target.facePos) {
       // Check we have items to place
       const hotbar = useHotbarStore.getState();
       const placeId = hotbar.getSelectedBlockId();

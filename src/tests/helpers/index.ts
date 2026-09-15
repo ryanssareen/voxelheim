@@ -1,3 +1,6 @@
+import { KeyboardMouseSource } from "@engine/input/keyboardMouseSource";
+import { IntentState } from "@engine/input/snapshot";
+
 /**
  * vitest runs in the node environment, so `window` does not exist. Tests that
  * exercise storage-backed code install a stub for the duration of the case.
@@ -55,4 +58,41 @@ export function installWindow(
 
 export function removeWindow() {
   delete (globalThis as { window?: unknown }).window;
+}
+
+/**
+ * Intent snapshot with `codes` held, produced by driving the real
+ * keyboard/mouse source rather than by hand-rolling a stub.
+ *
+ * Gameplay consumers read named intents now, but the behaviour worth pinning is
+ * still "this key does that", so the tests keep speaking key codes and let the
+ * real mapping translate. Each call is a fresh source, i.e. one press: for keys
+ * that carry an edge (Space) that means calling it on consecutive frames reads
+ * as press-release-press. Use {@link keyboardHarness} when a press has to be
+ * held down across frames.
+ */
+export function heldKeys(...codes: string[]): IntentState {
+  const state = new IntentState();
+  const source = new KeyboardMouseSource(state);
+  for (const code of codes) source.keyDown(code);
+  return state;
+}
+
+export interface KeyboardHarness {
+  /** The snapshot to hand to the consumer under test. */
+  intents: IntentState;
+  /** Presses keys. A key already down produces no second edge, as auto-repeat must not. */
+  press(...codes: string[]): void;
+  release(...codes: string[]): void;
+}
+
+/** Stateful keyboard whose presses persist across frames. */
+export function keyboardHarness(now: () => number = () => performance.now()): KeyboardHarness {
+  const intents = new IntentState();
+  const source = new KeyboardMouseSource(intents, now);
+  return {
+    intents,
+    press: (...codes: string[]) => codes.forEach((c) => source.keyDown(c)),
+    release: (...codes: string[]) => codes.forEach((c) => source.keyUp(c)),
+  };
 }

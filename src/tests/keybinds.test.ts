@@ -2,10 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { KEYBIND_GROUPS } from "@data/keybinds";
 import { useKeybindsStore } from "@store/useKeybindsStore";
 import { PlayerController } from "@engine/player/PlayerController";
-import type { InputManager } from "@engine/InputManager";
 import type { Camera } from "@engine/player/Camera";
 import type { BlockRegistry } from "@engine/world/BlockRegistry";
-import { installWindow, removeWindow } from "./helpers";
+import { heldKeys, installWindow, removeWindow } from "./helpers";
 
 beforeEach(() => {
   installWindow();
@@ -67,10 +66,7 @@ describe("advertised movement binds match PlayerController", () => {
   /** Runs one frame with `code` held and reports the resulting movement state. */
   function stateWith(code: string) {
     const player = new PlayerController(0, 10, 0);
-    const input = {
-      isKeyDown: (k: string) => k === code,
-    } as unknown as InputManager;
-    player.update(1 / 60, input, camera, noBlocks, registry);
+    player.update(1 / 60, heldKeys(code), camera, noBlocks, registry);
     return { crouching: player.isCrouching, sprinting: player.isSprinting };
   }
 

@@ -2,9 +2,8 @@
 
 import { useRef, useEffect, useCallback, useState } from "react";
 import { useEngine } from "@hooks/useEngine";
-import { useChatStore } from "@store/useChatStore";
-import { useGameStore } from "@store/useGameStore";
-import { useInventoryStore } from "@store/useInventoryStore";
+import { CHAT_OPEN_BLOCKERS } from "@engine/input/uiIntents";
+import { useIntentEdge } from "@ui/useIntentEdge";
 import { HUD } from "@ui/HUD";
 import { enterPlayCapture } from "@ui/playCapture";
 import { MinimapUI } from "@ui/MinimapUI";
@@ -72,29 +71,19 @@ export function GameCanvas({
     return () => observer.disconnect();
   }, [engineRef, isReady]);
 
-  // T-key opens chat (only when game is active and no modal UI is open)
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.code !== "KeyT") return;
-      // Don't hijack T if already typing somewhere else
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
-
-      const gameState = useGameStore.getState();
-      const invState = useInventoryStore.getState();
-      const chatState = useChatStore.getState();
-
-      if (gameState.isDead || gameState.isPaused) return;
-      if (chatState.composing) return;
-      if (invState.isOpen || invState.tableOpen || invState.furnaceOpen || invState.creativeOpen) return;
-
-      event.preventDefault();
-      if (document.pointerLockElement) document.exitPointerLock();
-      setChatOpenRequest((n) => n + 1);
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+  // Chat opens on the `openChat` intent (T on a keyboard). The guards that used
+  // to live inline here — dead, paused, already composing, a panel open — are
+  // now declared as CHAT_OPEN_BLOCKERS, and the "don't hijack T while typing"
+  // check moved down into InputManager, which never produces an intent for a
+  // keypress aimed at a text field.
+  //
+  // Gated on `isReady` because this effect runs from the first render, before
+  // the engine (and therefore the intent state) exists.
+  const openChat = useCallback(() => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    setChatOpenRequest((n) => n + 1);
   }, []);
+  useIntentEdge(engineRef, "openChat", CHAT_OPEN_BLOCKERS, openChat, { enabled: isReady });
 
   const handleSendChat = useCallback(
     (text: string) => {
@@ -128,8 +117,8 @@ export function GameCanvas({
           <FurnaceUI />
           <CreativeInventoryUI />
           <ChatUI onSend={handleSendChat} openRequest={chatOpenRequest} />
-          <Walkthrough worldId={worldId} />
-          <KeybindsPopup worldId={worldId} />
+          <Walkthrough worldId={worldId} engineRef={engineRef} />
+          <KeybindsPopup worldId={worldId} engineRef={engineRef} />
         </>
       )}
     </div>

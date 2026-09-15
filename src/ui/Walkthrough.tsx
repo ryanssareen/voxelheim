@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
+import type { Engine } from "@engine/Engine";
 import {
   WALKTHROUGH_STEPS,
   useWalkthroughStore,
@@ -8,14 +9,15 @@ import {
 import { useInventoryStore } from "@store/useInventoryStore";
 import { DEMO_WORLD_ID } from "@lib/demoWorld";
 import { useKeybindsStore } from "@store/useKeybindsStore";
+import { useMovementIntent } from "@ui/useIntentEdge";
 
-// Mirrors PlayerController, which also accepts the arrow keys.
-const MOVE_KEYS = new Set([
-  "KeyW", "KeyA", "KeyS", "KeyD",
-  "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight",
-]);
-
-export function Walkthrough({ worldId }: { worldId?: string }) {
+export function Walkthrough({
+  worldId,
+  engineRef,
+}: {
+  worldId?: string;
+  engineRef?: React.RefObject<Engine | null>;
+}) {
   const isOpen = useWalkthroughStore((s) => s.isOpen);
   const activeIndex = useWalkthroughStore((s) => s.activeIndex);
   const notify = useWalkthroughStore((s) => s.notify);
@@ -36,14 +38,13 @@ export function Walkthrough({ worldId }: { worldId?: string }) {
   }, [worldId, keybindsSeen, keybindsOpen, startIfUnseen]);
 
   // Movement is observed here; break/place are notified from BlockInteraction.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (MOVE_KEYS.has(e.code)) notify("move");
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, notify]);
+  //
+  // R24 puts this on the movement *intent* rather than on eight key codes that
+  // had to be kept in step with PlayerController by hand — and that counted a
+  // "w" typed into the chat box as a step of walking. A joystick (U6) will
+  // satisfy it with no change here.
+  const notifyMove = useCallback(() => notify("move"), [notify]);
+  useMovementIntent(engineRef, isOpen, notifyMove);
 
   useEffect(() => {
     if (!isOpen) return;

@@ -5,6 +5,8 @@ import type { Engine } from "@engine/Engine";
 import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 import { useHudMetrics, type HudMetrics } from "@ui/useHudScale";
+import { DEBUG_TOGGLE_BLOCKERS } from "@engine/input/uiIntents";
+import { useIntentEdge } from "@ui/useIntentEdge";
 
 type DebugInfo = NonNullable<ReturnType<Engine["getDebugInfo"]>>;
 
@@ -173,16 +175,14 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const m = useHudMetrics();
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.code === "F3") {
-        e.preventDefault();
-        setShowDebug((d) => !d);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
+  // F3 through the intent layer. DEBUG_TOGGLE_BLOCKERS is empty on purpose:
+  // this listener has never had a guard, so the overlay toggles while chat is
+  // composing, while paused and while a panel is open. That is a latent bug the
+  // plan defers rather than fixes here (see @engine/input/uiIntents), and
+  // InputManager lets F3 past its typing guard for the same reason.
+  useIntentEdge(engineRef, "toggleDebug", DEBUG_TOGGLE_BLOCKERS, () =>
+    setShowDebug((d) => !d),
+  );
 
   useEffect(() => {
     if (!showDebug || !engineRef) return;

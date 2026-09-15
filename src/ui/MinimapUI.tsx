@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import type { Engine } from "@engine/Engine";
-import { useChatStore } from "@store/useChatStore";
 import { useGameStore } from "@store/useGameStore";
 import { useHudMetrics } from "@ui/useHudScale";
-import { useInventoryStore } from "@store/useInventoryStore";
+import { MINIMAP_TOGGLE_BLOCKERS } from "@engine/input/uiIntents";
+import { useIntentEdge } from "@ui/useIntentEdge";
 import { SEA_LEVEL } from "@engine/world/constants";
 import { BLOCK_ID, BLOCK_DEFINITIONS } from "@data/blocks";
 
@@ -160,20 +160,15 @@ export function MinimapUI({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const legendRef = useRef<HTMLDivElement>(null);
 
-  // M key toggles the map — listener stays mounted even while hidden
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.code !== "KeyM" || event.repeat) return;
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
-      if (useChatStore.getState().composing) return;
-      const inv = useInventoryStore.getState();
-      if (inv.isOpen || inv.tableOpen || inv.furnaceOpen || inv.creativeOpen) return;
-      useGameStore.getState().toggleMinimap();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, []);
+  // The `toggleMinimap` intent (M on a keyboard) flips the map, whether or not
+  // it is currently drawn. The old inline guards are now declared:
+  // MINIMAP_TOGGLE_BLOCKERS stops chat composition and open panels but not
+  // death or pause, which is what this handler has always done. The auto-repeat
+  // and text-field checks moved down — the source emits one edge per press and
+  // none at all for a keypress aimed at a text field.
+  useIntentEdge(engineRef, "toggleMinimap", MINIMAP_TOGGLE_BLOCKERS, () =>
+    useGameStore.getState().toggleMinimap(),
+  );
 
   // Imperative draw loop — polls the engine, never touches React state
   useEffect(() => {

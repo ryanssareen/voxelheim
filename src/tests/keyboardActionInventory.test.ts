@@ -6,16 +6,17 @@ import { KEYBIND_GROUPS } from "@data/keybinds";
  * "Every action currently reachable only by keyboard has a touch affordance or
  * is explicitly listed as deferred."
  *
- * Keyboard handling is scattered across the codebase:
- *  - Most gameplay keys go through `InputManager.isKeyDown()`, polled each
- *    frame by `PlayerController` and `Engine`.
- *  - Several React components attach their OWN `window` "keydown" listeners
- *    and bypass InputManager entirely: chat (GameCanvas), debug info (HUD),
- *    minimap toggle (MinimapUI), and the keybinds popup's own Escape/Enter
- *    close handler (KeybindsPopup).
- *  - `Escape` for "Pause" is not read from any keydown handler at all: it
- *    relies on the BROWSER's native pointer-lock-exit behavior, observed via
- *    `InputManager.onPointerLockLost` (wired in `Engine.ts`).
+ * Keyboard handling used to be scattered across the codebase. As of U5 of the
+ * touch/tablet plan it is not:
+ *  - Every key goes through `InputManager`, which maps the code to a named
+ *    intent (`src/engine/input/keyboardMouseSource.ts`). Gameplay reads the
+ *    intent snapshot each frame; the React overlays — chat (GameCanvas), debug
+ *    info (HUD), minimap toggle (MinimapUI), controls popup (KeybindsPopup) —
+ *    subscribe to the same intents through `src/ui/useIntentEdge.ts` instead of
+ *    attaching their own `window` "keydown" listeners.
+ *  - `Escape` for "Pause" is still not read from any keydown handler: it relies
+ *    on the BROWSER's native pointer-lock-exit behavior, observed via
+ *    `InputManager.onPointerLockLost` (wired in `Engine.ts`). U8 changes that.
  *
  * `src/data/keybinds.ts` is a display-only table with nothing enforcing it
  * matches reality. This test hand-encodes the actual inventory (found by
@@ -36,7 +37,7 @@ interface KeyHandlerEntry {
   action: string;
   /** file:line where the key is read/handled. */
   location: string;
-  /** true = polled via InputManager.isKeyDown(); false = own window listener / native browser behavior. */
+  /** true = the press enters through InputManager; false = own window listener / native browser behavior. */
   viaInputManager: boolean;
 }
 
@@ -45,51 +46,76 @@ interface KeyHandlerEntry {
  * responds to, as of this writing. See file header for how this was built.
  */
 const KEY_HANDLER_INVENTORY: readonly KeyHandlerEntry[] = [
-  // --- Movement (PlayerController, polled via InputManager) ---
-  { code: "KeyW", action: "Walk forward", location: "src/engine/player/PlayerController.ts:112", viaInputManager: true },
-  { code: "ArrowUp", action: "Walk forward", location: "src/engine/player/PlayerController.ts:112", viaInputManager: true },
-  { code: "KeyS", action: "Walk backward", location: "src/engine/player/PlayerController.ts:113", viaInputManager: true },
-  { code: "ArrowDown", action: "Walk backward", location: "src/engine/player/PlayerController.ts:113", viaInputManager: true },
-  { code: "KeyA", action: "Walk left", location: "src/engine/player/PlayerController.ts:114", viaInputManager: true },
-  { code: "ArrowLeft", action: "Walk left", location: "src/engine/player/PlayerController.ts:114", viaInputManager: true },
-  { code: "KeyD", action: "Walk right", location: "src/engine/player/PlayerController.ts:115", viaInputManager: true },
-  { code: "ArrowRight", action: "Walk right", location: "src/engine/player/PlayerController.ts:115", viaInputManager: true },
-  { code: "Space", action: "Jump / fly up / double-tap toggles flying (creative)", location: "src/engine/player/PlayerController.ts:74,141,155", viaInputManager: true },
-  { code: "ShiftLeft", action: "Sprint / fly faster", location: "src/engine/player/PlayerController.ts:104", viaInputManager: true },
-  { code: "ShiftRight", action: "Sprint / fly faster", location: "src/engine/player/PlayerController.ts:104", viaInputManager: true },
-  { code: "ControlLeft", action: "Sneak / fly down", location: "src/engine/player/PlayerController.ts:97,143", viaInputManager: true },
-  { code: "ControlRight", action: "Sneak / fly down", location: "src/engine/player/PlayerController.ts:98,143", viaInputManager: true },
-  // NOTE: CapsLock only sneaks; the flight-descend branch (line 143) checks
-  // ControlLeft/ControlRight only, so CapsLock does NOT fly down. keybinds.ts
-  // advertises "Ctrl / CapsLock" -> "Sneak / fly down" as one bundled action,
-  // which slightly overstates what CapsLock does. Pinned as-is (characterization).
-  { code: "CapsLock", action: "Sneak (does not fly down)", location: "src/engine/player/PlayerController.ts:99", viaInputManager: true },
+  // --- Movement: key codes are mapped to intents in keyboardMouseSource.ts and
+  // consumed by PlayerController.update(), which no longer sees codes at all.
+  // InputManager still owns the listeners, so these remain viaInputManager. ---
+  { code: "KeyW", action: "Walk forward", location: "src/engine/input/keyboardMouseSource.ts:40 -> PlayerController.ts:139", viaInputManager: true },
+  { code: "ArrowUp", action: "Walk forward", location: "src/engine/input/keyboardMouseSource.ts:41 -> PlayerController.ts:139", viaInputManager: true },
+  { code: "KeyS", action: "Walk backward", location: "src/engine/input/keyboardMouseSource.ts:42 -> PlayerController.ts:140", viaInputManager: true },
+  { code: "ArrowDown", action: "Walk backward", location: "src/engine/input/keyboardMouseSource.ts:43 -> PlayerController.ts:140", viaInputManager: true },
+  { code: "KeyA", action: "Walk left", location: "src/engine/input/keyboardMouseSource.ts:44 -> PlayerController.ts:142", viaInputManager: true },
+  { code: "ArrowLeft", action: "Walk left", location: "src/engine/input/keyboardMouseSource.ts:45 -> PlayerController.ts:142", viaInputManager: true },
+  { code: "KeyD", action: "Walk right", location: "src/engine/input/keyboardMouseSource.ts:46 -> PlayerController.ts:141", viaInputManager: true },
+  { code: "ArrowRight", action: "Walk right", location: "src/engine/input/keyboardMouseSource.ts:47 -> PlayerController.ts:141", viaInputManager: true },
+  { code: "Space", action: "Jump / fly up / double-tap toggles flying (creative)", location: "src/engine/input/keyboardMouseSource.ts:48,71 -> PlayerController.ts:107,185,201", viaInputManager: true },
+  { code: "ShiftLeft", action: "Sprint / fly faster", location: "src/engine/input/keyboardMouseSource.ts:49 -> PlayerController.ts:129", viaInputManager: true },
+  { code: "ShiftRight", action: "Sprint / fly faster", location: "src/engine/input/keyboardMouseSource.ts:50 -> PlayerController.ts:129", viaInputManager: true },
+  { code: "ControlLeft", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:51 -> PlayerController.ts:126,187", viaInputManager: true },
+  { code: "ControlRight", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:52 -> PlayerController.ts:126,187", viaInputManager: true },
+  // CHANGED in U3 (intent layer): CapsLock used to sneak but NOT fly down,
+  // because the flight-descend branch listed the two Control codes only. All
+  // three codes now produce the one `sneak` intent the controller reads for
+  // both, so CapsLock descends too — which is what keybinds.ts has always
+  // advertised ("Ctrl / CapsLock" -> "Sneak / fly down"). Pinned behaviourally
+  // in src/tests/playerControllerInput.test.ts.
+  { code: "CapsLock", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:53 -> PlayerController.ts:126,187", viaInputManager: true },
 
-  // --- Building / hotbar (Engine, polled via InputManager) ---
-  { code: "Digit1", action: "Pick hotbar slot 1", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit2", action: "Pick hotbar slot 2", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit3", action: "Pick hotbar slot 3", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit4", action: "Pick hotbar slot 4", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit5", action: "Pick hotbar slot 5", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit6", action: "Pick hotbar slot 6", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit7", action: "Pick hotbar slot 7", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit8", action: "Pick hotbar slot 8", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "Digit9", action: "Pick hotbar slot 9", location: "src/engine/Engine.ts:942", viaInputManager: true },
-  { code: "KeyE", action: "Open inventory", location: "src/engine/Engine.ts:874", viaInputManager: true },
-  { code: "KeyQ", action: "Drop held item", location: "src/engine/Engine.ts:948", viaInputManager: true },
+  // --- Building / hotbar. Since U4 the engine reads named edges, not codes:
+  // keyboardMouseSource maps the code to an edge intent and Engine.update()
+  // takes one frame's worth through readEngineFrameEdges(). InputManager still
+  // owns the listeners, so these stay viaInputManager. ---
+  { code: "Digit1", action: "Pick hotbar slot 1", location: "src/engine/input/keyboardMouseSource.ts:81 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit2", action: "Pick hotbar slot 2", location: "src/engine/input/keyboardMouseSource.ts:82 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit3", action: "Pick hotbar slot 3", location: "src/engine/input/keyboardMouseSource.ts:83 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit4", action: "Pick hotbar slot 4", location: "src/engine/input/keyboardMouseSource.ts:84 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit5", action: "Pick hotbar slot 5", location: "src/engine/input/keyboardMouseSource.ts:85 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit6", action: "Pick hotbar slot 6", location: "src/engine/input/keyboardMouseSource.ts:86 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit7", action: "Pick hotbar slot 7", location: "src/engine/input/keyboardMouseSource.ts:87 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit8", action: "Pick hotbar slot 8", location: "src/engine/input/keyboardMouseSource.ts:88 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "Digit9", action: "Pick hotbar slot 9", location: "src/engine/input/keyboardMouseSource.ts:89 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
+  { code: "KeyE", action: "Open inventory", location: "src/engine/input/keyboardMouseSource.ts:74 -> frameIntents.ts:77 -> Engine.ts:894", viaInputManager: true },
+  { code: "KeyQ", action: "Drop held item", location: "src/engine/input/keyboardMouseSource.ts:75 -> frameIntents.ts:83 -> Engine.ts:972", viaInputManager: true },
 
-  // --- View (Engine, polled via InputManager) ---
-  { code: "KeyV", action: "Zoom", location: "src/engine/Engine.ts:751", viaInputManager: true },
-  { code: "KeyP", action: "Change camera mode", location: "src/engine/Engine.ts:936", viaInputManager: true },
+  // --- View (Engine, read from the intent snapshot; V is a held intent, P an edge) ---
+  { code: "KeyV", action: "Zoom", location: "src/engine/input/keyboardMouseSource.ts:56 -> Engine.ts:761", viaInputManager: true },
+  { code: "KeyP", action: "Change camera mode", location: "src/engine/input/keyboardMouseSource.ts:76 -> frameIntents.ts:80 -> Engine.ts:964", viaInputManager: true },
 
-  // --- View: components that bypass InputManager with their own window listener ---
-  { code: "KeyM", action: "Toggle minimap", location: "src/ui/MinimapUI.tsx:166", viaInputManager: false },
-  { code: "KeyT", action: "Open chat", location: "src/ui/GameCanvas.tsx:78", viaInputManager: false },
-  { code: "F3", action: "Toggle debug info", location: "src/ui/HUD.tsx:178", viaInputManager: false },
+  // --- View: React overlays. Since U5 these no longer attach their own window
+  // keydown listeners — keyboardMouseSource maps the code to an edge intent,
+  // InputManager pushes it, and the component reacts through
+  // `useIntentEdge` (src/ui/useIntentEdge.ts). Hence viaInputManager: true. ---
+  { code: "KeyM", action: "Toggle minimap", location: "src/engine/input/keyboardMouseSource.ts:84 -> MinimapUI.tsx:169", viaInputManager: true },
+  { code: "KeyT", action: "Open chat", location: "src/engine/input/keyboardMouseSource.ts:83 -> GameCanvas.tsx:86", viaInputManager: true },
+  // F3 additionally bypasses InputManager's typing guard
+  // (UNGUARDED_UI_CODES), because its pre-U5 listener had no such guard and
+  // the overlay therefore toggles while chat is composing. Preserved
+  // deliberately; the plan's Scope Boundaries defer the fix.
+  { code: "F3", action: "Toggle debug info", location: "src/engine/input/keyboardMouseSource.ts:85 -> HUD.tsx:183", viaInputManager: true },
 
-  // --- Escape: no keydown handler drives "Pause" at all. It rides the
-  // browser's native pointer-lock-exit, observed via onPointerLockLost. ---
-  { code: "Escape", action: "Pause (via native pointer-lock release, not a keydown listener)", location: "src/engine/Engine.ts:224 (InputManager.onPointerLockLost)", viaInputManager: false },
+  // --- Escape: still no keydown handler drives "Pause". It rides the
+  // browser's native pointer-lock-exit, observed via onPointerLockLost, which
+  // is why this stays viaInputManager: false. Escape *does* now also produce a
+  // `pause` intent, which the controls popup consumes exclusively while it is
+  // open (KeybindsPopup.tsx:41) — nothing else reads it yet. U8 makes pause a
+  // real intent consumer and this entry changes then. ---
+  { code: "Escape", action: "Pause (via native pointer-lock release, not a keydown listener)", location: "src/engine/Engine.ts:238 (InputManager.onPointerLockLost)", viaInputManager: false },
+
+  // NOT LISTED: `Enter`. The controls popup has always closed on Enter (a
+  // capture-phase window listener before U5, the `confirm` intent after), and
+  // this inventory has never carried it, because `src/data/keybinds.ts` does
+  // not advertise Enter and the cross-checks below require every pinned code to
+  // be advertised. Enter is modal-dismissal, not a game bind. Recorded here so
+  // the omission is a decision rather than an oversight.
 ] as const;
 
 /** Maps a keybinds.ts key label to the KeyboardEvent.code values it stands for. */
@@ -180,11 +206,19 @@ describe("keyboard action inventory (R23 audit)", () => {
     }
   });
 
+  /**
+   * U5 emptied this list of everything but Escape: chat, the debug overlay and
+   * the minimap toggle used to own `window` keydown listeners and now consume
+   * intents, so every keyboard action except Escape enters through
+   * InputManager. Escape remains outside it because "Pause" is still the
+   * browser's native pointer-lock release rather than any handler of ours —
+   * U8 is what changes that.
+   */
   it("pins which codes bypass InputManager (own window listeners or native browser behavior)", () => {
     const bypassing = KEY_HANDLER_INVENTORY.filter((e) => !e.viaInputManager)
       .map((e) => e.code)
       .sort();
-    expect(bypassing).toEqual(["Escape", "F3", "KeyM", "KeyT"]);
+    expect(bypassing).toEqual(["Escape"]);
   });
 
   it("pins the total set of handled key codes, so a new/removed handler must update this file", () => {
