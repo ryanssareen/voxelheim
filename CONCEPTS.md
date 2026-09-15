@@ -57,6 +57,30 @@ A contiguous range of a screen's flat slot space with a role, an `accepts` predi
 ### Quick-Move
 Shift-click transfer of a stack into the best accepting region: partial stacks of the same item first, then empty slots, whole stack or as much as fits, remainder left at the source. Conservation is the acceptance test: the multiset of items across every slot and the cursor never changes.
 
+## Input
+
+### Intent
+A named thing the player wants to do — move, look, jump, mine-or-attack, place-or-use — as distinct from the key or button that asked for it. Gameplay code consumes intents; only an Input Source knows about devices. This is what lets a finger and a mouse drive identical behaviour without either being privileged.
+
+### Input Source
+A producer of Intents from one kind of device. Exactly one is driving at a time, and which one is a runtime property rather than a build or a device class: it changes the moment a different device is used, so a machine with both a keyboard and a touchscreen works without choosing between them.
+
+### Intent Snapshot
+The single per-frame view of every Intent, shared by the frame loop, the player controller and the UI. It expresses three temporal shapes, because collapsing them loses behaviour: **held** state that stays true while a control is down, **edges** that carry the moment of each press, and continuous **deltas**.
+
+Edges carry their timestamp because some behaviour is defined by the gap between two presses rather than by either one. Each consumer reads edges through its own cursor and sees every edge exactly once; a shared consume-on-read queue would let whichever consumer ran first silently starve the rest.
+
+### Suppression
+The explicit state meaning *gameplay input is being ignored right now*, naming its reason. Deliberately not the same as no controls being held: the game still runs physics while paused or while a panel is open, so the two conditions must be distinguishable.
+
+Lifting suppression discards whatever accumulated during it — buffered edges and accumulated look deltas alike. Keeping either would fire a stale action or snap the camera on the frame play resumes.
+
+### Touch Resolution
+The answer to "how does a finger do this?" for one action the keyboard binds — a **gesture** (an unlabelled movement on a surface showing no control), a **control** (something on screen a player can find by looking), or an explicit **deferral** with its reason. Every keyboard action has exactly one, recorded as data, because the failure it guards against is silent: an action with no touch route does not error, it simply never happens, which is indistinguishable from a player who never tried it.
+
+### Device Profile
+The render and simulation distance a device starts at, chosen from which Input Source is driving. It is a *starting point*, not a setting: the moment a player picks a distance themselves that choice is pinned and no later profile may overwrite it, in either direction. The pin has to be recorded separately from the value, because a saved number cannot say whether anyone chose it.
+
 ## Simulation
 
 ### Random Tick

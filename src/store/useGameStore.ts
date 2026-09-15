@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { InputSource } from "@engine/input/intents";
 import { getArmorDef } from "@data/items";
 import { useHotbarStore } from "@store/useHotbarStore";
+import { useSettingsStore } from "@store/useSettingsStore";
 import { BLOCK_ID } from "@data/blocks";
 
 export type DeathCause =
@@ -36,6 +37,17 @@ interface GameState {
   /** Whether the minimap overlay is shown (M key toggles). */
   minimapVisible: boolean;
   /**
+   * Whether the F3 debug overlay is drawn.
+   *
+   * Store state rather than `useState` inside `HUD` because the pause menu is
+   * the touch affordance for it (R23) and cannot reach into another component's
+   * local state. Pressing the `toggleDebug` intent from there would have worked
+   * only by accident — that intent's blocker list is empty, a latent bug the
+   * plan defers rather than fixes — so the button would have died silently the
+   * day someone fixed it.
+   */
+  debugVisible: boolean;
+  /**
    * Which device is driving right now.
    *
    * Lives here rather than only inside the engine because the UI has to see it:
@@ -48,6 +60,7 @@ interface GameState {
   inputSource: InputSource;
   setGameMode: (mode: GameMode) => void;
   toggleMinimap: () => void;
+  toggleDebug: () => void;
   setHardcoreLocked: (locked: boolean) => void;
   collectShard: () => void;
   resetObjective: () => void;
@@ -141,10 +154,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastDamageTime: 0,
   lastDamageCause: null,
   minimapVisible: true,
+  debugVisible: false,
   inputSource: "keyboardMouse",
 
   setGameMode: (mode: GameMode) => set({ gameMode: mode }),
   toggleMinimap: () => set((s) => ({ minimapVisible: !s.minimapVisible })),
+  toggleDebug: () => set((s) => ({ debugVisible: !s.debugVisible })),
   setHardcoreLocked: (locked: boolean) => set({ hardcoreLocked: locked }),
 
   collectShard: () => {
@@ -170,6 +185,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   setInputSource: (source: InputSource) => {
     if (get().inputSource === source) return;
     set({ inputSource: source });
+    // R29: the device that is driving decides the distance defaults, and it is
+    // only knowable here — touch arms on the first touch event (R27), long
+    // after any store is constructed, and can change back on a tablet with a
+    // keyboard (R28). Settings the player pinned themselves are left alone.
+    //
+    // Inside the change guard on purpose: this is called every frame, and
+    // re-resolving 60 times a second would write to localStorage at frame rate.
+    useSettingsStore.getState().applyDeviceProfile(source);
   },
   setDead: (dead: boolean) => set({ isDead: dead }),
   setBreakProgress: (progress: number) => set({ breakProgress: progress }),

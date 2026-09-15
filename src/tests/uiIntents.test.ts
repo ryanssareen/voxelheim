@@ -13,6 +13,7 @@ import {
   type UiInputState,
 } from "@engine/input/uiIntents";
 import { KEY_EDGE_INTENTS } from "@engine/input/keyboardMouseSource";
+import { TouchSource } from "@engine/input/touchSource";
 import { WALKTHROUGH_STEPS, useWalkthroughStore } from "@store/useWalkthroughStore";
 import { installWindow, keyboardHarness, removeWindow } from "./helpers";
 
@@ -405,6 +406,43 @@ describe("walkthrough movement step reads intents, not key codes", () => {
     if (movementIntended(kb.intents)) useWalkthroughStore.getState().notify("move");
 
     expect(useWalkthroughStore.getState().activeIndex).toBe(1);
+  });
+
+  it("advances that step from a real joystick drag, end to end (R24)", () => {
+    // The whole chain rather than a hand-written `move` delta: a thumb lands in
+    // the left region, slides, and the walkthrough moves on. Onboarding is the
+    // one screen where a stalled first step is unrecoverable — a player who
+    // cannot complete "move" never sees step two, and the overlay sits there
+    // telling them to do the thing they are already doing.
+    useWalkthroughStore.getState().startIfUnseen();
+
+    const state = new IntentState();
+    const touch = new TouchSource(state, () => 1000);
+    touch.setSurfaceWidth(1000);
+
+    touch.touchStart([{ id: 1, x: 100, y: 300 }]);
+    expect(movementIntended(state)).toBe(false); // anchored, not yet deflected
+
+    touch.touchMove([{ id: 1, x: 100, y: 260 }]);
+    if (movementIntended(state)) useWalkthroughStore.getState().notify("move");
+
+    expect(useWalkthroughStore.getState().activeIndex).toBe(1);
+  });
+
+  it("does not advance it from a look drag on the play surface", () => {
+    // Looking around is not walking. The step would otherwise complete itself
+    // the moment a first-time player oriented the camera, teaching nothing.
+    useWalkthroughStore.getState().startIfUnseen();
+
+    const state = new IntentState();
+    const touch = new TouchSource(state, () => 1000);
+    touch.setSurfaceWidth(1000);
+
+    touch.touchStart([{ id: 1, x: 700, y: 300 }]);
+    touch.touchMove([{ id: 1, x: 760, y: 300 }]);
+
+    expect(movementIntended(state)).toBe(false);
+    expect(useWalkthroughStore.getState().activeIndex).toBe(0);
   });
 });
 

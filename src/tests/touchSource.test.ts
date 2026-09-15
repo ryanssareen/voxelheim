@@ -147,6 +147,119 @@ describe("TouchSource gestures", () => {
     });
   });
 
+  describe("play surface: long hold eats", () => {
+    /**
+     * The eat gate is a *level* read of `secondary`, and before this the touch
+     * source produced no such level anywhere: its only hold asserted `primary`
+     * and its only `secondary` signal was the tap edge. Food was therefore
+     * unreachable on a phone — not broken, absent, and silently so, since a
+     * closed gate looks exactly like a player who is not hungry.
+     */
+    it("asserts secondary once the longer threshold passes, alongside primary", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+
+      clock += 200;
+      source.endFrame();
+      expect(state.isHeld("primary")).toBe(true);
+      expect(state.isHeld("secondary")).toBe(false);
+
+      clock += 300;
+      source.endFrame();
+      expect(state.isHeld("primary")).toBe(true);
+      expect(state.isHeld("secondary")).toBe(true);
+    });
+
+    it("keeps asserting it on later frames with no further touch events", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 500;
+      source.endFrame();
+
+      for (let frame = 0; frame < 3; frame++) {
+        clock += 16;
+        state.clearDeltas();
+        source.endFrame();
+        expect(state.isHeld("secondary")).toBe(true);
+      }
+    });
+
+    it("never pushes a place edge off the back of a bite", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 600;
+      source.endFrame();
+      end(1, ON_PLAY_SURFACE, 300);
+
+      // `secondary` held and `secondary` edge are different readings of the
+      // same control. A hold must produce only the first, or every bite would
+      // place a block when the finger came off.
+      expect(edges("engine")).toEqual([]);
+    });
+
+    it("cancels the bite on lift — the gate closes with the finger", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 600;
+      source.endFrame();
+      expect(state.isHeld("secondary")).toBe(true);
+
+      end(1, ON_PLAY_SURFACE, 300);
+      expect(state.isHeld("secondary")).toBe(false);
+      expect(state.isHeld("primary")).toBe(false);
+    });
+
+    it("cancels the bite when the browser takes the contact away", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 600;
+      source.endFrame();
+
+      source.touchCancel([{ id: 1, x: ON_PLAY_SURFACE, y: 300 }]);
+      expect(state.isHeld("secondary")).toBe(false);
+      expect(state.isHeld("primary")).toBe(false);
+    });
+
+    it("cancels the bite when the hold starts sliding into a look", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 600;
+      source.endFrame();
+      expect(state.isHeld("secondary")).toBe(true);
+
+      move(1, ON_PLAY_SURFACE + 40, 300);
+      expect(state.isHeld("secondary")).toBe(false);
+      expect(state.isHeld("primary")).toBe(false);
+    });
+
+    it("does not arm on a contact that converted to a look before the threshold", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 50;
+      move(1, ON_PLAY_SURFACE + 40, 300);
+
+      clock += 600;
+      source.endFrame();
+      expect(state.isHeld("secondary")).toBe(false);
+    });
+
+    it("releaseAll drops the bite with everything else", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 600;
+      source.endFrame();
+
+      source.releaseAll();
+      expect(state.isHeld("secondary")).toBe(false);
+      expect(state.isHeld("primary")).toBe(false);
+    });
+
+    it("re-arms on a fresh hold after the previous one was released", () => {
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 600;
+      source.endFrame();
+      end(1, ON_PLAY_SURFACE, 300);
+      expect(state.isHeld("secondary")).toBe(false);
+
+      start(2, ON_PLAY_SURFACE, 300);
+      clock += 600;
+      source.endFrame();
+      expect(state.isHeld("secondary")).toBe(true);
+    });
+  });
+
   describe("play surface: drag looks", () => {
     it("cancels a hold in progress and looks instead", () => {
       start(1, ON_PLAY_SURFACE, 300);
@@ -308,6 +421,111 @@ describe("TouchSource gestures", () => {
       clock += 50;
       blank.touchEnd([{ id: 1, x: 5, y: 500 }]);
       expect(edges("blank")).toEqual(["secondary"]);
+    });
+  });
+
+  describe("joystick double-tap sprints (R23)", () => {
+    /**
+     * Sprint is a level read with no key to hold on a phone. The control
+     * already under the thumb carries it, and the sprint lasts exactly as long
+     * as that contact — the same relationship Shift has with a keyboard, and no
+     * latch that could drift out of step with what the overlay draws.
+     */
+    it("holds sprint when the thumb comes straight back down", () => {
+      start(1, IN_LEFT_REGION, 300);
+      clock += 100;
+      end(1, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(false);
+
+      clock += 100;
+      start(2, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(true);
+    });
+
+    it("does not sprint on the first contact of a session", () => {
+      // The double-tap clock starts at negative infinity precisely so this
+      // cannot read as the second half of a tap that never happened.
+      start(1, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("does not sprint when the second landing is too late", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 260;
+      start(2, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("measures the window from the lift, so a long walk then a double-tap works", () => {
+      start(1, IN_LEFT_REGION, 300);
+      clock += 5000;
+      move(1, IN_LEFT_REGION + 30, 300);
+      end(1, IN_LEFT_REGION + 30, 300);
+      clock += 80;
+      start(2, IN_LEFT_REGION, 300);
+
+      expect(state.isHeld("sprint")).toBe(true);
+    });
+
+    it("keeps sprinting while the thumb steers, and stops when it lifts", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      move(2, IN_LEFT_REGION + 40, 260);
+      source.endFrame();
+      expect(state.isHeld("sprint")).toBe(true);
+
+      end(2, IN_LEFT_REGION + 40, 260);
+      expect(state.isHeld("sprint")).toBe(false);
+      expect(state.delta("move")).toEqual({ x: 0, y: 0 });
+    });
+
+    it("does not arm the next contact off a cancelled one", () => {
+      // The browser took the contact — a call, a system gesture. The player did
+      // not lift, so the next thumb-down is a fresh press rather than the back
+      // half of a double-tap they never made.
+      start(1, IN_LEFT_REGION, 300);
+      source.touchCancel([{ id: 1, x: IN_LEFT_REGION, y: 300 }]);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("drops sprint when the browser cancels the sprinting contact", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(true);
+
+      source.touchCancel([{ id: 2, x: IN_LEFT_REGION, y: 300 }]);
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("releaseAll drops a live sprint", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      source.releaseAll();
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("is not armed by a tap on the play surface", () => {
+      // The play surface and the joystick are different controls. A tap to
+      // place a block followed by a thumb-down on the stick is not a sprint.
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 50;
+      end(1, ON_PLAY_SURFACE, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      expect(state.isHeld("sprint")).toBe(false);
     });
   });
 

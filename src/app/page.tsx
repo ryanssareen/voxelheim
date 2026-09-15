@@ -244,8 +244,16 @@ export default function Home() {
         setPlayError("Progress won't save — this browser's storage is blocked.");
         router.push(`/game?worldId=${DEMO_WORLD_ID}`);
       }
-    } catch {
-      setPlayError("Couldn't start the game. Try reloading the page.");
+    } catch (err) {
+      // Only the dynamic import reaches here, and a chunk that fails to load
+      // leaves no other trace — swallowing the cause turns a broken Play button
+      // into an unfalsifiable "try reloading".
+      console.error("Failed to start the demo world:", err);
+      setPlayError(
+        err instanceof Error
+          ? `Couldn't start the game: ${err.message}`
+          : "Couldn't start the game. Try reloading the page."
+      );
       setStartingDemo(false);
     }
   };

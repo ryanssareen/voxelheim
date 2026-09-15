@@ -25,6 +25,9 @@ import type { IntentState } from "@engine/input/snapshot";
  *  - **Left region** — the movement joystick. It anchors wherever the thumb
  *    first lands (R6) rather than sitting at a fixed spot, because a thumb that
  *    has to find a fixed pad first is a thumb that is not moving the player.
+ *    A thumb that comes straight back down after lifting holds `sprint` for
+ *    that contact's life, which is how a phone reaches an intent that has no
+ *    key to hold down.
  *  - **Everything else** — the play surface, which carries all three of look,
  *    mine and place with no buttons of its own (R7, R8). A contact there starts
  *    undecided and resolves into exactly one of:
@@ -32,7 +35,10 @@ import type { IntentState } from "@engine/input/snapshot";
  *        edge a right-click pushes, so placing runs the identical engine path.
  *      - *hold* — still past the hold threshold: `primary` held for as long as
  *        the finger stays down, which is mine-or-attack resolved by what is
- *        targeted exactly as a held left button is.
+ *        targeted exactly as a held left button is. Keep holding past the
+ *        longer eat threshold and `secondary` is asserted alongside it, which
+ *        is the level read the eat gate consumes — desktop's two buttons
+ *        separated in time rather than across controls.
  *      - *look* — moved past the look threshold: `look` deltas, and any hold it
  *        had already earned is released so break progress stops accruing.
  *
@@ -78,6 +84,37 @@ export interface TouchSourceConfig {
    * blocks while mining; longer reads as lag.
    */
   holdThresholdMs: number;
+  /**
+   * How long a still contact must last before it *also* asserts `secondary` as
+   * a level read — the reading the eat gate consumes.
+   *
+   * Touch has one hold to spend and desktop spends two buttons, so the two
+   * meanings are separated in time rather than across controls: a short hold is
+   * mine/attack, and a hold that outlasts this is additionally a bite. Both
+   * intents stay asserted, which is safe because `secondary`'s *edge* is what
+   * places a block and a hold never pushes one, and because the eat gate is
+   * already closed whenever the player is aiming at a block — so the gesture
+   * that mines and the gesture that eats can never both resolve.
+   *
+   * Necessarily longer than {@link holdThresholdMs}: arming both at once would
+   * make every mine attempt in open air a bite. It is dead time in front of the
+   * food's own eat duration, so it buys cancellability at the cost of felt
+   * latency, and like every threshold here the number is reasoned rather than
+   * measured on a device.
+   */
+  eatHoldThresholdMs: number;
+  /**
+   * Window in which a second thumb-down in the left region turns the joystick
+   * into a sprint, ms.
+   *
+   * Sprint is a level read with no key to hold on a phone, and a dedicated
+   * button would cost play area for something the player wants *while already
+   * walking* — so the control that is already under the thumb carries it. The
+   * sprint lasts exactly as long as that contact: lifting the thumb ends it,
+   * which is the same relationship `Shift` has with a keyboard and needs no
+   * latch that could desync from what the overlay draws.
+   */
+  sprintDoubleTapMs: number;
 }
 
 export const DEFAULT_TOUCH_CONFIG: TouchSourceConfig = {
@@ -85,6 +122,8 @@ export const DEFAULT_TOUCH_CONFIG: TouchSourceConfig = {
   joystickRadiusPx: 56,
   lookThresholdPx: 10,
   holdThresholdMs: 200,
+  eatHoldThresholdMs: 500,
+  sprintDoubleTapMs: 260,
 };
 
 /** What a play-surface contact has resolved into so far. */
@@ -96,6 +135,8 @@ interface JoystickContact {
   anchorY: number;
   x: number;
   y: number;
+  /** Whether this contact re-landed fast enough to hold `sprint` for its life. */
+  sprinting: boolean;
 }
 
 interface PlayContact {
@@ -104,9 +145,11 @@ interface PlayContact {
   startY: number;
   lastX: number;
   lastY: number;
-  /** Press timestamp, for the hold threshold. */
+  /** Press timestamp, for both hold thresholds. */
   at: number;
   phase: PlayPhase;
+  /** Whether this contact has outlasted the eat threshold and holds `secondary`. */
+  eating: boolean;
 }
 
 /** Read-only view of the live joystick, for the U7 overlay to draw. */
@@ -121,6 +164,12 @@ export interface JoystickView {
 
 export class TouchSource {
   private joystick: JoystickContact | null = null;
+  /**
+   * When the last joystick contact lifted, for the sprint double-tap. Starts at
+   * negative infinity so the very first thumb-down of a session can never read
+   * as the second half of a double-tap against an unset clock.
+   */
+  private lastJoystickEndAt = Number.NEGATIVE_INFINITY;
   private play: PlayContact | null = null;
   /** Held intents this source is currently asserting, via on-screen buttons. */
   private readonly buttonsHeld = new Set<HeldIntent>();
@@ -184,13 +233,20 @@ export class TouchSource {
 
     for (const point of points) {
       if (!this.joystick && this.isInLeftRegion(point.x)) {
+        // A thumb that comes straight back down after lifting is asking to
+        // sprint. Measured from the previous contact's *lift* rather than its
+        // press, so holding the stick for a while and then double-tapping works
+        // the same as a quick double-tap from rest.
+        const sprinting = this.now() - this.lastJoystickEndAt < this.config.sprintDoubleTapMs;
         this.joystick = {
           id: point.id,
           anchorX: point.x,
           anchorY: point.y,
           x: point.x,
           y: point.y,
+          sprinting,
         };
+        if (sprinting) this.state.setHeld("sprint", true);
         // Anchored means centred: the stick reads zero until the thumb slides.
         this.state.setDelta("move", { x: 0, y: 0 });
         continue;
@@ -205,6 +261,7 @@ export class TouchSource {
           lastY: point.y,
           at: this.now(),
           phase: "pending",
+          eating: false,
         };
         continue;
       }
@@ -233,7 +290,7 @@ export class TouchSource {
         // A hold that starts sliding is a look. Dropping `primary` here is what
         // stops break progress accruing (BlockInteraction resets the moment the
         // level read goes false) — the finger is aiming now, not mining.
-        if (play.phase === "hold") this.state.setHeld("primary", false);
+        if (play.phase === "hold") this.releaseHold(play);
         play.phase = "look";
         // The movement that crossed the threshold is deliberately not looked
         // with: it is the slop a tap is allowed, and spending it would make
@@ -265,8 +322,7 @@ export class TouchSource {
   touchEnd(points: readonly TouchPoint[]): void {
     for (const point of points) {
       if (this.joystick && this.joystick.id === point.id) {
-        this.joystick = null;
-        this.state.setDelta("move", { x: 0, y: 0 });
+        this.releaseJoystick(this.now());
         continue;
       }
 
@@ -278,11 +334,13 @@ export class TouchSource {
         // right-click pushes, so place runs the identical engine path.
         //
         // Note it pushes the edge only, never the `secondary` *level* read the
-        // eat gate consumes. Eating on touch is R26/U12's longer hold with its
-        // own cancellable indicator; a tap must not smuggle a bite in.
+        // eat gate consumes: a tap must not smuggle a bite in. Eating is the
+        // separate, longer hold above, cancellable by lifting the finger — the
+        // gate closes the moment `secondary` goes false and the engine resets
+        // the timer.
         this.state.pushEdge("secondary", this.now());
       } else if (play.phase === "hold") {
-        this.state.setHeld("primary", false);
+        this.releaseHold(play);
       }
 
       this.play = null;
@@ -300,14 +358,16 @@ export class TouchSource {
   touchCancel(points: readonly TouchPoint[]): void {
     for (const point of points) {
       if (this.joystick && this.joystick.id === point.id) {
-        this.joystick = null;
-        this.state.setDelta("move", { x: 0, y: 0 });
+        // Negative infinity, not the current time: the player did not lift the
+        // thumb, the browser took it, so the next thumb-down is a fresh press
+        // rather than the second half of a double-tap they never made.
+        this.releaseJoystick(Number.NEGATIVE_INFINITY);
         continue;
       }
 
       const play = this.play;
       if (!play || play.id !== point.id) continue;
-      if (play.phase === "hold") this.state.setHeld("primary", false);
+      if (play.phase === "hold") this.releaseHold(play);
       this.play = null;
     }
   }
@@ -370,15 +430,29 @@ export class TouchSource {
    * them with it.
    */
   releaseAll(): void {
-    if (this.play?.phase === "hold") this.state.setHeld("primary", false);
+    if (this.play?.phase === "hold") this.releaseHold(this.play);
     for (const intent of this.buttonsHeld) this.state.setHeld(intent, false);
     this.buttonsHeld.clear();
-    this.joystick = null;
+    if (this.joystick) this.releaseJoystick(Number.NEGATIVE_INFINITY);
     this.play = null;
     this.state.setDelta("move", { x: 0, y: 0 });
   }
 
   // ---------------------------------------------------------------- internals
+
+  /**
+   * Drops the joystick contact and whatever it was asserting.
+   *
+   * `endedAt` is what a following thumb-down measures its double-tap against —
+   * the real clock for a lift the player made, negative infinity for one they
+   * did not.
+   */
+  private releaseJoystick(endedAt: number): void {
+    if (this.joystick?.sprinting) this.state.setHeld("sprint", false);
+    this.joystick = null;
+    this.lastJoystickEndAt = endedAt;
+    this.state.setDelta("move", { x: 0, y: 0 });
+  }
 
   private isInLeftRegion(x: number): boolean {
     return x < this.surfaceWidth * this.config.leftRegionFraction;
@@ -406,12 +480,45 @@ export class TouchSource {
     });
   }
 
-  /** Turns a pending contact that has outlasted the threshold into a hold. */
+  /**
+   * Advances a still contact through both hold thresholds.
+   *
+   * Two promotions rather than one, in order: pending → hold asserts `primary`,
+   * and a hold that keeps going past the longer threshold additionally asserts
+   * `secondary` so the eat gate can open. A contact that has already converted
+   * to a look is past both — it is aiming, not pressing.
+   */
   private promoteHold(): void {
     const play = this.play;
-    if (!play || play.phase !== "pending") return;
-    if (this.now() - play.at < this.config.holdThresholdMs) return;
-    play.phase = "hold";
-    this.state.setHeld("primary", true);
+    if (!play || play.phase === "look") return;
+
+    const elapsed = this.now() - play.at;
+
+    if (play.phase === "pending") {
+      if (elapsed < this.config.holdThresholdMs) return;
+      play.phase = "hold";
+      this.state.setHeld("primary", true);
+    }
+
+    if (!play.eating && elapsed >= this.config.eatHoldThresholdMs) {
+      play.eating = true;
+      this.state.setHeld("secondary", true);
+    }
+  }
+
+  /**
+   * Drops whatever level reads a hold contact had earned.
+   *
+   * One place rather than four, because `secondary` is only ever asserted
+   * alongside `primary` and releasing one without the other would leave the eat
+   * gate open on a finger that is no longer down — a bite the player cannot
+   * see, cancel, or explain.
+   */
+  private releaseHold(play: PlayContact): void {
+    this.state.setHeld("primary", false);
+    if (play.eating) {
+      this.state.setHeld("secondary", false);
+      play.eating = false;
+    }
   }
 }

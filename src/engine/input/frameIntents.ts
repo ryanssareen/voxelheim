@@ -43,6 +43,15 @@ export interface EngineFrameEdges {
    * is why the two readings have to stay separate all the way down.
    */
   place: boolean;
+  /**
+   * Flip the zoom latch.
+   *
+   * Zoom is a level read on a keyboard — the FOV lerps toward the zoom target
+   * for as long as V is down — and touch has no hold to spend on it, so the
+   * same control is also expressed as an edge. `Engine` keeps the latch; this
+   * only reports that the player asked for it to flip.
+   */
+  toggleZoom: boolean;
   /** Hotbar index (0-based) to select, or null. */
   hotbarSlot: number | null;
 }
@@ -69,6 +78,7 @@ export function readEngineFrameEdges(intents: IntentSnapshot): EngineFrameEdges 
     cycleCamera: false,
     dropItem: false,
     place: false,
+    toggleZoom: false,
     hotbarSlot: null,
   };
 
@@ -85,6 +95,9 @@ export function readEngineFrameEdges(intents: IntentSnapshot): EngineFrameEdges 
         break;
       case "secondary":
         frame.place = true;
+        break;
+      case "zoom":
+        frame.toggleZoom = true;
         break;
       default: {
         // Hotbar presses are one intent per slot. Two in a frame is a human

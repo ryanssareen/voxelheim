@@ -12,6 +12,7 @@ import {
 import { BLOCK_DEFINITIONS, BLOCK_ID } from "@data/blocks";
 import { getToolDef, getArmorDef } from "@data/items";
 import { ItemIcon, InventorySlot, CursorItemOverlay } from "@ui/ItemIcon";
+import { useSlotGestures, SLOT_TOUCH_STYLE } from "@ui/useSlotGestures";
 import { useSlotInteractions, ARMOR_LABELS } from "@ui/useSlotInteractions";
 import { usePanelMetrics } from "@ui/usePanelMetrics";
 
@@ -53,8 +54,15 @@ function CreativePanel() {
   const searchRef = useRef<HTMLInputElement>(null);
   const metrics = usePanelMetrics();
 
-  const { handleSlotClick, handleArmorClick, handleOffhandClick } =
+  const { handleSlotAction, handleArmorAction, handleOffhandAction } =
     useSlotInteractions();
+  const slotGestures = useSlotGestures(cursorItem.count === 0);
+  const gestures = (i: number) =>
+    slotGestures(`slot:${i}`, (a) => handleSlotAction(a, i));
+  const armorGestures = (i: number) =>
+    slotGestures(`armor:${i}`, (a) => handleArmorAction(a, i));
+  const offhandGestures = slotGestures("offhand", (a) => handleOffhandAction(a));
+
 
   // Autofocus the search box when the UI opens
   useEffect(() => {
@@ -143,10 +151,10 @@ function CreativePanel() {
   // Cursor mechanics on the hotbar, plus keep click-to-select working
   const handleHotbarClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>, index: number) => {
-      handleSlotClick(e, index);
+      handleSlotAction(e.shiftKey ? "quickMove" : "primary", index);
       useHotbarStore.getState().select(index);
     },
-    [handleSlotClick]
+    [handleSlotAction]
   );
 
   const hotbarSlots = slots.slice(0, HOTBAR_SLOTS);
@@ -251,7 +259,8 @@ function CreativePanel() {
               <InventorySlot
                 key={`armor-${i}`}
                 item={slot}
-                onClick={(e) => handleArmorClick(e, i)}
+                {...armorGestures(i)}
+                style={SLOT_TOUCH_STYLE}
                 size={S}
                 label={ARMOR_LABELS[i]}
               />
@@ -260,7 +269,8 @@ function CreativePanel() {
               <p className="text-[11px] font-mono text-[#606060] mb-0.5">Offhand</p>
               <InventorySlot
                 item={offhand}
-                onClick={handleOffhandClick}
+                {...offhandGestures}
+                style={SLOT_TOUCH_STYLE}
                 size={S}
                 label="Off"
               />
@@ -275,7 +285,8 @@ function CreativePanel() {
                   <InventorySlot
                     key={`inv-${i}`}
                     item={slot}
-                    onClick={(e) => handleSlotClick(e, HOTBAR_SLOTS + i)}
+                    {...gestures(HOTBAR_SLOTS + i)}
+                    style={SLOT_TOUCH_STYLE}
                     size={S}
                   />
                 ))}

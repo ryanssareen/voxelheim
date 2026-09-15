@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  NO_INSETS,
+  useViewportEnv,
+  type Insets,
+  type ViewportEnv,
+} from "@ui/useViewportEnv";
 
 /**
  * The HUD is drawn, not CSS-scaled: every SVG and slot gets a real pixel size
@@ -22,7 +27,13 @@ export interface HudMetrics {
   statGap: number;
   /** Gap between the health group and the hunger group, px. */
   barGap: number;
-  /** Distance from the viewport bottom to the health / hunger row, px. */
+  /**
+   * Distance from the viewport bottom to the health / hunger row, px.
+   * Includes the bottom safe-area inset, so the row clears the home indicator.
+   * Other insets are not mirrored here — read them from `useViewportEnv`, since
+   * every field of this interface is a strictly positive size and an inset is
+   * legitimately zero.
+   */
   statBottom: number;
   crosshair: number;
   /** Hotbar slot height, px. Slots flex horizontally. */
@@ -67,7 +78,12 @@ const MINIMAP_BASE = 176;
  * dimension, and per-widget width budgets so the stat row and the hotbar can
  * never overflow or overlap on a narrow screen.
  */
-export function hudMetrics(viewportW: number, viewportH: number): HudMetrics {
+export function hudMetrics(
+  viewportW: number,
+  viewportH: number,
+  env?: ViewportEnv
+): HudMetrics {
+  const insets: Insets = env?.insets ?? NO_INSETS;
   const vw = Math.max(1, viewportW);
   const vh = Math.max(1, viewportH);
   // The floor can sit fairly high because the per-widget width budgets below
@@ -102,7 +118,7 @@ export function hudMetrics(viewportW: number, viewportH: number): HudMetrics {
     stat,
     statGap,
     barGap,
-    statBottom,
+    statBottom: statBottom + insets.bottom,
     crosshair: Math.round(clamp(30 * scale, 18, 38)),
     hotbarSlot,
     hotbarIcon,
@@ -130,14 +146,6 @@ export function statRowWidth(m: HudMetrics): number {
 
 /** Live HUD metrics for the current viewport. */
 export function useHudMetrics(): HudMetrics {
-  const [metrics, setMetrics] = useState<HudMetrics>(() => hudMetrics(DESIGN_W, DESIGN_H));
-
-  useEffect(() => {
-    const compute = () => setMetrics(hudMetrics(window.innerWidth, window.innerHeight));
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
-  }, []);
-
-  return metrics;
+  const env = useViewportEnv();
+  return hudMetrics(env.width, env.height, env);
 }

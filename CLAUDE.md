@@ -19,6 +19,9 @@ These contain institutional knowledge (resolved gotchas, architecture decisions,
 - Atlas art is generated: edit `scripts/buildAtlas.ts` (or drop `public/textures/blocks/<name>.png` overrides), run `npx tsx scripts/buildAtlas.ts`, commit `atlas.png`, `items.png` and `src/data/atlasUVs.ts` together.
 - Agent worktrees live under `.claude/worktrees/` (excluded from tsc, eslint, git); symlink `node_modules` there instead of installing.
 - The in-app Browser pane refuses pointer lock (mouse-look needs it) and keypress-driven screens did not open there, so game screens are verified headless.
+- Gameplay code reads **named intents**, never key codes or mouse buttons. Add to the vocabulary in `src/engine/input/intents.ts` and produce it from a source; do not reach for `isKeyDown`/`getMouseButton` at a call site, and do not add a `window` keydown listener in a component. Edges are read through per-consumer cursors — pass a stable consumer name — because a shared consume-on-read queue starves whichever consumer reads second, silently.
+- Pointer lock is requested only through `src/engine/input/pointerLock.ts`. It returns a promise that rejects when denied (iframe without `allow="pointer-lock"`, unfocused document), and a denial is normal rather than an error — look and pause no longer depend on it.
+- On-device testing needs an HTTPS origin: a Vercel PR preview, or `cloudflared tunnel --url http://localhost:3000` (binary at `~/.local/bin/cloudflared`, not on PATH). A dev server reached cross-origin must have its host listed in `allowedDevOrigins` in `next.config.ts` — otherwise Next rejects the HMR socket and **WebKit never finishes hydrating**, which looks like a fully painted page with every button dead. `/mobile-check` reports what a device actually supports.
 
 ## Common Commands
 ```bash

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import { useInventoryStore } from "@store/useInventoryStore";
 import {
   useHotbarStore,
@@ -12,9 +12,10 @@ import { findRecipe3x3 } from "@systems/crafting/recipes";
 import { resolveCraft } from "@systems/crafting/craft";
 import { quickMoveAt } from "@systems/inventory/craft";
 import { tableScreen } from "@systems/inventory/screens";
-import { ItemIcon, InventorySlot } from "@ui/ItemIcon";
+import { InventorySlot, CursorItemOverlay } from "@ui/ItemIcon";
 import { RecipeBook, useRecipeFill } from "@ui/RecipeBook";
 import { usePanelMetrics } from "@ui/usePanelMetrics";
+import { useSlotGestures, SLOT_TOUCH_STYLE } from "@ui/useSlotGestures";
 import { useSlotInteractions } from "@ui/useSlotInteractions";
 
 export function CraftingTableUI() {
@@ -23,16 +24,13 @@ export function CraftingTableUI() {
   const cursorItem = useInventoryStore((s) => s.cursorItem);
   const slots = useHotbarStore((s) => s.slots);
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  useEffect(() => {
-    if (!tableOpen) return;
-    const handler = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY });
-    window.addEventListener("mousemove", handler);
-    return () => window.removeEventListener("mousemove", handler);
-  }, [tableOpen]);
 
-  const { handleSlotClick } = useSlotInteractions();
+  const { handleSlotAction } = useSlotInteractions();
+  const slotGestures = useSlotGestures(cursorItem.count === 0);
+  const gestures = (i: number) =>
+    slotGestures(`slot:${i}`, (a) => handleSlotAction(a, i));
+
   const fillFromRecipe = useRecipeFill(3);
   const metrics = usePanelMetrics();
 
@@ -154,7 +152,8 @@ export function CraftingTableUI() {
             <InventorySlot
               key={`inv-${i}`}
               item={slot}
-              onClick={(e) => handleSlotClick(e, HOTBAR_SLOTS + i)}
+              {...gestures(HOTBAR_SLOTS + i)}
+                style={SLOT_TOUCH_STYLE}
               size={S}
             />
           ))}
@@ -169,7 +168,8 @@ export function CraftingTableUI() {
             <InventorySlot
               key={`hot-${i}`}
               item={slot}
-              onClick={(e) => handleSlotClick(e, i)}
+              {...gestures(i)}
+                style={SLOT_TOUCH_STYLE}
               size={S}
               highlight={i === selectedIndex}
             />
@@ -181,28 +181,7 @@ export function CraftingTableUI() {
         </div>
       </div>
 
-      {/* Floating cursor item */}
-      {cursorItem.count > 0 && (
-        <div
-          className="fixed pointer-events-none z-50 flex items-center justify-center"
-          style={{
-            left: mousePos.x + 8,
-            top: mousePos.y + 8,
-            width: 40,
-            height: 40,
-          }}
-        >
-          <ItemIcon blockId={cursorItem.blockId} size={40} />
-          {cursorItem.count > 1 && (
-            <span
-              className="absolute bottom-0 right-0 text-[11px] font-mono font-bold text-white"
-              style={{ textShadow: "1px 1px 0 #000" }}
-            >
-              {cursorItem.count}
-            </span>
-          )}
-        </div>
-      )}
+      <CursorItemOverlay item={cursorItem} />
     </div>
   );
 }

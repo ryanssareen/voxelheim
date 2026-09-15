@@ -1,288 +1,142 @@
 import { describe, it, expect } from "vitest";
 import { KEYBIND_GROUPS } from "@data/keybinds";
+import {
+  TOUCH_DEFERRED,
+  TOUCH_PARITY,
+  keyboardActions,
+  orphanedParityRows,
+  touchControlGroups,
+  unresolvedKeyboardActions,
+} from "@data/touchParity";
+import { TOUCH_CORNER_CONTROLS, TOUCH_HOLD_CONTROLS } from "@ui/TouchControls";
 
 /**
- * Characterization test for R23 (docs/brainstorms/2026-09-11-mobile-tablet-support-requirements.md):
- * "Every action currently reachable only by keyboard has a touch affordance or
- * is explicitly listed as deferred."
+ * R23: every keyboard-only action has a touch affordance or an explicit
+ * deferral.
  *
- * Keyboard handling used to be scattered across the codebase. As of U5 of the
- * touch/tablet plan it is not:
- *  - Every key goes through `InputManager`, which maps the code to a named
- *    intent (`src/engine/input/keyboardMouseSource.ts`). Gameplay reads the
- *    intent snapshot each frame; the React overlays — chat (GameCanvas), debug
- *    info (HUD), minimap toggle (MinimapUI), controls popup (KeybindsPopup) —
- *    subscribe to the same intents through `src/ui/useIntentEdge.ts` instead of
- *    attaching their own `window` "keydown" listeners.
- *  - `Escape` for "Pause" is still not read from any keydown handler: it relies
- *    on the BROWSER's native pointer-lock-exit behavior, observed via
- *    `InputManager.onPointerLockLost` (wired in `Engine.ts`). U8 changes that.
+ * This is the unit's whole verification, and it is a test rather than a
+ * checklist because the failure it guards against is one nobody notices. Every
+ * gap this work has turned up — eating with no producer, fullscreen with no
+ * route, flight with no edge — was silent: the action simply did not happen,
+ * and an absent action looks exactly like a player who did not try it. A list
+ * in a plan document cannot fail; this can.
  *
- * `src/data/keybinds.ts` is a display-only table with nothing enforcing it
- * matches reality. This test hand-encodes the actual inventory (found by
- * grepping the whole src/ tree for isKeyDown / keydown listeners / e.code
- * comparisons on 2026-09-11) and cross-checks it against keybinds.ts, so
- * that adding/removing/renaming a key handler without updating keybinds.ts,
- * or vice versa, fails this test.
- *
- * IMPORTANT: this inventory must be updated by hand alongside any change to
- * keyboard handling. It is intentionally NOT derived by scanning source code
- * at test time (too brittle/gameable) — it is a pinned snapshot of behavior.
+ * It does not check that an affordance *works* — that is the job of the source
+ * and component tests, and ultimately of R32's human on a real phone. It checks
+ * that one was decided on at all.
  */
 
-interface KeyHandlerEntry {
-  /** KeyboardEvent.code value. */
-  code: string;
-  /** Short description of what the key does today. */
-  action: string;
-  /** file:line where the key is read/handled. */
-  location: string;
-  /** true = the press enters through InputManager; false = own window listener / native browser behavior. */
-  viaInputManager: boolean;
-}
+describe("keyboard action inventory (R23)", () => {
+  it("resolves every keyboard action to a touch affordance or a recorded deferral", () => {
+    expect(unresolvedKeyboardActions()).toEqual([]);
+  });
 
-/**
- * The complete, hand-audited inventory of key codes the game actually
- * responds to, as of this writing. See file header for how this was built.
- */
-const KEY_HANDLER_INVENTORY: readonly KeyHandlerEntry[] = [
-  // --- Movement: key codes are mapped to intents in keyboardMouseSource.ts and
-  // consumed by PlayerController.update(), which no longer sees codes at all.
-  // InputManager still owns the listeners, so these remain viaInputManager. ---
-  { code: "KeyW", action: "Walk forward", location: "src/engine/input/keyboardMouseSource.ts:40 -> PlayerController.ts:139", viaInputManager: true },
-  { code: "ArrowUp", action: "Walk forward", location: "src/engine/input/keyboardMouseSource.ts:41 -> PlayerController.ts:139", viaInputManager: true },
-  { code: "KeyS", action: "Walk backward", location: "src/engine/input/keyboardMouseSource.ts:42 -> PlayerController.ts:140", viaInputManager: true },
-  { code: "ArrowDown", action: "Walk backward", location: "src/engine/input/keyboardMouseSource.ts:43 -> PlayerController.ts:140", viaInputManager: true },
-  { code: "KeyA", action: "Walk left", location: "src/engine/input/keyboardMouseSource.ts:44 -> PlayerController.ts:142", viaInputManager: true },
-  { code: "ArrowLeft", action: "Walk left", location: "src/engine/input/keyboardMouseSource.ts:45 -> PlayerController.ts:142", viaInputManager: true },
-  { code: "KeyD", action: "Walk right", location: "src/engine/input/keyboardMouseSource.ts:46 -> PlayerController.ts:141", viaInputManager: true },
-  { code: "ArrowRight", action: "Walk right", location: "src/engine/input/keyboardMouseSource.ts:47 -> PlayerController.ts:141", viaInputManager: true },
-  { code: "Space", action: "Jump / fly up / double-tap toggles flying (creative)", location: "src/engine/input/keyboardMouseSource.ts:48,71 -> PlayerController.ts:107,185,201", viaInputManager: true },
-  { code: "ShiftLeft", action: "Sprint / fly faster", location: "src/engine/input/keyboardMouseSource.ts:49 -> PlayerController.ts:129", viaInputManager: true },
-  { code: "ShiftRight", action: "Sprint / fly faster", location: "src/engine/input/keyboardMouseSource.ts:50 -> PlayerController.ts:129", viaInputManager: true },
-  { code: "ControlLeft", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:51 -> PlayerController.ts:126,187", viaInputManager: true },
-  { code: "ControlRight", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:52 -> PlayerController.ts:126,187", viaInputManager: true },
-  // CHANGED in U3 (intent layer): CapsLock used to sneak but NOT fly down,
-  // because the flight-descend branch listed the two Control codes only. All
-  // three codes now produce the one `sneak` intent the controller reads for
-  // both, so CapsLock descends too — which is what keybinds.ts has always
-  // advertised ("Ctrl / CapsLock" -> "Sneak / fly down"). Pinned behaviourally
-  // in src/tests/playerControllerInput.test.ts.
-  { code: "CapsLock", action: "Sneak / fly down", location: "src/engine/input/keyboardMouseSource.ts:53 -> PlayerController.ts:126,187", viaInputManager: true },
+  it("has no parity row for an action the keyboard no longer binds", () => {
+    // The other direction. A bind removed from `KEYBIND_GROUPS` leaves a row
+    // here describing a control that may no longer exist, and the controls
+    // popup would go on advertising it.
+    expect(orphanedParityRows()).toEqual([]);
+  });
 
-  // --- Building / hotbar. Since U4 the engine reads named edges, not codes:
-  // keyboardMouseSource maps the code to an edge intent and Engine.update()
-  // takes one frame's worth through readEngineFrameEdges(). InputManager still
-  // owns the listeners, so these stay viaInputManager. ---
-  { code: "Digit1", action: "Pick hotbar slot 1", location: "src/engine/input/keyboardMouseSource.ts:81 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit2", action: "Pick hotbar slot 2", location: "src/engine/input/keyboardMouseSource.ts:82 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit3", action: "Pick hotbar slot 3", location: "src/engine/input/keyboardMouseSource.ts:83 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit4", action: "Pick hotbar slot 4", location: "src/engine/input/keyboardMouseSource.ts:84 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit5", action: "Pick hotbar slot 5", location: "src/engine/input/keyboardMouseSource.ts:85 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit6", action: "Pick hotbar slot 6", location: "src/engine/input/keyboardMouseSource.ts:86 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit7", action: "Pick hotbar slot 7", location: "src/engine/input/keyboardMouseSource.ts:87 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit8", action: "Pick hotbar slot 8", location: "src/engine/input/keyboardMouseSource.ts:88 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "Digit9", action: "Pick hotbar slot 9", location: "src/engine/input/keyboardMouseSource.ts:89 -> frameIntents.ts:94 -> Engine.ts:967", viaInputManager: true },
-  { code: "KeyE", action: "Open inventory", location: "src/engine/input/keyboardMouseSource.ts:74 -> frameIntents.ts:77 -> Engine.ts:894", viaInputManager: true },
-  { code: "KeyQ", action: "Drop held item", location: "src/engine/input/keyboardMouseSource.ts:75 -> frameIntents.ts:83 -> Engine.ts:972", viaInputManager: true },
+  it("covers every action exactly once", () => {
+    const actions = TOUCH_PARITY.map((row) => row.action);
+    expect(new Set(actions).size).toBe(actions.length);
+  });
 
-  // --- View (Engine, read from the intent snapshot; V is a held intent, P an edge) ---
-  { code: "KeyV", action: "Zoom", location: "src/engine/input/keyboardMouseSource.ts:56 -> Engine.ts:761", viaInputManager: true },
-  { code: "KeyP", action: "Change camera mode", location: "src/engine/input/keyboardMouseSource.ts:76 -> frameIntents.ts:80 -> Engine.ts:964", viaInputManager: true },
-
-  // --- View: React overlays. Since U5 these no longer attach their own window
-  // keydown listeners — keyboardMouseSource maps the code to an edge intent,
-  // InputManager pushes it, and the component reacts through
-  // `useIntentEdge` (src/ui/useIntentEdge.ts). Hence viaInputManager: true. ---
-  { code: "KeyM", action: "Toggle minimap", location: "src/engine/input/keyboardMouseSource.ts:84 -> MinimapUI.tsx:169", viaInputManager: true },
-  { code: "KeyT", action: "Open chat", location: "src/engine/input/keyboardMouseSource.ts:83 -> GameCanvas.tsx:86", viaInputManager: true },
-  // F3 additionally bypasses InputManager's typing guard
-  // (UNGUARDED_UI_CODES), because its pre-U5 listener had no such guard and
-  // the overlay therefore toggles while chat is composing. Preserved
-  // deliberately; the plan's Scope Boundaries defer the fix.
-  { code: "F3", action: "Toggle debug info", location: "src/engine/input/keyboardMouseSource.ts:85 -> HUD.tsx:183", viaInputManager: true },
-
-  // --- Escape: still no keydown handler drives "Pause". It rides the
-  // browser's native pointer-lock-exit, observed via onPointerLockLost, which
-  // is why this stays viaInputManager: false. Escape *does* now also produce a
-  // `pause` intent, which the controls popup consumes exclusively while it is
-  // open (KeybindsPopup.tsx:41) — nothing else reads it yet. U8 makes pause a
-  // real intent consumer and this entry changes then. ---
-  { code: "Escape", action: "Pause (via native pointer-lock release, not a keydown listener)", location: "src/engine/Engine.ts:238 (InputManager.onPointerLockLost)", viaInputManager: false },
-
-  // NOT LISTED: `Enter`. The controls popup has always closed on Enter (a
-  // capture-phase window listener before U5, the `confirm` intent after), and
-  // this inventory has never carried it, because `src/data/keybinds.ts` does
-  // not advertise Enter and the cross-checks below require every pinned code to
-  // be advertised. Enter is modal-dismissal, not a game bind. Recorded here so
-  // the omission is a decision rather than an oversight.
-] as const;
-
-/** Maps a keybinds.ts key label to the KeyboardEvent.code values it stands for. */
-const LABEL_TO_CODES: Record<string, string[]> = {
-  W: ["KeyW"],
-  A: ["KeyA"],
-  S: ["KeyS"],
-  D: ["KeyD"],
-  Arrows: ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"],
-  Space: ["Space"],
-  "Double-tap Space": ["Space"],
-  Shift: ["ShiftLeft", "ShiftRight"],
-  Ctrl: ["ControlLeft", "ControlRight"],
-  CapsLock: ["CapsLock"],
-  "1": ["Digit1"],
-  "9": ["Digit9"],
-  E: ["KeyE"],
-  Q: ["KeyQ"],
-  V: ["KeyV"],
-  P: ["KeyP"],
-  M: ["KeyM"],
-  T: ["KeyT"],
-  F3: ["F3"],
-  Esc: ["Escape"],
-};
-
-/** Non-keyboard binds in keybinds.ts (mouse) that this inventory intentionally excludes. */
-const NON_KEYBOARD_LABELS = new Set(["Mouse", "Left click", "Right click"]);
-
-/** Parses a keybinds.ts "keys" cell (e.g. "Ctrl / CapsLock", "1 - 9", "W A S D") into codes. */
-function labelsToCodes(keys: string): string[] {
-  // Exact-match multi-word labels must be checked before generic
-  // dash/slash/space decomposition below.
-  if (NON_KEYBOARD_LABELS.has(keys)) return [];
-  if (LABEL_TO_CODES[keys]) return LABEL_TO_CODES[keys];
-  if (keys.includes(" - ")) {
-    // Range shorthand, e.g. "1 - 9" -> Digit1..Digit9
-    const [start, end] = keys.split(" - ").map((s) => s.trim());
-    const codes: string[] = [];
-    for (const label of [start, end]) {
-      if (!LABEL_TO_CODES[label]) throw new Error(`no code mapping for range endpoint "${label}"`);
-    }
-    const startNum = Number(start);
-    const endNum = Number(end);
-    for (let i = startNum; i <= endNum; i++) codes.push(`Digit${i}`);
-    return codes;
-  }
-  if (keys.includes("/")) {
-    // Alternatives, e.g. "Ctrl / CapsLock"
-    return keys.split("/").flatMap((label) => labelsToCodes(label.trim()));
-  }
-  if (keys.includes(" ")) {
-    // Space-separated list, e.g. "W A S D"
-    return keys.split(" ").flatMap((label) => labelsToCodes(label));
-  }
-  if (NON_KEYBOARD_LABELS.has(keys)) return [];
-  const codes = LABEL_TO_CODES[keys];
-  if (!codes) throw new Error(`no code mapping for keybinds.ts label "${keys}"`);
-  return codes;
-}
-
-const INVENTORY_CODES = new Set(KEY_HANDLER_INVENTORY.map((e) => e.code));
-
-describe("keyboard action inventory (R23 audit)", () => {
-  it("every keyboard bind advertised in keybinds.ts maps to a code the codebase actually handles", () => {
-    for (const group of KEYBIND_GROUPS) {
-      for (const bind of group.binds) {
-        const codes = labelsToCodes(bind.keys);
-        for (const code of codes) {
-          expect(
-            INVENTORY_CODES.has(code),
-            `keybinds.ts advertises "${bind.action}" (${bind.keys} -> ${code}), but no handler for ${code} is in the pinned inventory`
-          ).toBe(true);
-        }
-      }
+  it("gives every resolution a non-empty explanation", () => {
+    for (const row of TOUCH_PARITY) {
+      const text = row.touch.kind === "deferred" ? row.touch.why : row.touch.how;
+      expect(text.trim().length, `${row.action} has an empty resolution`).toBeGreaterThan(0);
     }
   });
 
-  it("the pinned inventory has no unexplained extra codes beyond what keybinds.ts advertises", () => {
-    const advertisedCodes = new Set(
-      KEYBIND_GROUPS.flatMap((g) => g.binds.flatMap((b) => labelsToCodes(b.keys)))
-    );
-    for (const entry of KEY_HANDLER_INVENTORY) {
-      expect(
-        advertisedCodes.has(entry.code),
-        `${entry.code} (${entry.action}, ${entry.location}) is handled in code but not advertised anywhere in keybinds.ts`
-      ).toBe(true);
-    }
-  });
-
-  /**
-   * U5 emptied this list of everything but Escape: chat, the debug overlay and
-   * the minimap toggle used to own `window` keydown listeners and now consume
-   * intents, so every keyboard action except Escape enters through
-   * InputManager. Escape remains outside it because "Pause" is still the
-   * browser's native pointer-lock release rather than any handler of ours —
-   * U8 is what changes that.
-   */
-  it("pins which codes bypass InputManager (own window listeners or native browser behavior)", () => {
-    const bypassing = KEY_HANDLER_INVENTORY.filter((e) => !e.viaInputManager)
-      .map((e) => e.code)
-      .sort();
-    expect(bypassing).toEqual(["Escape"]);
-  });
-
-  it("pins the total set of handled key codes, so a new/removed handler must update this file", () => {
-    const codes = [...INVENTORY_CODES].sort();
-    expect(codes).toEqual(
-      [
-        "ArrowDown",
-        "ArrowLeft",
-        "ArrowRight",
-        "ArrowUp",
-        "CapsLock",
-        "ControlLeft",
-        "ControlRight",
-        "Digit1",
-        "Digit2",
-        "Digit3",
-        "Digit4",
-        "Digit5",
-        "Digit6",
-        "Digit7",
-        "Digit8",
-        "Digit9",
-        "Escape",
-        "F3",
-        "KeyA",
-        "KeyD",
-        "KeyE",
-        "KeyM",
-        "KeyP",
-        "KeyQ",
-        "KeyS",
-        "KeyT",
-        "KeyV",
-        "KeyW",
-        "ShiftLeft",
-        "ShiftRight",
-        "Space",
-      ].sort()
+  it("defers nothing today, and would say so if it did", () => {
+    // Not a requirement that the list stay empty — a deferral is a legitimate
+    // answer under R23. The assertion is that the constant reflects the table,
+    // so a future deferral shows up here instead of being lost.
+    expect(TOUCH_DEFERRED.map((row) => row.action)).toEqual(
+      TOUCH_PARITY.filter((r) => r.touch.kind === "deferred").map((r) => r.action),
     );
   });
 
-  /**
-   * R23 (docs/brainstorms/2026-09-11-mobile-tablet-support-requirements.md line 75)
-   * requires every keyboard-only action to have a touch affordance OR be
-   * explicitly deferred. Line 178 of that doc names the actions still
-   * missing one: sprint, creative fly toggle, drop, zoom, minimap toggle,
-   * and debug info. This test does not (and cannot) verify touch UI exists —
-   * that's out of scope for a src/ keyboard audit — but it pins that these
-   * actions are keyboard-only today, so the requirement stays checkable
-   * against a concrete list instead of vague recollection.
-   */
-  it("pins the actions R23 flags as currently keyboard-only with no touch affordance", () => {
-    const keyboardOnlyNoTouchAffordance = [
-      "Sprint / fly faster (Shift)",
-      "Sneak / fly down (Ctrl / CapsLock)",
-      "Double-tap Space (toggle flying, creative)",
-      "Drop held item (Q)",
-      "Zoom (V)",
-      "Toggle minimap (M)",
-      "Chat (T)",
-      "Debug info (F3)",
-    ];
-    // This is a documentation pin, not a behavioral assertion — it exists so
-    // that shrinking or growing this list requires a deliberate edit here.
-    expect(keyboardOnlyNoTouchAffordance).toHaveLength(8);
+  it("names the six actions the plan called out by hand", () => {
+    // Sprint, creative fly, drop, zoom, minimap toggle, debug info — the list
+    // U12 was written to close. Spelled out so a future edit that quietly drops
+    // one fails here rather than in a player's hands.
+    const resolved = new Set(TOUCH_PARITY.map((row) => row.action));
+    for (const action of [
+      "Sprint / fly faster",
+      "Toggle flying (creative)",
+      "Drop held item",
+      "Zoom",
+      "Toggle minimap",
+      "Debug info",
+      "Change camera",
+    ]) {
+      expect(resolved.has(action), `${action} has no touch resolution`).toBe(true);
+    }
+  });
+});
+
+describe("touch controls popup content (R24)", () => {
+  it("groups under the same headings the keyboard layout uses", () => {
+    const keyboardTitles = KEYBIND_GROUPS.map((g) => g.title);
+    for (const group of touchControlGroups()) {
+      expect(keyboardTitles).toContain(group.title);
+    }
+  });
+
+  it("shows every action the keyboard popup shows, minus deferrals", () => {
+    const shown = touchControlGroups().flatMap((g) => g.rows.map((r) => r.action));
+    const deferred = new Set(TOUCH_DEFERRED.map((r) => r.action));
+    const expected = keyboardActions().filter((a) => !deferred.has(a));
+
+    expect(new Set(shown)).toEqual(new Set(expected));
+  });
+
+  it("lists an action bound to two key sets only once", () => {
+    // "Walk" is both WASD and the arrow keys. A keyboard popup showing it twice
+    // is showing two real alternatives; a touch popup showing "Joystick" twice
+    // is just noise.
+    const shown = touchControlGroups().flatMap((g) => g.rows.map((r) => r.action));
+    expect(shown.filter((a) => a === "Walk")).toHaveLength(1);
+  });
+
+  it("never renders a key cap in the touch layout", () => {
+    // The failure this guards is the one R24 exists for: a phone player told to
+    // press W A S D learns only that the game was not built for them.
+    const text = touchControlGroups()
+      .flatMap((g) => g.rows.map((r) => r.how))
+      .join(" ");
+    for (const cap of ["W A S D", "Right click", "Left click", "F3", "Esc"]) {
+      expect(text).not.toContain(cap);
+    }
+  });
+});
+
+describe("on-screen controls back the parity table", () => {
+  it("draws an icon for each corner-control action the table promises", () => {
+    const icons = new Set(TOUCH_CORNER_CONTROLS.map((c) => c.intent));
+    expect(icons.has("pause")).toBe(true);
+    expect(icons.has("openChat")).toBe(true);
+    expect(icons.has("toggleMinimap")).toBe(true);
+    expect(icons.has("zoom")).toBe(true);
+  });
+
+  it("gives jump a press edge so creative flight is reachable", () => {
+    // `PlayerController` toggles flight on two `jump` *edges* in a 300 ms
+    // window. A hold button that only set the held state would leave flight
+    // unreachable on touch while every other jump behaviour kept working —
+    // which is precisely how it would go unnoticed.
+    const jump = TOUCH_HOLD_CONTROLS.find((c) => c.intent === "jump");
+    expect(jump?.edgeOnPress).toBe("jump");
+  });
+
+  it("does not give crouch a press edge", () => {
+    // Nothing consumes a `sneak` edge, and pushing one would put a press into
+    // every consumer's queue for no reader to take — the shape of bug the
+    // per-consumer cursors exist to make impossible to ignore.
+    const crouch = TOUCH_HOLD_CONTROLS.find((c) => c.intent === "sneak");
+    expect(crouch?.edgeOnPress).toBeUndefined();
   });
 });
