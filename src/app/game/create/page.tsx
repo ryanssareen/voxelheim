@@ -129,12 +129,17 @@ export default function CreateWorldPage() {
         }}
       />
 
-      <div className="relative z-10 flex flex-col items-center w-full max-w-[480px] px-4 animate-fadeIn">
+      {/* Vertical padding is what lets Create World clear the fold on a phone
+          held in landscape: the form is taller than the viewport there, and
+          without it the page scrolls to its end with the button's last pixels
+          still under the edge. */}
+      <div className="relative z-10 flex flex-col items-center w-full max-w-[480px] px-4 py-6 animate-fadeIn">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8 w-full">
+          {/* Thumb-sized hit area, unchanged text — see the worlds list (R30). */}
           <Link
             href="/worlds"
-            className="text-white/40 hover:text-white/70 font-mono text-sm transition-colors"
+            className="inline-flex items-center min-h-11 pr-3 text-white/40 hover:text-white/70 font-mono text-sm transition-colors"
             style={{ textShadow: "1px 1px 0 #000" }}
           >
             &larr; Back
@@ -254,9 +259,10 @@ export default function CreateWorldPage() {
             border: startMultiplayer ? "2px solid rgba(0,200,255,0.15)" : "2px solid rgba(255,255,255,0.04)",
           }}
         >
+          {/* Full width already, but a 20px-tall row is not a thumb target. */}
           <button
             onClick={() => setStartMultiplayer((v) => !v)}
-            className="w-full flex items-center justify-between font-mono text-sm"
+            className="w-full min-h-11 flex items-center justify-between font-mono text-sm"
           >
             <span className="flex items-center gap-2">
               <span

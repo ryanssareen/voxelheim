@@ -1,3 +1,4 @@
+import { useGameStore } from "@store/useGameStore";
 import { useSettingsStore } from "@store/useSettingsStore";
 
 /**
@@ -9,7 +10,16 @@ import { useSettingsStore } from "@store/useSettingsStore";
  * Order matters: a single user activation can drive both pointer lock and
  * fullscreen, but fullscreen consumes that activation, so the lock request
  * must go first or it silently fails (w3c.github.io/pointerlock). Pointer
- * lock itself is unconditional and does not depend on the setting.
+ * lock itself does not depend on the `fullscreenOnPlay` setting.
+ *
+ * It does depend on the input source. In touch mode the lock is skipped
+ * outright: a finger has nothing to capture, mouse-look stopped needing a lock
+ * in U2 (R4), and pause stopped riding lock-loss in U8 (R22) -- so the request
+ * could only do harm. Concretely, the compatibility click a browser synthesizes
+ * after a tap reaches this through the canvas's React `onClick`, and a
+ * touchscreen laptop that grants the lock would hand the player a capture they
+ * never asked for and no obvious way out of. Fullscreen still applies, since
+ * that is worth more on a phone than anywhere else.
  *
  * Every fullscreen precondition is guarded, and a rejection (denied,
  * unsupported, iframe without allowfullscreen) is swallowed -- the game
@@ -18,7 +28,9 @@ import { useSettingsStore } from "@store/useSettingsStore";
 export function enterPlayCapture(canvas: HTMLCanvasElement | null): void {
   if (!canvas) return;
 
-  canvas.requestPointerLock();
+  if (useGameStore.getState().inputSource !== "touch") {
+    canvas.requestPointerLock();
+  }
 
   if (!useSettingsStore.getState().fullscreenOnPlay) return;
 

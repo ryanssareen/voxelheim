@@ -6,6 +6,7 @@ import { useGameStore } from "@store/useGameStore";
 import { useMultiplayerStore } from "@store/useMultiplayerStore";
 import { useHudMetrics, type HudMetrics } from "@ui/useHudScale";
 import { DEBUG_TOGGLE_BLOCKERS } from "@engine/input/uiIntents";
+import type { InputSource } from "@engine/input/intents";
 import { useIntentEdge } from "@ui/useIntentEdge";
 
 type DebugInfo = NonNullable<ReturnType<Engine["getDebugInfo"]>>;
@@ -17,6 +18,78 @@ export function crosshairBarMetrics(m: HudMetrics): { marginTop: number; width: 
     width: Math.round(m.crosshair * 4.6),
     height: Math.max(3, Math.round(m.scale * 5)),
   };
+}
+
+/**
+ * Whether to draw the crosshair.
+ *
+ * Touch drops it (R10): it is a small mark in the middle of a small screen,
+ * frequently under the player's own thumb, and it duplicates what the aimed
+ * block's outline (`BlockTargetOutline`) says better. Desktop keeps it.
+ */
+export function crosshairVisible(source: InputSource): boolean {
+  return source !== "touch";
+}
+
+/** Tailwind `top-3` on the shard counter, px. */
+const SHARD_COUNTER_TOP = 12;
+/** Tailwind `py-1.5` on the shard counter, top and bottom together, px. */
+const SHARD_COUNTER_PADDING_Y = 12;
+
+/**
+ * Size and position of the progress bar in touch mode.
+ *
+ * R11 asks that break progress stay visible while it is being made, and the
+ * centre of the screen is the one place that cannot promise it: with no
+ * crosshair the middle is where the player aims, and the finger holding the
+ * mine sits over it. So the bar moves to the top edge, tucked under the shard
+ * counter — clear of the aiming finger and of both thumbs, which live in the
+ * bottom corners with the joystick and the action buttons.
+ */
+export function touchProgressBarMetrics(m: HudMetrics): {
+  top: number;
+  width: number;
+  height: number;
+} {
+  const counterBottom =
+    SHARD_COUNTER_TOP + SHARD_COUNTER_PADDING_Y + Math.round(m.shardFont * 1.1);
+  return {
+    top: counterBottom + Math.max(6, Math.round(m.scale * 8)),
+    // Wider and thicker than the crosshair bar: it is further from where the
+    // player is looking, so it has to carry at a glance.
+    width: Math.round(m.crosshair * 6),
+    height: Math.max(4, Math.round(m.scale * 7)),
+  };
+}
+
+/**
+ * The break/eat progress pill.
+ *
+ * One component for both, because they share a slot and are mutually exclusive
+ * — breaking needs a targeted block, eating needs none — and because the touch
+ * placement above has to move them together or the two would disagree about
+ * where progress lives.
+ */
+function ProgressBar({
+  progress,
+  fillClass,
+  style,
+}: {
+  progress: number;
+  fillClass: string;
+  style: React.CSSProperties;
+}) {
+  return (
+    <div
+      className="absolute left-1/2 -translate-x-1/2 bg-black/40 rounded-full overflow-hidden"
+      style={style}
+    >
+      <div
+        className={`h-full ${fillClass} transition-none`}
+        style={{ width: `${progressPercent(progress)}%` }}
+      />
+    </div>
+  );
 }
 
 /** Clamps a 0-1 progress fraction to an integer percent. */
@@ -168,6 +241,7 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
   const hunger = useGameStore((s) => s.hunger);
   const maxHunger = useGameStore((s) => s.maxHunger);
   const minimapVisible = useGameStore((s) => s.minimapVisible);
+  const inputSource = useGameStore((s) => s.inputSource);
   const multiplayerSession = useMultiplayerStore((s) => s.session);
   const multiplayerPlayers = useMultiplayerStore((s) => s.players);
   const multiplayerStatus = useMultiplayerStore((s) => s.status);
@@ -192,43 +266,36 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
     return () => clearInterval(id);
   }, [showDebug, engineRef]);
 
+  // Touch replaces the crosshair with the aimed block's outline and moves the
+  // progress bar out from under the acting finger (R10, R11).
+  const showCrosshair = crosshairVisible(inputSource);
+  const barStyle: React.CSSProperties = showCrosshair
+    ? { top: "50%", ...crosshairBarMetrics(m) }
+    : touchProgressBarMetrics(m);
+
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
       {/* Minecraft-style crosshair — white + with slight transparency */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        <svg width={m.crosshair} height={m.crosshair} viewBox="0 0 24 24" className="opacity-70">
-          <rect x="11" y="4" width="2" height="7" fill="white" />
-          <rect x="11" y="13" width="2" height="7" fill="white" />
-          <rect x="4" y="11" width="7" height="2" fill="white" />
-          <rect x="13" y="11" width="7" height="2" fill="white" />
-        </svg>
-      </div>
-
-      {/* Break progress bar below crosshair */}
-      {breakProgress > 0 && (
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 bg-black/40 rounded-full overflow-hidden"
-          style={crosshairBarMetrics(m)}
-        >
-          <div
-            className="h-full bg-white/80 transition-none"
-            style={{ width: `${progressPercent(breakProgress)}%` }}
-          />
+      {showCrosshair && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <svg width={m.crosshair} height={m.crosshair} viewBox="0 0 24 24" className="opacity-70">
+            <rect x="11" y="4" width="2" height="7" fill="white" />
+            <rect x="11" y="13" width="2" height="7" fill="white" />
+            <rect x="4" y="11" width="7" height="2" fill="white" />
+            <rect x="13" y="11" width="7" height="2" fill="white" />
+          </svg>
         </div>
+      )}
+
+      {/* Break progress bar */}
+      {breakProgress > 0 && (
+        <ProgressBar progress={breakProgress} fillClass="bg-white/80" style={barStyle} />
       )}
 
       {/* Eat progress bar — same slot as the break bar; the two are mutually
           exclusive (breaking needs a targeted block, eating needs none). */}
       {eatProgress > 0 && (
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 bg-black/40 rounded-full overflow-hidden"
-          style={crosshairBarMetrics(m)}
-        >
-          <div
-            className="h-full bg-amber-400/90 transition-none"
-            style={{ width: `${progressPercent(eatProgress)}%` }}
-          />
-        </div>
+        <ProgressBar progress={eatProgress} fillClass="bg-amber-400/90" style={barStyle} />
       )}
 
       {/* Sun/Moon indicator — top left */}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useSliderDrag } from "@ui/useSliderDrag";
 import { useSettingsStore } from "@/store/useSettingsStore";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useIdentityStore } from "@/store/useIdentityStore";
@@ -24,51 +25,51 @@ function SliderOption({
   onChange: (v: number) => void;
 }) {
   const pct = ((value - min) / (max - min)) * 100;
+  const drag = useSliderDrag(min, max, onChange);
   return (
     <div className="w-full">
       <div className="text-white font-mono text-sm mb-1 text-center" style={{ textShadow: "2px 2px 0 #2a2a2a" }}>
         {label}: {displayValue}
       </div>
+      {/*
+        The hit area is taller than the bar it draws. A 30px track is a fine
+        mouse target and a poor thumb one, and because the track fills this
+        wrapper's width, the wrapper's rect gives the same left/width the value
+        math always used — the drag reads this element, the player sees the bar.
+        `touch-action: none` is load-bearing: without it the browser treats a
+        horizontal slide as a candidate for pan-scroll and cancels the pointer.
+      */}
       <div
-        className="relative w-full h-[30px] cursor-pointer"
-        style={{
-          background: "linear-gradient(to bottom, #5a5a5a 0%, #3a3a3a 40%, #2e2e2e 60%, #222 100%)",
-          border: "3px solid #1a1a1a",
-          boxShadow: "inset 0 2px 0 rgba(255,255,255,0.08), inset 0 -2px 0 rgba(0,0,0,0.3)",
-        }}
-        onMouseDown={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const update = (clientX: number) => {
-            const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            onChange(Math.round(min + x * (max - min)));
-          };
-          update(e.clientX);
-          const onMove = (ev: MouseEvent) => update(ev.clientX);
-          const onUp = () => {
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-          };
-          window.addEventListener("mousemove", onMove);
-          window.addEventListener("mouseup", onUp);
-        }}
+        className="relative w-full h-11 flex items-center cursor-pointer"
+        style={{ touchAction: "none" }}
+        {...drag}
       >
         <div
-          className="absolute top-0 left-0 h-full"
+          className="relative w-full h-[30px]"
           style={{
-            width: `${pct}%`,
-            background: "linear-gradient(to bottom, #7a7a7a 0%, #5a5a5a 40%, #484848 60%, #3a3a3a 100%)",
-            boxShadow: "inset 0 2px 0 rgba(255,255,255,0.15), inset 0 -2px 0 rgba(0,0,0,0.3)",
+            background: "linear-gradient(to bottom, #5a5a5a 0%, #3a3a3a 40%, #2e2e2e 60%, #222 100%)",
+            border: "3px solid #1a1a1a",
+            boxShadow: "inset 0 2px 0 rgba(255,255,255,0.08), inset 0 -2px 0 rgba(0,0,0,0.3)",
           }}
-        />
-        <div
-          className="absolute top-[-2px] w-[8px] h-[calc(100%+4px)]"
-          style={{
-            left: `calc(${pct}% - 4px)`,
-            background: "linear-gradient(to bottom, #eee 0%, #aaa 100%)",
-            border: "2px solid #555",
-            boxShadow: "0 0 4px rgba(0,0,0,0.5)",
-          }}
-        />
+        >
+          <div
+            className="absolute top-0 left-0 h-full"
+            style={{
+              width: `${pct}%`,
+              background: "linear-gradient(to bottom, #7a7a7a 0%, #5a5a5a 40%, #484848 60%, #3a3a3a 100%)",
+              boxShadow: "inset 0 2px 0 rgba(255,255,255,0.15), inset 0 -2px 0 rgba(0,0,0,0.3)",
+            }}
+          />
+          <div
+            className="absolute top-[-2px] w-[8px] h-[calc(100%+4px)]"
+            style={{
+              left: `calc(${pct}% - 4px)`,
+              background: "linear-gradient(to bottom, #eee 0%, #aaa 100%)",
+              border: "2px solid #555",
+              boxShadow: "0 0 4px rgba(0,0,0,0.5)",
+            }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -84,8 +85,21 @@ function OptionsModal({ onClose }: { onClose: () => void }) {
   const setPlayerName = useIdentityStore((state) => state.setPlayerName);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
-      <div className="flex flex-col items-center gap-4 w-[380px]">
+    /*
+      Scrolls, and never wider than the screen. The stack of sliders is taller
+      than a phone held in landscape, and a centred, non-scrolling modal clips
+      equally at both ends — which put Render Distance and Simulation Distance
+      (R31) off-screen with no way to reach them. `items-start` plus `my-auto`
+      still centres the modal whenever it does fit, so desktop is unchanged.
+
+      `fixed`, not `absolute`: the title screen's own content already overflows a
+      landscape phone, so an absolutely-positioned overlay inherits that taller
+      height and hangs its last controls below the viewport — where the scroll
+      container has already ended and `main`'s `overflow-hidden` stops the page
+      following. Fixed pins it to the viewport, which is what it needs to be.
+    */
+    <div className="fixed inset-0 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/60 z-20 px-4 py-6">
+      <div className="flex flex-col items-center gap-4 w-full max-w-[380px] my-auto">
         <h2 className="text-2xl font-mono text-white font-bold" style={{ textShadow: "2px 2px 0 #2a2a2a" }}>
           Options
         </h2>

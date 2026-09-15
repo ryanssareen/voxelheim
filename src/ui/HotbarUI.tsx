@@ -1,10 +1,43 @@
 "use client";
 
+import type { Engine } from "@engine/Engine";
+import type { EdgeIntent } from "@engine/input/intents";
 import { useHotbarStore, HOTBAR_SLOTS } from "@store/useHotbarStore";
+import { useGameStore } from "@store/useGameStore";
 import { BLOCK_ID } from "@data/blocks";
 import { ITEM_NAMES, getToolDef } from "@data/items";
 import { ItemIcon, DurabilityBar } from "@ui/ItemIcon";
 import { useHudMetrics } from "@ui/useHudScale";
+
+/**
+ * The press a tap on hotbar slot `index` (0-based) produces.
+ *
+ * A tap becomes the same named edge `Digit1`-`Digit9` produce (R15) rather than
+ * calling `useHotbarStore.select()` directly, so slot selection keeps running
+ * through the frame loop: the engine is where a press is ignored while a panel
+ * is open or the game is paused, and a control that wrote the store itself
+ * would quietly be the one exception to that.
+ */
+export function hotbarIntentForIndex(index: number): EdgeIntent {
+  const slot = Math.max(1, Math.min(HOTBAR_SLOTS, Math.round(index) + 1));
+  return `hotbar${slot as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
+}
+
+/**
+ * What the control docked at the right end of the strip does (R14).
+ *
+ * The same edge `KeyE` produces, so it toggles whichever panel is up exactly as
+ * the key does, including closing one.
+ *
+ * It is one control rather than two because the recipe book has no surface of
+ * its own — `RecipeBook` renders *inside* `InventoryUI` — so a second dock
+ * control would open the same screen under a different glyph. That answers the
+ * plan's open question ("its own dock control, or a tab inside the inventory
+ * screen") in favour of the tab; the left end of the strip, where the offhand
+ * slot sits, is where a book control would go if the book is ever given its own
+ * screen.
+ */
+export const HOTBAR_DOCK_INTENT: EdgeIntent = "openInventory";
 
 /**
  * Full-width Minecraft-style hotbar with item stack counts.
@@ -14,12 +47,31 @@ import { useHudMetrics } from "@ui/useHudScale";
  * used to draw its own flat isometric block sprite from a small colour table,
  * which made a crafting table look identical to dirt; every slot now renders
  * through ItemIcon so hotbar and inventory show the same detailed icon.
+ *
+ * In touch mode the strip also becomes interactive: slots take taps (R15) and
+ * an inventory control docks at the right end (R14), where it costs no play
+ * area. Both are inert on desktop — the strip keeps `pointer-events: none`
+ * there, because a mouse click that landed on the hotbar instead of the canvas
+ * would stop a mine rather than select a slot.
  */
-export function HotbarUI() {
+export function HotbarUI({ engineRef }: { engineRef?: React.RefObject<Engine | null> }) {
   const selectedIndex = useHotbarStore((s) => s.selectedIndex);
   const slots = useHotbarStore((s) => s.slots);
   const offhand = useHotbarStore((s) => s.offhand);
+  const touchMode = useGameStore((s) => s.inputSource) === "touch";
   const m = useHudMetrics();
+
+  /**
+   * Presses an on-screen control.
+   *
+   * `preventDefault` keeps the browser from synthesizing the compatibility
+   * mouse burst that follows a touch — `InputManager` guards the canvas against
+   * it, but these controls are their own elements and carry their own guard.
+   */
+  const press = (e: React.PointerEvent, intent: EdgeIntent) => {
+    e.preventDefault();
+    engineRef?.current?.touch.pressButton(intent);
+  };
 
   const selectedSlot = slots[selectedIndex];
   const selectedName =
@@ -89,9 +141,13 @@ export function HotbarUI() {
             <div
               key={i}
               className="relative flex items-center justify-center flex-1 min-w-0"
+              onPointerDown={touchMode ? (e) => press(e, hotbarIntentForIndex(i)) : undefined}
               style={{
                 height: m.hotbarSlot,
                 margin: 2,
+                // Only in touch mode: see the component doc.
+                pointerEvents: touchMode ? "auto" : "none",
+                touchAction: "none",
                 background: isSelected ? "#c6c6c6" : "#8b8b8b",
                 border: isSelected ? "2px solid #ffffff" : "2px solid #373737",
                 boxShadow: isSelected
@@ -141,7 +197,56 @@ export function HotbarUI() {
             </div>
           );
         })}
+
+        {/* Inventory control, docked at the right end of the strip (R14).
+            Sized to match the offhand slot at the other end, so the strip stays
+            symmetric; U10 owns raising the touch-target floor these inherit. */}
+        {touchMode && (
+          <button
+            type="button"
+            aria-label="Open inventory"
+            onPointerDown={(e) => press(e, HOTBAR_DOCK_INTENT)}
+            className="relative flex shrink-0 items-center justify-center"
+            style={{
+              width: m.offhandSlot,
+              height: m.offhandSlot,
+              margin: 4,
+              background: "#6a6a6a",
+              border: "2px solid #373737",
+              boxShadow: "inset 2px 2px 0 #ababab, inset -2px -2px 0 #585858",
+              pointerEvents: "auto",
+              touchAction: "none",
+            }}
+          >
+            <InventoryGlyph size={Math.round(m.offhandIcon * 0.8)} />
+          </button>
+        )}
       </div>
     </div>
+  );
+}
+
+/** Four stacked cells — the inventory grid, at glyph size. */
+function InventoryGlyph({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" className="block">
+      {[
+        [1, 1],
+        [9, 1],
+        [1, 9],
+        [9, 9],
+      ].map(([x, y]) => (
+        <rect
+          key={`${x}-${y}`}
+          x={x}
+          y={y}
+          width="6"
+          height="6"
+          fill="#2a2a2a"
+          stroke="#d8d8d8"
+          strokeWidth="1"
+        />
+      ))}
+    </svg>
   );
 }

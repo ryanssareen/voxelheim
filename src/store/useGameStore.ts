@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { InputSource } from "@engine/input/intents";
 import { getArmorDef } from "@data/items";
 import { useHotbarStore } from "@store/useHotbarStore";
 import { BLOCK_ID } from "@data/blocks";
@@ -34,12 +35,24 @@ interface GameState {
   lastDamageCause: DeathCause | null;
   /** Whether the minimap overlay is shown (M key toggles). */
   minimapVisible: boolean;
+  /**
+   * Which device is driving right now.
+   *
+   * Lives here rather than only inside the engine because the UI has to see it:
+   * the touch controls mount on it, the crosshair hides on it, and resuming from
+   * pause stops asking for a pointer lock on it. The engine publishes it each
+   * frame from the intent layer, where touch arms on the first touch event (R27)
+   * and a key press hands it back (R28) — no user-agent string anywhere, and no
+   * reload to switch.
+   */
+  inputSource: InputSource;
   setGameMode: (mode: GameMode) => void;
   toggleMinimap: () => void;
   setHardcoreLocked: (locked: boolean) => void;
   collectShard: () => void;
   resetObjective: () => void;
   setPaused: (paused: boolean) => void;
+  setInputSource: (source: InputSource) => void;
   setDead: (dead: boolean) => void;
   setBreakProgress: (progress: number) => void;
   setEatProgress: (progress: number) => void;
@@ -128,6 +141,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastDamageTime: 0,
   lastDamageCause: null,
   minimapVisible: true,
+  inputSource: "keyboardMouse",
 
   setGameMode: (mode: GameMode) => set({ gameMode: mode }),
   toggleMinimap: () => set((s) => ({ minimapVisible: !s.minimapVisible })),
@@ -146,6 +160,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ shardsCollected: 0, isComplete: false }),
 
   setPaused: (paused: boolean) => set({ isPaused: paused }),
+
+  /**
+   * Idempotent on purpose: the engine publishes the live source every frame, so
+   * an unguarded `set` would notify every subscriber 60 times a second to say
+   * nothing changed. Writing only on a genuine switch makes the per-frame call
+   * free and keeps the store honest for any other caller.
+   */
+  setInputSource: (source: InputSource) => {
+    if (get().inputSource === source) return;
+    set({ inputSource: source });
+  },
   setDead: (dead: boolean) => set({ isDead: dead }),
   setBreakProgress: (progress: number) => set({ breakProgress: progress }),
   setEatProgress: (progress: number) => set({ eatProgress: progress }),
