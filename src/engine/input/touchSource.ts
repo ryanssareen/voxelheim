@@ -25,6 +25,9 @@ import type { IntentState } from "@engine/input/snapshot";
  *  - **Left region** — the movement joystick. It anchors wherever the thumb
  *    first lands (R6) rather than sitting at a fixed spot, because a thumb that
  *    has to find a fixed pad first is a thumb that is not moving the player.
+ *    A thumb that comes straight back down after lifting holds `sprint` for
+ *    that contact's life, which is how a phone reaches an intent that has no
+ *    key to hold down.
  *  - **Everything else** — the play surface, which carries all three of look,
  *    mine and place with no buttons of its own (R7, R8). A contact there starts
  *    undecided and resolves into exactly one of:
@@ -100,6 +103,18 @@ export interface TouchSourceConfig {
    * measured on a device.
    */
   eatHoldThresholdMs: number;
+  /**
+   * Window in which a second thumb-down in the left region turns the joystick
+   * into a sprint, ms.
+   *
+   * Sprint is a level read with no key to hold on a phone, and a dedicated
+   * button would cost play area for something the player wants *while already
+   * walking* — so the control that is already under the thumb carries it. The
+   * sprint lasts exactly as long as that contact: lifting the thumb ends it,
+   * which is the same relationship `Shift` has with a keyboard and needs no
+   * latch that could desync from what the overlay draws.
+   */
+  sprintDoubleTapMs: number;
 }
 
 export const DEFAULT_TOUCH_CONFIG: TouchSourceConfig = {
@@ -108,6 +123,7 @@ export const DEFAULT_TOUCH_CONFIG: TouchSourceConfig = {
   lookThresholdPx: 10,
   holdThresholdMs: 200,
   eatHoldThresholdMs: 500,
+  sprintDoubleTapMs: 260,
 };
 
 /** What a play-surface contact has resolved into so far. */
@@ -119,6 +135,8 @@ interface JoystickContact {
   anchorY: number;
   x: number;
   y: number;
+  /** Whether this contact re-landed fast enough to hold `sprint` for its life. */
+  sprinting: boolean;
 }
 
 interface PlayContact {
@@ -146,6 +164,12 @@ export interface JoystickView {
 
 export class TouchSource {
   private joystick: JoystickContact | null = null;
+  /**
+   * When the last joystick contact lifted, for the sprint double-tap. Starts at
+   * negative infinity so the very first thumb-down of a session can never read
+   * as the second half of a double-tap against an unset clock.
+   */
+  private lastJoystickEndAt = Number.NEGATIVE_INFINITY;
   private play: PlayContact | null = null;
   /** Held intents this source is currently asserting, via on-screen buttons. */
   private readonly buttonsHeld = new Set<HeldIntent>();
@@ -209,13 +233,20 @@ export class TouchSource {
 
     for (const point of points) {
       if (!this.joystick && this.isInLeftRegion(point.x)) {
+        // A thumb that comes straight back down after lifting is asking to
+        // sprint. Measured from the previous contact's *lift* rather than its
+        // press, so holding the stick for a while and then double-tapping works
+        // the same as a quick double-tap from rest.
+        const sprinting = this.now() - this.lastJoystickEndAt < this.config.sprintDoubleTapMs;
         this.joystick = {
           id: point.id,
           anchorX: point.x,
           anchorY: point.y,
           x: point.x,
           y: point.y,
+          sprinting,
         };
+        if (sprinting) this.state.setHeld("sprint", true);
         // Anchored means centred: the stick reads zero until the thumb slides.
         this.state.setDelta("move", { x: 0, y: 0 });
         continue;
@@ -291,8 +322,7 @@ export class TouchSource {
   touchEnd(points: readonly TouchPoint[]): void {
     for (const point of points) {
       if (this.joystick && this.joystick.id === point.id) {
-        this.joystick = null;
-        this.state.setDelta("move", { x: 0, y: 0 });
+        this.releaseJoystick(this.now());
         continue;
       }
 
@@ -328,8 +358,10 @@ export class TouchSource {
   touchCancel(points: readonly TouchPoint[]): void {
     for (const point of points) {
       if (this.joystick && this.joystick.id === point.id) {
-        this.joystick = null;
-        this.state.setDelta("move", { x: 0, y: 0 });
+        // Negative infinity, not the current time: the player did not lift the
+        // thumb, the browser took it, so the next thumb-down is a fresh press
+        // rather than the second half of a double-tap they never made.
+        this.releaseJoystick(Number.NEGATIVE_INFINITY);
         continue;
       }
 
@@ -401,12 +433,26 @@ export class TouchSource {
     if (this.play?.phase === "hold") this.releaseHold(this.play);
     for (const intent of this.buttonsHeld) this.state.setHeld(intent, false);
     this.buttonsHeld.clear();
-    this.joystick = null;
+    if (this.joystick) this.releaseJoystick(Number.NEGATIVE_INFINITY);
     this.play = null;
     this.state.setDelta("move", { x: 0, y: 0 });
   }
 
   // ---------------------------------------------------------------- internals
+
+  /**
+   * Drops the joystick contact and whatever it was asserting.
+   *
+   * `endedAt` is what a following thumb-down measures its double-tap against —
+   * the real clock for a lift the player made, negative infinity for one they
+   * did not.
+   */
+  private releaseJoystick(endedAt: number): void {
+    if (this.joystick?.sprinting) this.state.setHeld("sprint", false);
+    this.joystick = null;
+    this.lastJoystickEndAt = endedAt;
+    this.state.setDelta("move", { x: 0, y: 0 });
+  }
 
   private isInLeftRegion(x: number): boolean {
     return x < this.surfaceWidth * this.config.leftRegionFraction;

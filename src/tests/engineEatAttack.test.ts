@@ -304,6 +304,7 @@ describe("engine frame edges (Engine.update, presses taken once per frame)", () 
       cycleCamera: false,
       dropItem: false,
       place: false,
+      toggleZoom: false,
       hotbarSlot: null,
     });
   });

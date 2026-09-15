@@ -424,6 +424,111 @@ describe("TouchSource gestures", () => {
     });
   });
 
+  describe("joystick double-tap sprints (R23)", () => {
+    /**
+     * Sprint is a level read with no key to hold on a phone. The control
+     * already under the thumb carries it, and the sprint lasts exactly as long
+     * as that contact — the same relationship Shift has with a keyboard, and no
+     * latch that could drift out of step with what the overlay draws.
+     */
+    it("holds sprint when the thumb comes straight back down", () => {
+      start(1, IN_LEFT_REGION, 300);
+      clock += 100;
+      end(1, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(false);
+
+      clock += 100;
+      start(2, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(true);
+    });
+
+    it("does not sprint on the first contact of a session", () => {
+      // The double-tap clock starts at negative infinity precisely so this
+      // cannot read as the second half of a tap that never happened.
+      start(1, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("does not sprint when the second landing is too late", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 260;
+      start(2, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("measures the window from the lift, so a long walk then a double-tap works", () => {
+      start(1, IN_LEFT_REGION, 300);
+      clock += 5000;
+      move(1, IN_LEFT_REGION + 30, 300);
+      end(1, IN_LEFT_REGION + 30, 300);
+      clock += 80;
+      start(2, IN_LEFT_REGION, 300);
+
+      expect(state.isHeld("sprint")).toBe(true);
+    });
+
+    it("keeps sprinting while the thumb steers, and stops when it lifts", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      move(2, IN_LEFT_REGION + 40, 260);
+      source.endFrame();
+      expect(state.isHeld("sprint")).toBe(true);
+
+      end(2, IN_LEFT_REGION + 40, 260);
+      expect(state.isHeld("sprint")).toBe(false);
+      expect(state.delta("move")).toEqual({ x: 0, y: 0 });
+    });
+
+    it("does not arm the next contact off a cancelled one", () => {
+      // The browser took the contact — a call, a system gesture. The player did
+      // not lift, so the next thumb-down is a fresh press rather than the back
+      // half of a double-tap they never made.
+      start(1, IN_LEFT_REGION, 300);
+      source.touchCancel([{ id: 1, x: IN_LEFT_REGION, y: 300 }]);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("drops sprint when the browser cancels the sprinting contact", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+      expect(state.isHeld("sprint")).toBe(true);
+
+      source.touchCancel([{ id: 2, x: IN_LEFT_REGION, y: 300 }]);
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("releaseAll drops a live sprint", () => {
+      start(1, IN_LEFT_REGION, 300);
+      end(1, IN_LEFT_REGION, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      source.releaseAll();
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+
+    it("is not armed by a tap on the play surface", () => {
+      // The play surface and the joystick are different controls. A tap to
+      // place a block followed by a thumb-down on the stick is not a sprint.
+      start(1, ON_PLAY_SURFACE, 300);
+      clock += 50;
+      end(1, ON_PLAY_SURFACE, 300);
+      clock += 50;
+      start(2, IN_LEFT_REGION, 300);
+
+      expect(state.isHeld("sprint")).toBe(false);
+    });
+  });
+
   describe("simultaneous contacts (R12)", () => {
     it("drives movement, look and a button at once without interference", () => {
       source.touchStart([

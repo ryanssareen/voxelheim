@@ -241,13 +241,17 @@ describe("corner controls", () => {
     input.touch.pressButton(control.intent);
   }
 
-  it("offers exactly pause, chat and the map", () => {
-    // Every other keyboard-only action is U12's parity sweep; this pins what
-    // this unit claims to cover so the two cannot silently overlap.
+  it("offers exactly pause, chat, the map and zoom", () => {
+    // U7 opened with the first three. U12's parity sweep added zoom and stopped
+    // there: the icon column is the scarcest space on a short landscape screen,
+    // so camera cycle and debug info went to the pause menu instead — see
+    // `src/data/touchParity.ts`, which is the list this one has to stay in step
+    // with. Pinned as an exact sequence because the order is the reach order.
     expect(TOUCH_CORNER_CONTROLS.map((c) => c.intent)).toEqual([
       "pause",
       "openChat",
       "toggleMinimap",
+      "zoom",
     ]);
   });
 
@@ -350,6 +354,29 @@ describe("hotbar taps", () => {
       "hotbar8",
       "hotbar9",
     ]);
+  });
+
+  it("toggles zoom from the corner icon, and back off on a second press", () => {
+    // Zoom is a *held* intent on a keyboard (V) and an edge here, which is what
+    // the `zoom` edge in the vocabulary was reserved for: a source with no hold
+    // to spend. The engine keeps the latch; the frame only reports the flip.
+    touch.pressButton("zoom");
+    expect(readEngineFrameEdges(state).toggleZoom).toBe(true);
+
+    // A frame with no press must not report one, or the latch would flap every
+    // frame and the FOV would never settle.
+    expect(readEngineFrameEdges(state).toggleZoom).toBe(false);
+
+    touch.pressButton("zoom");
+    expect(readEngineFrameEdges(state).toggleZoom).toBe(true);
+  });
+
+  it("drops the selected stack from a held hotbar slot (R23's answer for Q)", () => {
+    // The long-press pushes the same edge `KeyQ` does, so the drop runs the
+    // identical engine path — including the part that decides what a drop means
+    // when the slot is empty.
+    touch.pressButton("drop");
+    expect(readEngineFrameEdges(state).dropItem).toBe(true);
   });
 
   it("clamps an out-of-range index rather than inventing an intent", () => {

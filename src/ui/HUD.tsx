@@ -245,7 +245,7 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
   const multiplayerSession = useMultiplayerStore((s) => s.session);
   const multiplayerPlayers = useMultiplayerStore((s) => s.players);
   const multiplayerStatus = useMultiplayerStore((s) => s.status);
-  const [showDebug, setShowDebug] = useState(false);
+  const showDebug = useGameStore((s) => s.debugVisible);
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const m = useHudMetrics();
 
@@ -255,7 +255,7 @@ export function HUD({ engineRef }: { engineRef?: React.RefObject<Engine | null> 
   // plan defers rather than fixes here (see @engine/input/uiIntents), and
   // InputManager lets F3 past its typing guard for the same reason.
   useIntentEdge(engineRef, "toggleDebug", DEBUG_TOGGLE_BLOCKERS, () =>
-    setShowDebug((d) => !d),
+    useGameStore.getState().toggleDebug(),
   );
 
   useEffect(() => {

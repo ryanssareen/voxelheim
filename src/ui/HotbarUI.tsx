@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { Engine } from "@engine/Engine";
 import type { EdgeIntent } from "@engine/input/intents";
 import { useHotbarStore, HOTBAR_SLOTS } from "@store/useHotbarStore";
@@ -40,6 +41,23 @@ export function hotbarIntentForIndex(index: number): EdgeIntent {
 export const HOTBAR_DOCK_INTENT: EdgeIntent = "openInventory";
 
 /**
+ * How long a finger must stay on a hotbar slot before it also drops the stack
+ * in it, ms.
+ *
+ * Drop is `Q` on a keyboard and has no gesture and no room for an icon, so it
+ * rides the control the player is already using to choose what to drop. The tap
+ * half is unchanged and still fires immediately — the slot is selected on
+ * press, and the drop is an *addition* after the threshold, so the gesture
+ * reads as "pick this one… and get rid of it" rather than as two competing
+ * meanings the player has to disambiguate before anything happens.
+ *
+ * Longer than the play surface's mine threshold (200 ms) and its eat threshold
+ * (500 ms) because this one destroys something: the cost of being too slow is
+ * a wait, and the cost of being too fast is a stack on the ground.
+ */
+export const HOTBAR_DROP_HOLD_MS = 600;
+
+/**
  * Full-width Minecraft-style hotbar with item stack counts.
  *
  * Slot, icon and text sizes are real pixel sizes from hudMetrics rather than a
@@ -48,9 +66,10 @@ export const HOTBAR_DOCK_INTENT: EdgeIntent = "openInventory";
  * which made a crafting table look identical to dirt; every slot now renders
  * through ItemIcon so hotbar and inventory show the same detailed icon.
  *
- * In touch mode the strip also becomes interactive: slots take taps (R15) and
- * an inventory control docks at the right end (R14), where it costs no play
- * area. Both are inert on desktop — the strip keeps `pointer-events: none`
+ * In touch mode the strip also becomes interactive: slots take taps (R15), a
+ * slot held past {@link HOTBAR_DROP_HOLD_MS} drops its stack (R23's answer for
+ * `Q`), and an inventory control docks at the right end (R14), where it costs
+ * no play area. Both are inert on desktop — the strip keeps `pointer-events: none`
  * there, because a mouse click that landed on the hotbar instead of the canvas
  * would stop a mine rather than select a slot.
  */
@@ -72,6 +91,34 @@ export function HotbarUI({ engineRef }: { engineRef?: React.RefObject<Engine | n
     e.preventDefault();
     engineRef?.current?.touch.pressButton(intent);
   };
+
+  /**
+   * Select on press, drop if the finger stays.
+   *
+   * The timer is cleared on every way a contact can end, including the one that
+   * is easy to forget: sliding off the slot. Without `onPointerLeave` a thumb
+   * that started on a slot and moved away would still drop the stack, which is
+   * the kind of thing a player would read as the game losing their items at
+   * random.
+   */
+  const dropTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelDropTimer = () => {
+    if (dropTimer.current === null) return;
+    clearTimeout(dropTimer.current);
+    dropTimer.current = null;
+  };
+
+  const pressSlot = (e: React.PointerEvent, index: number) => {
+    press(e, hotbarIntentForIndex(index));
+    cancelDropTimer();
+    dropTimer.current = setTimeout(() => {
+      dropTimer.current = null;
+      engineRef?.current?.touch.pressButton("drop");
+    }, HOTBAR_DROP_HOLD_MS);
+  };
+
+  useEffect(() => cancelDropTimer, []);
 
   const selectedSlot = slots[selectedIndex];
   const selectedName =
@@ -141,7 +188,10 @@ export function HotbarUI({ engineRef }: { engineRef?: React.RefObject<Engine | n
             <div
               key={i}
               className="relative flex items-center justify-center flex-1 min-w-0"
-              onPointerDown={touchMode ? (e) => press(e, hotbarIntentForIndex(i)) : undefined}
+              onPointerDown={touchMode ? (e) => pressSlot(e, i) : undefined}
+              onPointerUp={touchMode ? cancelDropTimer : undefined}
+              onPointerCancel={touchMode ? cancelDropTimer : undefined}
+              onPointerLeave={touchMode ? cancelDropTimer : undefined}
               style={{
                 height: m.hotbarSlot,
                 margin: 2,

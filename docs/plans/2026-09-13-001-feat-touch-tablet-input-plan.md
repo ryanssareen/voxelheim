@@ -326,6 +326,20 @@ Order within the tier is U6, U11, U8, U7. The pre-game screens come early becaus
 **Files:** `src/ui/KeybindsPopup.tsx`, `src/ui/Walkthrough.tsx`, `src/ui/ChatUI.tsx`, `src/ui/MinimapUI.tsx`, `src/tests/keyboardActionInventory.test.ts`, `src/tests/walkthrough.test.ts`
 **Approach:** Resolve each of sprint, creative fly, drop, zoom, minimap toggle, debug info, and the third-person camera cycle to an affordance or the deferred list. Eating keeps its held trigger with a longer threshold and a cancellable indicator.
 
+**Resolved.** Each keyboard-only action got an affordance, recorded as data in `src/data/touchParity.ts` rather than as a claim here — one table, read by both the controls popup and the inventory test, so a new bind with no touch answer fails CI:
+
+| Action | Touch |
+|---|---|
+| Sprint | Double-tap the joystick and keep holding — the control already under the thumb, lasting exactly as long as the contact, so no latch can drift out of step with the overlay |
+| Creative fly | Double-tap the Jump button. The button now pushes a `jump` *edge* as well as holding the intent, so `PlayerController`'s existing 300 ms double-tap rule fires unchanged |
+| Drop | Press and hold a hotbar slot (600 ms — longer than mine or eat, because this one destroys something) |
+| Zoom | Corner icon, toggling. `Engine` latches on the `zoom` edge the vocabulary had already reserved for "a source with no hold to spend" |
+| Minimap | Corner icon (already shipped in U7) |
+| Debug info | Pause menu. Required lifting `showDebug` out of `HUD`'s local state into the store — pressing the intent from the menu would have worked only because that intent's blocker list is empty, a latent bug the plan defers, so the button would have died the day someone fixed it |
+| Change camera | Pause menu, calling the engine directly. An edge pushed while paused stays queued and fires after resuming, so the player would close the menu and only then see the camera move |
+
+Zoom is the only addition to the icon column. The column is the scarcest space on a short landscape screen, which is why the two rare actions went to the pause menu instead.
+
 **Landed early:** R26's producer. `TouchSource` had no way to assert `secondary` as a *level* read — its only hold asserted `primary` and its only `secondary` signal was the tap edge — so the eat gate could never open on a phone, silently, since a closed gate is indistinguishable from a player who is not hungry. A play-surface hold that outlasts `eatHoldThresholdMs` (500 ms, against mining's 200 ms) now asserts `secondary` alongside `primary`, and lifting, cancelling, or sliding into a look drops it. The two never both resolve: the eat gate is already closed whenever the player is aiming at a block. The indicator is the existing eat progress bar. What remains for U12 is the affordance work, not the input.
 **Test scenarios:**
 - The keyboard-only action inventory test enumerates zero unaddressed actions.
@@ -344,6 +358,12 @@ Order within the tier is U6, U11, U8, U7. The pre-game screens come early becaus
 **Files:** `src/store/useSettingsStore.ts`, `src/engine/world/constants.ts`, `src/tests/deviceProfile.test.ts`
 **Approach:** Measure on a real mid-range device before choosing values — this is the assumption carried from the origin's blocking question. If the binding constraint is meshing or GC rather than distance, record that and revisit the requirement rather than shipping a distance change that does nothing.
 **Execution note:** There is no prior art in `docs/solutions/` on meshing budgets or distance tuning. Capture the measurement as a learning afterward.
+
+**Built as mechanism, not as measurement.** The resolution path is complete and tested — a device profile applies when the source changes (R28), a distance the player picks is pinned and survives both a reload and every later profile, and desktop values are untouched. The two touch numbers in `src/engine/world/deviceProfile.ts` are **provisional**: 5 and 4 against desktop's 8 and 6, chosen to be conservative rather than right. They sit in one place so the measurement session replaces two lines.
+
+The larger assumption is untouched and must be checked first: that *distance* is the binding constraint at all. If a phone is limited by meshing throughput or GC pauses, these values cost draw distance and buy nothing, and R29 is aimed at the wrong lever.
+
+**What the mechanism cost:** `saved ?? default` could not express this. The store persists every field on any change, so a number was on disk whether or not the player chose it — moving the music slider was enough to make a render distance look deliberate. A device profile on top of that would either never apply or would silently discard a real choice. The pin is now recorded separately from the value.
 **Test scenarios:**
 - Touch mode resolves lower defaults than desktop.
 - An explicit user setting overrides the device default and survives reload.

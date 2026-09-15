@@ -75,6 +75,12 @@ The explicit state meaning *gameplay input is being ignored right now*, naming i
 
 Lifting suppression discards whatever accumulated during it — buffered edges and accumulated look deltas alike. Keeping either would fire a stale action or snap the camera on the frame play resumes.
 
+### Touch Resolution
+The answer to "how does a finger do this?" for one action the keyboard binds — a **gesture** (an unlabelled movement on a surface showing no control), a **control** (something on screen a player can find by looking), or an explicit **deferral** with its reason. Every keyboard action has exactly one, recorded as data, because the failure it guards against is silent: an action with no touch route does not error, it simply never happens, which is indistinguishable from a player who never tried it.
+
+### Device Profile
+The render and simulation distance a device starts at, chosen from which Input Source is driving. It is a *starting point*, not a setting: the moment a player picks a distance themselves that choice is pinned and no later profile may overwrite it, in either direction. The pin has to be recorded separately from the value, because a saved number cannot say whether anyone chose it.
+
 ## Simulation
 
 ### Random Tick
