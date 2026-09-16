@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthHydrator } from "./AuthHydrator";
+import { TouchArmer } from "./TouchArmer";
 import { DevErrorOverlay } from "./DevErrorOverlay";
 
 const geistSans = Geist({
@@ -98,6 +99,7 @@ if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded"
       </head>
       <body className="min-h-full flex flex-col">
         <AuthHydrator />
+        <TouchArmer />
         {process.env.NODE_ENV !== "production" && <DevErrorOverlay />}
         {children}
       </body>

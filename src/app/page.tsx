@@ -308,7 +308,7 @@ export default function Home() {
       {/* === CONTENT === */}
       <div className="relative flex flex-col items-center z-10 -mt-8 animate-fadeInSlow">
         <h1
-          className="text-[72px] sm:text-[100px] md:text-[130px] font-black leading-none"
+          className="font-black leading-none"
           style={{
             fontFamily: "monospace",
             color: "#e8e8e8",
@@ -316,6 +316,18 @@ export default function Home() {
             letterSpacing: "0.04em",
             WebkitTextStroke: "1px #3a3a3a",
             paintOrder: "stroke fill",
+            // Sized off the viewport rather than stepped at breakpoints. Nine
+            // monospace capitals plus the tracking came to 416px inside a
+            // 375px phone, so the word was clipped 21px at each edge — and the
+            // old `text-[72px]` was already the smallest step, with nothing
+            // below it to fall back to.
+            //
+            // 15vw is the widest ratio that still clears a gutter at 320px,
+            // which is the constraint that sets it. The 130px ceiling is the
+            // old `md:` size unchanged; between roughly 768px and 870px the
+            // word is now a little smaller than the old step gave it, which is
+            // the price of one continuous ramp instead of three jumps.
+            fontSize: "clamp(48px, 15vw, 130px)",
           }}
         >
           VOXELHEIM

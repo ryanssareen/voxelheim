@@ -1,6 +1,7 @@
 import { KeyboardMouseSource } from "@engine/input/keyboardMouseSource";
 import { attemptPointerLock } from "@engine/input/pointerLock";
 import { IntentState } from "@engine/input/snapshot";
+import { installTouchArming, onTouchArmed } from "@engine/input/touchArming";
 import { TouchSource, type TouchPoint } from "@engine/input/touchSource";
 
 /**
@@ -252,7 +253,18 @@ export class InputManager {
     for (const [property, value] of TOUCH_SURFACE_STYLES) {
       canvas.style?.setProperty(property, value);
     }
+
+    // Arming is wider than producing. A tap on the title screen, on the
+    // controls popup's own dismiss button, or anywhere else off the canvas
+    // means a finger is driving, and the UI needs to know before the player
+    // ever reaches the play surface — `IntentState` seeds itself from the same
+    // signal for the case where that tap happened before this engine existed.
+    installTouchArming();
+    this.stopTouchArming = onTouchArmed(() => this.intents.setSource("touch"));
   }
+
+  /** Unsubscribes from the arming signal. Set in the constructor. */
+  private stopTouchArming: (() => void) | null = null;
 
   /**
    * True while a mouse event is more likely the browser's compatibility
@@ -330,6 +342,8 @@ export class InputManager {
       if (this.onTouchEnd) this.canvas.removeEventListener("touchend", this.onTouchEnd);
       if (this.onTouchCancel) this.canvas.removeEventListener("touchcancel", this.onTouchCancel);
     }
+    this.stopTouchArming?.();
+    this.stopTouchArming = null;
     // Drops what touch is asserting without touching the keyboard's held state.
     this.touch.releaseAll();
     if (this.locked && document.exitPointerLock) {

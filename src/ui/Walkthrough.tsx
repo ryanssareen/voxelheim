@@ -4,8 +4,10 @@ import { useCallback, useEffect } from "react";
 import type { Engine } from "@engine/Engine";
 import {
   WALKTHROUGH_STEPS,
+  stepHint,
   useWalkthroughStore,
 } from "@store/useWalkthroughStore";
+import { useGameStore } from "@store/useGameStore";
 import { useInventoryStore } from "@store/useInventoryStore";
 import { DEMO_WORLD_ID } from "@lib/demoWorld";
 import { useKeybindsStore } from "@store/useKeybindsStore";
@@ -24,6 +26,9 @@ export function Walkthrough({
   const dismiss = useWalkthroughStore((s) => s.dismiss);
   const startIfUnseen = useWalkthroughStore((s) => s.startIfUnseen);
   const keybindsOpen = useKeybindsStore((s) => s.isOpen);
+  // Read live: the source arms on the first touch anywhere on the page, so a
+  // player who taps rather than clicks gets the right wording from step one.
+  const touchMode = useGameStore((s) => s.inputSource === "touch");
   const keybindsSeen = useKeybindsStore((s) => s.seen);
 
   // R9 scopes auto-start to the demo world. Existing players loading their own
@@ -85,7 +90,9 @@ export function Walkthrough({
         >
           {step.title}
         </p>
-        <p className="text-white/70 font-mono text-[11px] leading-snug">{step.hint}</p>
+        <p className="text-white/70 font-mono text-[11px] leading-snug">
+          {stepHint(step, touchMode)}
+        </p>
       </div>
     </div>
   );

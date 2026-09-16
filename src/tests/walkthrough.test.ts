@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   WALKTHROUGH_STEPS,
+  stepHint,
   useWalkthroughStore,
 } from "@store/useWalkthroughStore";
 import { DEMO_WORLD_ID } from "@lib/demoWorld";
@@ -100,5 +101,52 @@ describe("auto-start scoping", () => {
     useWalkthroughStore.setState({ completed: true });
     useWalkthroughStore.getState().reopen();
     expect(useWalkthroughStore.getState().isOpen).toBe(true);
+  });
+});
+
+describe("input-source aware copy (R24)", () => {
+  /**
+   * Onboarding is the screen whose entire job is teaching the controls, so
+   * telling a phone player to press W A S D is the narrowest and most
+   * embarrassing version of the gap this whole effort exists to close. The
+   * step *detection* was already input-agnostic — it watches the movement
+   * intent, which a joystick satisfies exactly as a key does — and only the
+   * words were still assuming a keyboard.
+   */
+  it("gives every step a touch wording", () => {
+    for (const step of WALKTHROUGH_STEPS) {
+      expect(step.touchHint.trim().length, `${step.action} has no touch hint`).toBeGreaterThan(0);
+    }
+  });
+
+  it("names no key or mouse button in any touch wording", () => {
+    const text = WALKTHROUGH_STEPS.map((s) => s.touchHint).join(" ");
+    for (const term of ["W A S D", "left-click", "right-click", "Press E", "mouse"]) {
+      expect(text).not.toContain(term);
+    }
+  });
+
+  it("keeps the keyboard wording for a keyboard", () => {
+    // Desktop parity: the words a mouse player sees are untouched.
+    expect(stepHint(WALKTHROUGH_STEPS[0], false)).toBe(
+      "Use W A S D to walk. Move the mouse to look.",
+    );
+  });
+
+  it("swaps to the touch wording in touch mode", () => {
+    const step = WALKTHROUGH_STEPS[0];
+    expect(stepHint(step, true)).toBe(step.touchHint);
+    expect(stepHint(step, true)).not.toBe(step.hint);
+  });
+
+  it("describes a real affordance in each touch wording", () => {
+    // Each hint must name something that exists on screen or a gesture the
+    // touch source actually produces — a hint for a control nobody built is
+    // worse than no hint.
+    const [move, breakStep, place, inventory] = WALKTHROUGH_STEPS;
+    expect(move.touchHint).toContain("left of the screen");
+    expect(breakStep.touchHint).toContain("hold");
+    expect(place.touchHint).toContain("Tap");
+    expect(inventory.touchHint).toContain("hotbar");
   });
 });

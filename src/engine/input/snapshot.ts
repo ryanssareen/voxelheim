@@ -8,6 +8,7 @@ import {
   type SuppressionReason,
   type Vec2,
 } from "@engine/input/intents";
+import { initialInputSource } from "@engine/input/touchArming";
 
 /**
  * The per-frame intent state every consumer reads.
@@ -75,7 +76,13 @@ export class IntentState implements IntentSnapshot {
   /** Per-consumer cursor into the edge stream, keyed by consumer name. */
   private cursors = new Map<string, number>();
   private suppression: SuppressionReason | null = null;
-  private activeSource: InputSource = "keyboardMouse";
+  /**
+   * Seeded from {@link initialInputSource} rather than hardcoded, so an engine
+   * built after the player has already touched the page starts in touch mode.
+   * Without this the controls popup — which opens before any canvas contact —
+   * showed a phone player the keyboard layout.
+   */
+  private activeSource: InputSource = initialInputSource();
   /** Push-face subscribers; see {@link IntentSnapshot.onEdge}. */
   private edgeListeners = new Set<(edge: IntentEdge) => void>();
 
